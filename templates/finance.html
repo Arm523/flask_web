@@ -1,0 +1,503 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>Finance - การจัดการการเงิน</title>
+<style>
+    :root {
+        --glass-bg: rgba(255, 255, 255, 0.9);
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --success-gradient: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        --danger-gradient: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+        --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+    }
+
+    .finance-card {
+        border: none;
+        border-radius: 16px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        overflow: hidden;
+    }
+
+    .finance-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    .stat-card-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+
+    .bg-gradient-success {
+        background: var(--success-gradient);
+        color: white;
+    }
+
+    .bg-gradient-danger {
+        background: var(--danger-gradient);
+        color: white;
+    }
+
+    .bg-gradient-warning {
+        background: var(--warning-gradient);
+        color: white;
+    }
+
+    .bg-gradient-primary {
+        background: var(--primary-gradient);
+        color: white;
+    }
+
+    .table-modern thead th {
+        background-color: #f8f9fa;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 1px;
+        color: #6c757d;
+        border: none;
+        padding: 15px;
+    }
+
+    .table-modern tbody td {
+        padding: 15px;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f1f1;
+    }
+
+    .badge-pill {
+        border-radius: 50px;
+        padding: 6px 12px;
+        font-weight: 500;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-0">ระบบบริหารการเงิน</h4>
+            <p class="text-muted small">สรุปรายรับ-รายจ่าย และสุขภาพทางการเงินของหอพัก</p>
+        </div>
+        <div class="d-flex gap-2">
+
+            <div class="d-flex gap-2 align-items-center">
+                <div class="input-group shadow-sm" style="width: 170px;">
+                    <span class="input-group-text bg-white border-0 small text-muted">ปี</span>
+                    <input type="number" id="filter-year" class="form-control border-0" value="{{ selected_year }}"
+                        list="year-options" onchange="updateFinanceRealtime()" placeholder="ระบุปี...">
+
+                    <datalist id="year-options">
+                        {% for y in years_list %}
+                        <option value="{{ y }}">
+                            {% endfor %}
+                    </datalist>
+                </div>
+
+                <div class="input-group shadow-sm" style="width: 200px;">
+                    <span class="input-group-text bg-white border-0 small text-muted">เดือน</span>
+                    <select id="filter-month" class="form-select border-0" onchange="updateFinanceRealtime()">
+                        {% for m in months_list %}
+                        <option value="{{ m.id }}" {% if selected_month==m.id %}selected{% endif %}>{{ m.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+            </div>
+
+            <button class="btn btn-primary rounded-pill px-4 shadow-sm" onclick="openExpenseModal()">
+                <i class="bi bi-plus-lg me-2"></i>บันทึกรายจ่าย
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card finance-card bg-gradient-success shadow-sm p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="opacity-75">รายรับทั้งหมด</small>
+                        <h3 class="fw-bold mb-0" id="stat-income">0.00 ฿</h3>
+                    </div>
+                    <div class="stat-card-icon"><i class="bi bi-graph-up-arrow"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card finance-card bg-gradient-danger shadow-sm p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="opacity-75">รายจ่ายทั้งหมด</small>
+                        <h3 class="fw-bold mb-0" id="stat-expense">0.00 ฿</h3>
+                    </div>
+                    <div class="stat-card-icon"><i class="bi bi-graph-down-arrow"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card finance-card bg-gradient-warning shadow-sm p-3 text-dark">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="opacity-75">กำไรสุทธิ</small>
+                        <h3 class="fw-bold mb-0" id="stat-profit">0.00 ฿</h3>
+                    </div>
+                    <div class="stat-card-icon bg-dark bg-opacity-10 text-dark"><i class="bi bi-wallet2"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card finance-card bg-gradient-primary shadow-sm p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="opacity-75">อัตรากำไร</small>
+                        <h3 class="fw-bold mb-0" id="stat-margin">0 %</h3>
+                    </div>
+                    <div class="stat-card-icon"><i class="bi bi-pie-chart"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card finance-card shadow-sm p-4 h-100 bg-white">
+                <h6 class="fw-bold mb-4">แนวโน้มรายรับ - รายจ่าย รายเดือน</h6>
+                <div style="height: 350px;">
+                    <canvas id="financeBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card finance-card shadow-sm p-4 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h6 class="fw-bold mb-0">รายการล่าสุด</h6>
+                    <a href="#" class="text-decoration-none small">ดูทั้งหมด</a>
+                </div>
+                <div id="recent-list-container" class="overflow-auto" style="max-height: 400px;">
+                    <div id="transaction-list-simple"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card finance-card shadow-sm mt-4 bg-white border-0">
+        <div class="p-4 border-bottom bg-light bg-opacity-50">
+            <h6 class="fw-bold mb-0">ประวัติการทำธุรกรรมฉบับเต็ม</h6>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-modern mb-0">
+                <thead>
+                    <tr>
+                        <th>วันที่</th>
+                        <th>ประเภท</th>
+                        <th>หมวดหมู่</th>
+                        <th>รายละเอียด</th>
+                        <th class="text-end">จำนวนเงิน</th>
+                        <th class="text-center">สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody id="transaction-table">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="expenseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <div class="modal-header border-0 p-4 pb-0">
+                <h5 class="modal-title fw-bold">บันทึกรายจ่ายใหม่</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="expenseForm">
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-muted">วันที่จ่าย</label>
+                            <input type="date" name="expense_date"
+                                class="form-control form-control-lg border-light bg-light" required id="exp_date">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-muted">หมวดหมู่</label>
+                            <select name="category" class="form-select form-select-lg border-light bg-light" required>
+                                <option value="ค่าน้ำ-ไฟส่วนกลาง">ค่าน้ำ-ไฟส่วนกลาง</option>
+                                <option value="ซ่อมบำรุง">ซ่อมบำรุง</option>
+                                <option value="ค่าแม่บ้าน/พนักงาน">ค่าแม่บ้าน/พนักงาน</option>
+                                <option value="ภาษี/ประกัน">ภาษี/ประกัน</option>
+                                <option value="อื่นๆ">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-muted">รายละเอียด</label>
+                            <input type="text" name="description"
+                                class="form-control form-control-lg border-light bg-light"
+                                placeholder="ระบุรายละเอียดการจ่าย">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-muted">จำนวนเงิน (บาท)</label>
+                            <div class="input-group">
+                                <span class="input-group-text border-light bg-light">฿</span>
+                                <input type="number" step="0.01" name="amount"
+                                    class="form-control form-control-lg border-light bg-light" required
+                                    placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-muted">แนบหลักฐาน (สลิป)</label>
+                            <input type="file" name="slip_file" class="form-control" accept="image/*">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill px-4"
+                        data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 shadow-sm">บันทึกข้อมูล</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ฟังก์ชันโหลดข้อมูลและอัปเดตหน้าจอแบบ Real-time
+    let financeBarChart = null;
+
+    function openExpenseModal() {
+        document.getElementById('expenseForm').reset(); // ล้างค่าเก่าออกก่อน
+        document.getElementById('exp_date').valueAsDate = new Date();
+        new bootstrap.Modal(document.getElementById('expenseModal')).show();
+    }
+
+    // ดักจับเหตุการณ์เมื่อมีการกดปุ่ม "บันทึกข้อมูล" ในฟอร์ม
+    document.getElementById('expenseForm').addEventListener('submit', async function (e) {
+        e.preventDefault(); // สำคัญมาก: ป้องกันไม่ให้หน้าเว็บ Refresh เอง
+
+        const formData = new FormData(this);
+
+        Swal.fire({
+            title: 'กำลังบันทึกข้อมูล...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        try {
+            const response = await fetch('/add_expense', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                // กรณีบันทึกสำเร็จ
+                Swal.fire({
+                    icon: 'success',
+                    title: 'บันทึกสำเร็จ!',
+                    text: result.message,
+                    confirmButtonColor: '#28a745',
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => {
+                    // ปิด Modal ของ Bootstrap
+                    const modalEl = document.getElementById('expenseModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    modal.hide();
+
+                    updateFinanceRealtime();
+                    loadRecentTransactions();
+                    this.reset(); // ล้างข้อมูลในฟอร์ม
+                });
+
+            } else {
+                // กรณี Backend ส่ง Error มา
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: result.message,
+                    confirmButtonColor: '#dc3545'
+                });
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'เชื่อมต่อไม่สำเร็จ',
+                text: 'กรุณาลองใหม่อีกครั้ง หรือเช็คการเชื่อมต่อ Server',
+                confirmButtonColor: '#dc3545'
+            });
+        }
+    });
+
+    async function updateFinanceRealtime() {
+        const year = document.getElementById('filter-year').value;
+        const month = document.getElementById('filter-month').value;
+
+        try {
+            const response = await fetch(`/api/finance_data?year=${year}&month=${month}`);
+            const data = await response.json();
+
+            animateNumber('stat-income', data.total_income);
+            animateNumber('stat-expense', data.total_expense);
+            animateNumber('stat-profit', data.profit);
+            animateNumber('stat-margin', data.margin, '%');
+
+            loadFinanceBarChart();
+
+            loadRecentTransactions(year, month);
+
+
+        } catch (error) {
+            console.error("Error updating finance data:", error);
+        }
+    }
+
+    function animateNumber(id, targetValue, unit = '฿') {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        // ดึงค่าปัจจุบันออกมากรองเอาเฉพาะตัวเลข (ลบ ฿, %, และคอมมาออก)
+        let startValue = parseFloat(el.innerText.replace(/[^\d.-]/g, '')) || 0;
+
+        const duration = 800;
+        const frameRate = 1000 / 60;
+        const totalFrames = Math.round(duration / frameRate);
+        let currentFrame = 0;
+
+        const animate = () => {
+            currentFrame++;
+            const progress = currentFrame / totalFrames;
+            const currentValue = startValue + (targetValue - startValue) * progress;
+
+            if (currentFrame < totalFrames) {
+                // แสดงผลตามประเภทหน่วย
+                if (unit === '%') {
+                    el.innerText = currentValue.toFixed(2) + ' %';
+                } else {
+                    el.innerText = currentValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' ' + unit;
+                }
+                requestAnimationFrame(animate);
+            } else {
+                // จบงาน
+                if (unit === '%') {
+                    el.innerText = targetValue.toFixed(2) + ' %';
+                } else {
+                    el.innerText = targetValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' ' + unit;
+                }
+            }
+        };
+        requestAnimationFrame(animate);
+    }
+
+    function loadFinanceBarChart() {
+        const year = document.getElementById('filter-year').value || new Date().getFullYear();
+
+        fetch(`/api/finance_summary?year=${year}&month=all`)
+            .then(res => res.json())
+            .then(data => {
+                // ต้องเช็คว่า financeBarChart ถูกสร้างขึ้นมาแล้วจริงๆ
+                if (financeBarChart && data.income_list) {
+                    financeBarChart.data.datasets[0].data = data.income_list;
+                    financeBarChart.data.datasets[1].data = data.expense_list;
+                    financeBarChart.data.datasets[2].data = data.profit_loss_list;
+                    financeBarChart.update(); // สั่งให้กราฟวาดใหม่
+                }
+            })
+            .catch(err => console.error("Error loading Bar Chart:", err));
+    }
+
+    function loadRecentTransactions() {
+        fetch(`/api/recent_transactions`)
+            .then(res => res.json())
+            .then(data => {
+                const tbody = document.getElementById('transaction-table');
+                const simpleList = document.getElementById('transaction-list-simple');
+
+                tbody.innerHTML = '';
+                simpleList.innerHTML = ''; // ล้างข้อมูลเก่าของรายการย่อด้วย
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">ไม่มีประวัติการทำธุรกรรม</td></tr>';
+                    simpleList.innerHTML = '<p class="text-center text-muted small">ไม่มีรายการ</p>';
+                    return;
+                }
+
+                data.forEach(t => {
+                    const dateDisplay = t.transaction_date ? t.transaction_date.split('T')[0] : '-';
+                    const amountValue = parseFloat(t.amount || 0);
+
+                    // --- 1. สำหรับตารางใหญ่ (Table) ---
+                    const row = `
+                <tr>
+                    <td class="small text-muted">${dateDisplay}</td>
+                    <td>
+                        <span class="badge badge-pill ${t.type === 'income' ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'}">
+                            ${t.type === 'income' ? 'รายรับ' : 'รายจ่าย'}
+                        </span>
+                    </td>
+                    <td class="fw-medium">${t.category}</td>
+                    <td class="text-muted small">${t.description || t.note || '-'}</td>
+                    <td class="text-end fw-bold ${t.type === 'income' ? 'text-success' : 'text-danger'}">
+                        ${t.type === 'income' ? '+' : '-'} ฿${amountValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td class="text-center"><i class="bi bi-check-circle-fill text-success"></i></td>
+                </tr>`;
+                    tbody.insertAdjacentHTML('beforeend', row);
+
+                    // ย้ายก้อน 'item' เข้ามาข้างใน forEach เพื่อให้เข้าถึงตัวแปร t ได้
+                    const item = `
+                    <div class="d-flex align-items-center mb-3 p-2 rounded-3" style="background: #f8f9fa;">
+                        <div class="stat-card-icon me-3 ${t.type === 'income' ? 'bg-success' : 'bg-danger'}" 
+                             style="width:35px; height:35px; font-size:14px; flex-shrink: 0;">
+                            <i class="bi ${t.type === 'income' ? 'bi-plus-lg' : 'bi-dash-lg'}"></i>
+                        </div>
+                        <div class="flex-grow-1 overflow-hidden">
+                            <div class="fw-bold small text-truncate">${t.category}</div>
+                            <div class="text-muted" style="font-size:10px;">${dateDisplay}</div>
+                        </div>
+                        <div class="fw-bold small ms-2 ${t.type === 'income' ? 'text-success' : 'text-danger'}">
+                            ${t.type === 'income' ? '+' : '-'}฿${amountValue.toLocaleString()}
+                        </div>
+                    </div>
+                `;
+                    simpleList.insertAdjacentHTML('beforeend', item);
+                });
+            })
+            .catch(err => console.error("Error loading transactions:", err));
+    }
+
+    // 5. แก้ไขจุดเรียกใช้งานใน DOMContentLoaded
+    document.addEventListener("DOMContentLoaded", function () {
+        loadRecentTransactions();
+
+        financeBarChart = new Chart(document.getElementById("financeBarChart"), {
+            type: 'bar',
+            data: {
+                labels: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'],
+                datasets: [
+                    { label: 'รายรับ', data: [], backgroundColor: '#28a745', order: 2 },
+                    { label: 'รายจ่าย', data: [], backgroundColor: '#dc3545', order: 2 },
+                    { label: 'กำไร/ขาดทุน', data: [], type: 'line', borderColor: '#ffc107', borderWidth: 2, fill: true, tension: 0.1, order: 1 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        loadFinanceBarChart();
+        updateFinanceRealtime();
+    });
+</script>
+
+
+{% endblock %}

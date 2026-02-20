@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="th">
+
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <meta charset="UTF-8" />
+  <title>ใบเเจ้งหนี้</title>
+  <style>
+    body {
+      font-family: "Sarabun", sans-serif;
+      width: 80mm;
+      padding: 10px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    .badge-type {
+      font-size: 14px;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 5px;
+    }
+
+    .badge-monthly {
+      background: #3498db;
+    }
+
+    .badge-daily {
+      background: #f39c12;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      /* รวมเส้นขอบให้ชิดกัน */
+      margin-top: 10px;
+      border: 2px solid #3498db;
+      /* กรอบรอบ table */
+    }
+
+    th,
+    td {
+      border: 1px solid #3498db;
+      /* กรอบรอบ cell */
+      padding: 4px;
+      font-size: 14px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f0f8ff;
+      /* สีพื้น header */
+    }
+
+    .total {
+      font-weight: bold;
+      text-align: right;
+    }
+
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .option-table th,
+    .option-table td {
+      border: 1px dashed #aaa;
+      /* ตาราง option เป็นเส้นประ */
+    }
+
+    p {
+      font-size: 16px;
+      color: #333;
+      line-height: 1;
+    }
+
+    h3 {
+      line-height: 1;
+    }
+
+    @media print {
+      button {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h2>
+    ใบเเจ้งหนี้ {% if invoice.invoice_type == 'daily' %}
+    <span class="badge-type badge-daily">รายวัน</span>
+    {% else %}
+    <span class="badge-type badge-monthly">รายเดือน</span>
+    {% endif %}
+  </h2>
+
+  <p>
+    <strong class="margin:10">เลขที่ใบเเจ้งหนี้:</strong> #{{
+    invoice.invoice_id }}
+  </p>
+  <p>
+    <strong>ชื่อผู้เช่า:</strong>
+    {% if invoice.invoice_type == 'daily' %} {{ invoice.guest_fname }} {{
+    invoice.guest_lname }} {% else %} {{ invoice.tenant_fname }} {{
+    invoice.tenant_lname }} {% endif %}
+  </p>
+  <p>
+    <strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building
+    }} ชั้น {{ invoice.floor }}
+  </p>
+  <p>
+    <strong>รอบบิล:</strong>
+    {% if invoice.is_first_month %} ชําระ ค่ามัดจํา งวดเเรก {% elif
+    invoice.invoice_type == 'monthly' or invoice.invoice_type == 'final' %} {{
+    display_start.strftime('%d/%m/%Y') }} - {{
+    display_end.strftime('%d/%m/%Y') }} {% else %} ไม่มีรอบบิล {% endif %}
+  </p>
+  <p>
+    <strong>จ่ายภายในวันที่:</strong>
+    {% if invoice.due_date %} {{ invoice.due_date.strftime('%d/%m/%Y') }} {%
+    else %} - {% endif %}
+  </p>
+  <p style="color: red; margin: 0; line-height: 0.2px">
+    <small>*จะมีการปรับตามวันต่อวัน ที่เลยการชําระ</small>
+  </p>
+
+  {% if invoice.invoice_type in ['first','monthly','final','extra_bill'] %}
+  <!-- รายเดือน -->
+  <h3><strong>รายละเอียดการชำระเงิน</strong></h3>
+  <table>
+    <tr>
+      <th>รายการ</th>
+      <th style="text-align: center">จํานวน</th>
+      <th style="text-align: right">ราคา/หน่วย</th>
+    </tr>
+    <tbody>
+      {% if invoice.rent_amount > 0 %}
+      <tr>
+        <td>ค่าเช่าห้อง</td>
+        <td style="text-align: center">1</td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(invoice.rent_amount) }}
+        </td>
+      </tr>
+      {% endif %} {% if invoice.premiums > 0 %}
+      <tr>
+        <td>ค่ามัดจํา / ค่าประกัน</td>
+        <td style="text-align: center">1</td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(invoice.premiums) }}
+        </td>
+      </tr>
+      {% endif %} {% if invoice.reimburse and invoice.reimburse > 0 %}
+      <tr>
+        <td>คืน ค่ามัดจํา</td>
+        <td style="text-align: center">1</td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(invoice.reimburse) }}
+        </td>
+      </tr>
+      {% endif %} {% if not invoice.is_first_month %} {% if items %} {% for
+      item in items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td style="text-align: center">
+          {{ "%.0f"|format(item.quantity or 1) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(item.unit_price or 0) }}
+        </td>
+      </tr>
+      {% endfor %} {% endif %} {% endif %}
+    </tbody>
+  </table>
+  {% if meter_adjustment %}
+  <p><strong>รายการ มิเตอร์เก่าค่านํ้า / ค่าไฟ : </strong></p>
+  <table>
+    <tr>
+      <th>รายการ</th>
+      <th style="text-align: left">การใช้ต่อ/หน่วย</th>
+      <th style="text-align: center">ราคาต่อ/หน่วย</th>
+      <th style="text-align: right">ราคารวม</th>
+    </tr>
+    <tbody>
+      {% for meter_adjustment in meter_adjustment %}
+      <tr>
+        <td>{{ meter_adjustment.description }}</td>
+        <td style="text-align: left">{{ meter_adjustment.quantity }}</td>
+        <td style="text-align: center">
+          {{ "{:,.2f}".format(invoice.electricity_rate or 0) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(meter_adjustment.total_price or 0) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if invoice.overdue_days and invoice.overdue_days > 0 %}
+  <p><strong>ค่าปรับค้างชําระ (ชําระเกินวันที่กําหนด)</strong></p>
+  <table>
+    <tr>
+      <th>ราคาต่อ / วัน</th>
+      <th>จำนวนวัน</th>
+      <th>รวมทั้งสิ้น</th>
+    </tr>
+    <tbody>
+      <tr>
+        <td>{{ "{:,.2f}".format(late_fee_per_day) }}</td>
+        <td>{{ invoice.overdue_days }}</td>
+        <td>{{ "{:,.2f}".format(invoice.late_penalty) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% endif %} {% if invoice.electricity_total > 0 or invoice.water_total > 0
+  %}
+  <p><strong>รายการ ค่านํ้า / ค่าไฟ : </strong></p>
+  <table>
+    <tr>
+      <th>รายการ</th>
+      <th style="text-align: left">การใช้ต่อ/หน่วย</th>
+      <th style="text-align: center">ราคาต่อ/หน่วย</th>
+      <th style="text-align: right">ราคารวม</th>
+    </tr>
+    <tbody>
+      <tr>
+        <td>ค่าไฟ</td>
+        <td style="text-align: left">{{ invoice.electricity_usage or 0 }}</td>
+        <td style="text-align: center">
+          {{ "{:,.2f}".format(invoice.electricity_rate or 0) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(invoice.electricity_total or 0) }}
+        </td>
+      </tr>
+      <tr>
+        <td>ค่านํ้า</td>
+        <td style="text-align: left">{{ invoice.water_usage or 0 }}</td>
+        <td style="text-align: center">
+          {{ "{:,.2f}".format(invoice.water_rate or 0) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(invoice.water_total or 0) }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  {% endif %} {% elif invoice.invoice_type == 'daily' %}
+  <!-- รายวัน -->
+  <p><strong>รายละเอียดการชำระเงิน (รายวัน)</strong></p>
+  <table>
+    <tr>
+      <th>รายการ</th>
+      <th>จำนวนวัน</th>
+      <th>ราคา/วัน</th>
+      <th>ราคารวม</th>
+    </tr>
+    <tbody>
+      <tr>
+        <td>ค่าห้องรายวัน</td>
+        <td style="text-align: center">
+          {{ ((invoice.billing_period_end - invoice.billing_period_start).days
+          + 1)}}
+        </td>
+        <td style="text-align: right">{{ "{:,.2f}".format(price_daily) }}</td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(invoice.rent_amount) }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  {% if invoice.overdue_days > 0 %}
+  <p><strong>ค่าปรับค้างชําระ (ชําระเกินวันที่กําหนด)</strong></p>
+  <table>
+    <tr>
+      <th>ราคาต่อ / วัน</th>
+      <th>จำนวนวัน</th>
+      <th>รวม</th>
+    </tr>
+    <tbody>
+      <tr>
+        <td>{{ "{:,.2f}".format(late_fee_per_day) }}</td>
+        <td>{{ invoice.overdue_days }}</td>
+        <td>{{ "{:,.2f}".format(invoice.late_penalty) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% endif %} {% endif %} {% if discount %}
+  <p style="color: green; line-height: 0.2"><strong>ส่วนลด:</strong></p>
+  <table>
+    <thead>
+      <tr>
+        <th>รายการ</th>
+        <th style="text-align: center">จำนวน</th>
+        <th style="text-align: right">ราคา/หน่วย</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for discount in discount %}
+      <tr>
+        <td>{{ discount.description }}</td>
+        <td style="text-align: center">
+          {{ "%.0f"|format(discount.quantity or 1) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(discount.unit_price or 0) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %} {% if invoice.total_amount < 0 %} <p style="color: red">*คืนจํานวนเงิน หลังจากหักค่าต่างๆ</p>
+    <p class="total">
+      รวมทั้งสิ้น: {{ "{:,.2f}".format(invoice.total_amount) }} บาท
+    </p>
+    {% else %}
+    <p class="total">
+      รวมทั้งสิ้น: {{ "{:,.2f}".format(invoice.total_amount) }} บาท
+    </p>
+    {% endif %}
+
+    <div class="footer">
+      ขอบคุณที่ใช้บริการ<br />
+      ระบบหอพัก by YourSystem
+    </div>
+
+    <button onclick="window.print()">🖨 พิมพ์ใบเเจ้งหนี้</button>
+</body>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (status === "error") {
+      Swal.fire({
+        icon: "error",
+        title: "เกิดข้อผิดพลาด",
+        text: message,
+        confirmButtonText: "ตกลง",
+        confirmButtonColor: "#d33",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // ถ้าอยากให้กดยืนยันแล้วเด้งกลับไปหน้าเดิม
+          window.history.back();
+        }
+      });
+    }
+
+  });
+</script>
+
+</html>

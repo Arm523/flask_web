@@ -1,0 +1,215 @@
+{% extends "layout.html" %} 
+{% block title %}เพิ่มผู้ใช้งานใหม่{% endblock %} 
+{% block content %}
+<style>
+    .add-card { border: none; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1); background: #fff; }
+    .form-label { font-weight: 700; color: #444; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 8px; }
+    .form-control, .form-select { border-radius: 12px; padding: 12px; border: 1px solid #ebedf2; background: #f8f9fa; }
+    .gender-group { display: flex; gap: 15px; }
+    .gender-item { flex: 1; }
+    .gender-item input[type="radio"] { display: none; }
+    .gender-label { display: block; text-align: center; padding: 10px; background: #f8f9fa; border: 1px solid #ebedf2; border-radius: 12px; cursor: pointer; transition: 0.3s; }
+    .gender-item input[type="radio"]:checked+.gender-label { background: #4e73df; color: #fff; border-color: #4e73df; }
+    .upload-box { border: 2px dashed #d1d3e2; border-radius: 15px; padding: 20px; text-align: center; cursor: pointer; background: #fdfdfd; transition: 0.3s; }
+    .upload-box:hover { border-color: #4e73df; background: #f8faff; }
+    .preview-img { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); }
+    .section-title { font-weight: 800; color: #4e73df; font-size: 0.9rem; letter-spacing: 1px; }
+    .section-header { display: flex; align-items: center; margin: 2rem 0 1rem; }
+    .section-header hr { flex-grow: 1; margin: 0 1rem; opacity: 0.1; }
+</style>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card add-card">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-5">
+                        <img src="{{ url_for('static', filename='profile_user/default-male.png') }}" id="profile-preview" class="preview-img mb-3" />
+                        <h2 class="fw-bold">เพิ่มผู้ใช้งานใหม่</h2>
+                        <p class="text-muted small">กรอกข้อมูลสมาชิกใหม่ให้ครบถ้วน</p>
+                    </div>
+
+                    <form id="addStaffForm" method="POST" enctype="multipart/form-data">
+                        <div class="section-header">
+                            <span class="section-title">ข้อมูลพื้นฐาน</span>
+                            <hr />
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">ชื่อจริง *</label>
+                                <input type="text" name="fname" class="form-control" required placeholder="กรอกชื่อจริง" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">นามสกุล *</label>
+                                <input type="text" name="lname" class="form-control" required placeholder="กรอกนามสกุล" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">เพศ *</label>
+                                <div class="gender-group">
+                                    <div class="gender-item">
+                                        <input type="radio" name="gender" id="male" value="male" checked onchange="updateDefaultImg('male')" />
+                                        <label for="male" class="gender-label">ชาย</label>
+                                    </div>
+                                    <div class="gender-item">
+                                        <input type="radio" name="gender" id="female" value="female" onchange="updateDefaultImg('female')" />
+                                        <label for="female" class="gender-label">หญิง</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">ชื่อผู้ใช้ (Username) *</label>
+                                <input type="text" name="username" class="form-control" required placeholder="สำหรับใช้ Login" />
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">สิทธิ์การใช้งาน *</label>
+                                <select name="role_id" class="form-select" required>
+                                    <option value="" selected disabled>-- เลือกสิทธิ์การใช้งาน --</option>
+                                    {% for role in roles %}
+                                    <option value="{{ role.role_id }}">{{ role.r_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="section-header">
+                            <span class="section-title">ข้อมูลความปลอดภัย</span>
+                            <hr />
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">รหัสผ่าน *</label>
+                                <input type="password" name="password" id="password" class="form-control" required placeholder="รหัสผ่านอย่างน้อย 6 ตัว" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">ยืนยันรหัสผ่าน *</label>
+                                <input type="password" id="confirm_password" class="form-control" required placeholder="กรอกรหัสผ่านอีกครั้ง" />
+                            </div>
+                        </div>
+
+                        <div class="section-header">
+                            <span class="section-title">ข้อมูลติดต่อและเอกสาร</span>
+                            <hr />
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">อีเมล</label>
+                                <input type="email" name="email" class="form-control" placeholder="example@mail.com" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">เบอร์โทรศัพท์ *</label>
+                                <input type="text" name="tel" class="form-control" required placeholder="08XXXXXXXX" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">เลขบัตรประชาชน *</label>
+                                <input type="text" name="id_card" class="form-control" maxlength="13" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">วันออกบัตร *</label>
+                                <input type="date" name="start_card" class="form-control" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">วันหมดอายุ *</label>
+                                <input type="date" name="end_card" class="form-control" required />
+                            </div>
+                            
+                            <div class="col-md-6 mt-3">
+                                <label class="form-label">รูปโปรไฟล์ (ไม่บังคับ)</label>
+                                <div class="upload-box" onclick="document.getElementById('profile_img').click()">
+                                    <i class="bi bi-image text-primary fs-2" id="icon-profile"></i>
+                                    <p class="mb-0 small text-muted" id="text-profile">แนะนำ 1:1 (ไม่เกิน 2MB)</p>
+                                    <input type="file" id="profile_img" name="profile_img" hidden accept="image/*" onchange="updateFileName(this, 'text-profile', 'icon-profile', 'profile-preview', 2)" />
+                                </div>
+                            </div>
+                            <div class="col-md-6 mt-3">
+                                <label class="form-label text-danger">รูปบัตรประชาชน * (บังคับ)</label>
+                                <div class="upload-box" id="id-card-dropzone" onclick="document.getElementById('id_card_file').click()">
+                                    <i class="bi bi-file-earmark-pdf text-danger fs-2" id="icon-idcard"></i>
+                                    <p class="mb-0 small text-muted" id="text-idcard">อัปโหลดไฟล์ (ไม่เกิน 5MB)</p>
+                                    <input type="file" id="id_card_file" name="id_card_file" hidden accept="image/*" required onchange="updateFileName(this, 'text-idcard', 'icon-idcard', null, 5)" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 d-flex justify-content-between">
+                            <a href="{{ url_for('user_settings') }}" class="btn btn-link text-muted">ยกเลิก</a>
+                            <button type="button" onclick="confirmAddUser()" class="btn btn-primary px-5 py-3 shadow-lg fw-bold" style="border-radius: 15px">
+                                <i class="bi bi-person-plus"></i> บันทึกข้อมูล
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    function updateDefaultImg(gender) {
+        const preview = document.getElementById("profile-preview");
+        if (preview.src.includes("default")) {
+            preview.src = gender === "female" 
+                ? "{{ url_for('static', filename='profile_user/default-female.png') }}" 
+                : "{{ url_for('static', filename='profile_user/default-male.png') }}";
+        }
+    }
+
+    function updateFileName(input, textId, iconId, previewId, maxSizeMB) {
+        const fileText = document.getElementById(textId);
+        const fileIcon = document.getElementById(iconId);
+        
+        if (input.files && input.files[0]) {
+            const fileSize = input.files[0].size / 1024 / 1024;
+            if (fileSize > maxSizeMB) {
+                Swal.fire('ไฟล์ใหญ่เกินไป', `กรุณาเลือกไฟล์ขนาดไม่เกิน ${maxSizeMB}MB`, 'error');
+                input.value = "";
+                return;
+            }
+
+            fileText.innerHTML = `<strong class="text-success">เลือกสำเร็จ (${fileSize.toFixed(2)}MB)</strong>`;
+            fileIcon.className = "bi bi-check-circle-fill text-success fs-2";
+            
+            if (previewId) {
+                var reader = new FileReader();
+                reader.onload = (e) => { document.getElementById(previewId).src = e.target.result; };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    }
+
+    function confirmAddUser() {
+        const form = document.getElementById("addStaffForm");
+        const pass = document.getElementById("password").value;
+        const confirmPass = document.getElementById("confirm_password").value;
+        const idCardFile = document.getElementById("id_card_file");
+
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        if (idCardFile.files.length === 0) {
+            Swal.fire('ยังไม่อัปโหลดรูปบัตร', 'กรุณาอัปโหลดรูปบัตรประชาชนก่อนบันทึก', 'warning');
+            return;
+        }
+
+        if (pass !== confirmPass) {
+            Swal.fire('รหัสผ่านไม่ตรงกัน', 'กรุณาตรวจสอบการยืนยันรหัสผ่าน', 'error');
+            return;
+        }
+
+        Swal.fire({
+            title: "ยืนยันการบันทึก?",
+            text: "คุณต้องการเพิ่มผู้ใช้งานรายนี้ใช่หรือไม่",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonColor: "#4e73df",
+            confirmButtonText: "บันทึก",
+            cancelButtonText: "ยกเลิก",
+            borderRadius: "15px",
+        }).then((result) => {
+            if (result.isConfirmed) form.submit();
+        });
+    }
+</script>
+{% endblock %}

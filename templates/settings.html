@@ -1,0 +1,234 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>Settings - ตั้งค่าระบบ</title>
+
+<style>
+    :root {
+        --setting-primary: #4361ee;
+        --setting-bg: #f8f9fa;
+    }
+
+    .settings-header {
+        margin-bottom: 2rem;
+    }
+
+    .settings-card {
+        border: none;
+        border-radius: 16px;
+        transition: transform 0.2s;
+        background: white;
+    }
+
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--setting-primary);
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .input-group-text {
+        background-color: transparent;
+        border-right: none;
+        color: #6c757d;
+    }
+
+    .form-control:disabled {
+        background-color: #fdfdfd;
+        border-color: #f1f1f1;
+        color: #adb5bd;
+    }
+
+    .form-control.setting-input {
+        border-left: none;
+        font-weight: 500;
+    }
+
+    /* สไตล์เฉพาะสำหรับ Switch ขนาดใหญ่ */
+    .large-switch .form-check-input {
+        width: 3.5rem;
+        height: 1.75rem;
+        cursor: pointer;
+    }
+
+    .btn-action {
+        border-radius: 12px;
+        padding: 10px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .alert {
+        border-radius: 12px;
+        border: none;
+    }
+</style>
+
+<div class="container py-4">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm mb-4" role="alert">
+                    <i class="bi bi-info-circle-fill me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="settings-header">
+        <h2 class="fw-bold"><i class="bi bi-gear-fill me-2"></i> ตั้งค่าระบบ</h2>
+        <p class="text-muted">ปรับแต่งกฎเกณฑ์และการทำงานพื้นฐานของระบบหอพัก</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('update_settings') }}" id="settingsForm">
+        <div class="card settings-card shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="section-title">
+                    <i class="bi bi-cash-stack"></i> การเงินและการเรียกเก็บ
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">วันที่ต้องชำระเงิน</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                            <input type="number" name="invoice_due_day" class="form-control setting-input text-center"
+                                value="{{ settings.invoice_due_day }}" required disabled>
+                            <span class="input-group-text">ของทุกเดือน</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">ค่าปรับรายวัน (บาท)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">฿</span>
+                            <input type="number" name="late_fee_per_day" class="form-control setting-input text-center"
+                                value="{{ settings.late_fee_per_day }}" required disabled>
+                            <span class="input-group-text">/วัน</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">ภาษีมูลค่าเพิ่ม (VAT)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-percent"></i></span>
+                            <input type="number" name="vat_percent" class="form-control setting-input text-center"
+                                value="{{ settings.vat_percent }}" required disabled>
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card settings-card shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="section-title">
+                    <i class="bi bi-file-earmark-text"></i> ข้อกำหนดสัญญาและระยะเวลา
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">จำนวนใบเสร็จต่อเล่ม</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-book"></i></span>
+                            <input type="number" name="receipt_page_limit" class="form-control setting-input"
+                                value="{{ settings.receipt_page_limit }}" required disabled>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">สัญญาขั้นต่ำ</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-clock-history"></i></span>
+                            <input type="number" name="min_lease_months" class="form-control setting-input text-center"
+                                value="{{ settings.min_lease_months }}" required disabled>
+                            <span class="input-group-text">เดือน</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">ระยะเวลาพำนักขั้นต่ำก่อนย้าย</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-house-check"></i></span>
+                            <input type="number" name="min_stay_before_early_move" class="form-control setting-input text-center"
+                                value="{{ settings.min_stay_before_early_move }}" required disabled>
+                            <span class="input-group-text">เดือน</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card settings-card shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="section-title">
+                    <i class="bi bi-bell"></i> ระบบอัตโนมัติและการแจ้งเตือน
+                </div>
+                <div class="row g-4 align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted">แจ้งเตือนล่วงหน้า (วัน)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-megaphone"></i></span>
+                            <input type="number" name="bill_reminder_days" class="form-control setting-input text-center" 
+                                value="{{ settings.bill_reminder_days }}" required disabled>
+                            <span class="input-group-text">วัน</span>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="form-check form-switch large-switch">
+                            <input class="form-check-input" type="checkbox" id="auto_delete_contract_files"
+                                name="auto_delete_contract_files" value="1" {% if settings.auto_delete_contract_files=='1' %}checked{% endif %} disabled>
+                            <label class="form-check-label ms-3 fw-bold" for="auto_delete_contract_files">
+                                ระบบลบไฟล์สัญญาอัตโนมัติ (เมื่อครบกำหนด)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="form-check form-switch large-switch">
+                            <input class="form-check-input" type="checkbox" id="auto_generate_bill"
+                                name="auto_generate_bill" value="1" {% if settings.auto_generate_bill=='1' %}checked{% endif %} disabled>
+                            <label class="form-check-label ms-3 fw-bold" for="auto_generate_bill">
+                                ระบบสร้างบิลอัตโนมัติ 
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-3 mt-4">
+            <button type="button" class="btn btn-warning btn-action shadow-sm" id="editButton" onclick="enableEdit()">
+                <i class="bi bi-pencil-square me-2"></i> แก้ไขการตั้งค่า
+            </button>
+            <button type="submit" class="btn btn-primary btn-action shadow-sm d-none" id="saveButton">
+                <i class="bi bi-save me-2"></i> บันทึกข้อมูล
+            </button>
+            <button type="button" class="btn btn-light btn-action shadow-sm d-none" id="cancelButton" onclick="cancelEdit()">
+                ยกเลิก
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    function enableEdit() {
+        document.querySelectorAll('.setting-input').forEach(el => {
+            el.disabled = false;
+            el.classList.add('border-primary'); // ไฮไลท์ช่องที่แก้ได้
+        });
+
+        const autoDeleteToggle = document.getElementById('auto_delete_contract_files');
+        if (autoDeleteToggle) autoDeleteToggle.disabled = false;
+        const autoGenToggle = document.getElementById('auto_generate_bill');
+        if (autoGenToggle) autoGenToggle.disabled = false;
+
+        document.getElementById('editButton').classList.add('d-none');
+        document.getElementById('saveButton').classList.remove('d-none');
+        document.getElementById('cancelButton').classList.remove('d-none');
+    }
+
+    function cancelEdit() {
+        // เพิ่มความสวยงามด้วยการจางหายก่อนโหลดใหม่
+        document.body.style.opacity = "0.5";
+        location.reload();
+    }
+</script>
+{% endblock %}

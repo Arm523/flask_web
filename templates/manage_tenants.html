@@ -1,0 +1,207 @@
+{% extends 'layout.html' %}
+{% block content %}
+<title>Manage Tenants - การจัดการผู้เช่า</title>
+
+<div id="flash-data" data-messages='{{ get_flashed_messages(with_categories=true) | tojson | safe }}'></div>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="bi bi-people-fill"></i> Manage Tenants</h4>
+        <button class="btn btn-primary" onclick="openTenantModal('add')">+ เพิ่มผู้เช่าใหม่</button>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th>ชื่อ-นามสกุล</th>
+                        <th>เบอร์โทร/Email</th>
+                        <th>ห้องปัจจุบัน</th>
+                        <th class="text-center">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tenants %}
+                    <tr>
+                        <td>
+                            <strong>{{ t.fname }} {{ t.lname }}</strong><br>
+                            <small class="text-muted">เลขบัตรประชาชน: {{ t.id_card }}</small>
+                        </td>
+                        <td>{{ t.tel }}<br><small>{{ t.email }}</small></td>
+                        <td>
+                            {% if t.current_room %}
+                            <span class="badge bg-success">ห้อง {{ t.current_room }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">ไม่มีสัญญา</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-warning edit-tenant-btn"
+                                data-tenant='{{ t | tojson | safe }}'>
+                                <i class="bi bi-pencil"></i>
+                            </button>
+
+                            <form action="{{ url_for('manage_tenants') }}" method="POST" class="d-inline delete-form">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="tenant_id" value="{{ t.tenant_id }}">
+                                <button type="button" class="btn btn-sm btn-danger delete-btn">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="tenantModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form id="tenantForm" method="POST" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">ข้อมูลผู้เช่า</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="action" id="formAction">
+                <input type="hidden" name="tenant_id" id="tenant_id">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label>เลขบัตรประชาชน</label>
+                        <input type="text" name="id_card" id="id_card" class="form-control" maxlength="13" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label>ชื่อ</label>
+                        <input type="text" name="fname" id="fname" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label>นามสกุล</label>
+                        <input type="text" name="lname" id="lname" class="form-control" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label>เพศ</label>
+                        <select name="gender" id="gender" class="form-select">
+                            <option value="ชาย">ชาย</option>
+                            <option value="หญิง">หญิง</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label>อายุ</label>
+                        <input type="number" name="age" id="age" class="form-control" required> 
+                    </div>
+                    <div class="col-md-4">
+                        <label>วันเกิด</label>
+                        <input type="date" name="bd" id="bd" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label>เบอร์โทร</label>
+                        <input type="text" name="tel" id="tel" class="form-control" placeholder="08x-xxx-xxxx" required>
+                    </div>
+                    <div class="col-md-12">
+                        <label>ที่อยู่ปัจจุบันที่สามารถติดต่อได้</label>
+                        <textarea name="address" id="address" class="form-control" rows="2" placeholder="บ้านเลขที่ ถนน เขต จังหวัด"></textarea>
+                    </div>
+                    <div class="col-md-12">
+                        <label>Email</label>
+                        <input type="email" name="email" id="email" class="form-control" placeholder="xxx@gmail.com">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">บันทึกข้อมูล</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // 1. ฟังก์ชันเปิด Modal (ต้องอยู่นอก DOMContentLoaded เพื่อให้ปุ่ม HTML เรียกใช้ได้)
+    function openTenantModal(mode, data = null) {
+        const modalElement = document.getElementById('tenantModal');
+        const modal = new bootstrap.Modal(modalElement);
+
+        document.getElementById('formAction').value = mode;
+        document.getElementById('modalTitle').innerText = mode === 'add' ? 'เพิ่มผู้เช่าใหม่' : 'แก้ไขข้อมูลผู้เช่า';
+
+        if (data) {
+            document.getElementById('tenant_id').value = data.tenant_id || '';
+            document.getElementById('id_card').value = data.id_card || '';
+            document.getElementById('fname').value = data.fname || '';
+            document.getElementById('lname').value = data.lname || '';
+            document.getElementById('gender').value = data.gender || 'ชาย';
+            document.getElementById('age').value = data.age || '';
+            if (data.bd) {
+                // แปลงวันที่ให้เป็น YYYY-MM-DD เพื่อให้ input[type="date"] แสดงผลได้
+                const date = new Date(data.bd);
+                const formattedDate = date.toISOString().split('T')[0];
+                document.getElementById('bd').value = formattedDate;
+            } else {
+                document.getElementById('bd').value = '';
+            }
+            document.getElementById('tel').value = data.tel || '';
+            document.getElementById('address').value = data.address || '';
+            document.getElementById('email').value = data.email || '';
+        } else {
+            document.getElementById('tenantForm').reset();
+            document.getElementById('tenant_id').value = '';
+        }
+        modal.show();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const dataElement = document.getElementById('flash-data');
+        if (dataElement) {
+            const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
+            messages.forEach(([category, message]) => {
+                Swal.fire({
+                    icon: category === 'success' ? 'success' : (category === 'danger' ? 'error' : 'info'),
+                    title: category === 'success' ? 'สำเร็จ' : 'แจ้งเตือน',
+                    text: message,
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+            });
+        }
+
+        // --- 3. จัดการปุ่มแก้ไข (Edit) ---
+        document.querySelectorAll('.edit-tenant-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                try {
+                    const data = JSON.parse(this.getAttribute('data-tenant'));
+                    console.log("Editing Data:", data); 
+                    openTenantModal('edit', data);
+                } catch (e) {
+                    console.error("JSON Parse Error:", e);
+                }
+            });
+        });
+
+        // --- 4. จัดการปุ่มลบ (Delete) ---
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const form = this.closest('.delete-form');
+                Swal.fire({
+                    title: 'ยืนยันการลบ?',
+                    text: "คุณต้องการลบข้อมูลผู้เช่ารายนี้ใช่หรือไม่!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'ใช่, ลบเลย!',
+                    cancelButtonText: 'ยกเลิก'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        console.log("Console Status: User confirmed delete.");
+                        form.submit();
+                    } else {
+                        console.log("Console Status: Delete cancelled.");
+                    }
+                });
+            });
+        });
+    });
+</script>
+{% endblock %}

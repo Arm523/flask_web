@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mt-2">สัญญาเช่าที่อัพโหลดแล้ว</h2>
+<title>Leases Uploaded - สัญญาเช่าที่อัพโหลดแล้ว</title>
+<hr>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<form method="get" class="row mb-4">
+    <div class="col-md-4">
+        <label for="status">สถานะสัญญา:</label>
+        <select name="status" id="status" class="form-select">
+            <option value="">------------------ทั้งหมด------------------</option>
+            {% for key, label in status_map.items() %}
+            <option value="{{ key }}" {% if selected_status==key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label for="room">เลขห้อง:</label>
+        <input type="text" name="room" id="room" class="form-control" value="{{ room_filter }}">
+    </div>
+    <div class="col-md-4 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">ค้นหา</button>
+    </div>
+</form>
+
+<div class="row row-cols-1 row-cols-md-3 g-3">
+    {% for lease in leases %}
+    <div class="col">
+        <div class="card bg-light text-dark shadow-sm"
+            style="font-size: 0.9rem; min-height: 180px; position: relative;">
+            <div class="card-body d-flex flex-column justify-content-between h-100">
+                <div>
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="card-title">ผู้เช่า {{ lease.tenant_name }}</h5>
+                        <img src="{{ url_for('static', filename='icons/' + status_icons[lease.status]) }}" alt="icon"
+                            style="width: 70px; height: 70px; position: absolute;  right: 10px; top: 10px;" />
+                    </div>
+                    <p class="card-text mb-1"><strong>ห้อง:</strong> {{ lease.room_number }}</p>
+                    <p class="card-text mb-1"><strong>เริ่มสัญญา:</strong> {{ lease.contract_start }}</p>
+                    <p class="card-text mb-1"><strong>สิ้นสุดสัญญา:</strong> {{ lease.contract_end }}</p>
+                    <p class="card-text mb-1"><strong>สถานะ:</strong> {{ status_map[lease.status] }}</p>
+                </div>
+                {% if lease.status in [1,2,3,4,5,6,7] and lease.contracts_file %}
+                <a href="{{ url_for('contracts', filename=lease.contracts_file) }}" target="_blank"
+                    style="background-color: #1ac728; color: #ffffff; text-decoration: none;"
+                    class="btn btn-sm btn-light mt-2">ดูสัญญา</a>
+
+                <a><strong class="text-danger">*หากต้องอัปโหลดเอกสารสัญญาใหม่ กรุณารวมหลักฐานทุกอย่างไว้ในไฟล์เดียว</strong></a>
+                <form action="{{ url_for('edit_signed_contract', contract_id=lease.contract_id) }}" method="POST"
+                    enctype="multipart/form-data" class="edit-contract-form">
+                    <input type="file" name="file" class="form-control form-control-sm" accept=".pdf,.jpg,.png,.docx"
+                        required>
+                    <button type="submit" class="btn btn-warning btn-sm mt-1">
+                        🔁 แก้ไขไฟล์สัญญา
+                    </button>
+                </form>
+
+                {% if lease.status in [5, 6] %}
+                <form method="post" action="{{ url_for('delete_contract', contract_id=lease.contract_id) }}"
+                    class="delete-contract-form">
+                    <button type="submit" class="btn btn-sm btn-danger mt-2">ลบสัญญา</button>
+                </form>
+                {% endif %}
+
+                {% else %}
+                <p class="text-danger mt-2">ไม่มีไฟล์สัญญา (มีการลบไปเเล้ว)</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <p>ไม่มีสัญญาที่อัพโหลดไฟล์แล้วในระบบ</p>
+    {% endfor %}
+</div>
+
+<script>
+    document.querySelectorAll('.delete-contract-form').forEach(form => {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault(); // หยุด form ส่งทันที
+
+            // 1️⃣ Confirm ลบ
+            Swal.fire({
+                title: 'คุณแน่ใจหรือไม่?',
+                text: "การลบสัญญานี้จะไม่สามารถกู้คืนได้!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'ใช่ ลบเลย!',
+                cancelButtonText: 'ยกเลิก'
+            }).then((first) => {
+                if (first.isConfirmed) {
+
+                    // 2️⃣ กรอกรหัสผ่าน
+                    Swal.fire({
+                        title: 'ยืนยันรหัสผ่าน',
+                        input: 'password',
+                        inputLabel: 'กรอกรหัสผ่านผู้ใช้ของคุณ',
+                        inputPlaceholder: 'รหัสผ่าน',
+                        inputAttributes: {
+                            maxlength: 50,
+                            autocapitalize: 'off',
+                            autocorrect: 'off'
+                        },
+                        showCancelButton: true,
+                        confirmButtonText: 'ยืนยัน',
+                        cancelButtonText: 'ยกเลิก',
+                        preConfirm: (password) => {
+                            if (!password) {
+                                Swal.showValidationMessage('กรุณากรอกรหัสผ่านก่อนยืนยัน!');
+                            }
+                            return password;
+                        }
+                    }).then((second) => {
+                        if (second.isConfirmed) {
+
+                            // สร้าง input hidden สำหรับส่ง password ไป backend
+                            let pwdInput = document.createElement("input");
+                            pwdInput.type = "hidden";
+                            pwdInput.name = "user_password";
+                            pwdInput.value = second.value;
+
+                            form.appendChild(pwdInput);
+
+                            // 3️⃣ ส่ง form ผ่าน fetch (AJAX) เพื่อเช็ค password ก่อน
+                            fetch(form.action, {
+                                method: 'POST',
+                                body: new FormData(form),
+                                credentials: 'same-origin'
+                            })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.status === 'error') {
+                                        Swal.fire({
+                                            icon: 'error',
+                                            title: 'ล้มเหลว',
+                                            text: data.message
+                                        });
+                                    } else {
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: 'สำเร็จ',
+                                            text: 'ยืนยันการลบเอกสารสำเร็จ!'
+                                        }).then(() => {
+                                            // reload หน้า หรือ remove card ออก
+                                            location.reload();
+                                        });
+                                    }
+                                })
+                                .catch(() => {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'เกิดข้อผิดพลาด',
+                                        text: 'ไม่สามารถลบสัญญาได้'
+                                    });
+                                });
+                        }
+                    });
+
+                }
+            });
+        });
+    });
+
+    document.querySelectorAll('.edit-contract-form').forEach(form => {
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault(); // ❌ ไม่ให้ submit ทันที
+
+            const fileInput = form.querySelector('input[type="file"]');
+
+            if (!fileInput.files.length) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'ยังไม่ได้เลือกไฟล์',
+                    text: 'กรุณาเลือกไฟล์สัญญาก่อนอัปโหลด'
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'ยืนยันการแก้ไขสัญญา',
+                text: 'ไฟล์สัญญาเดิมจะถูกแทนที่ด้วยไฟล์ใหม่',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#f0ad4e',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'ใช่, อัปโหลดใหม่',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+
+                    Swal.fire({
+                        title: 'กำลังอัปโหลด...',
+                        text: 'กรุณารอสักครู่',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    form.submit();
+                }
+            });
+        });
+
+    });
+</script>
+{% endblock %}

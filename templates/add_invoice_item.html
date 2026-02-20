@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>เพิ่มรายการในใบแจ้งหนี้</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600&display=swap');
+  </style>
+</head>
+<style>
+  body {
+    background: #c3c9eb;
+    font-family: "Sarabun", sans-serif;
+  }
+
+  .container-box {
+    background: #fff;
+    border-radius: 18px;
+    padding: 30px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    max-width: 850px;
+    margin: 50px auto;
+    transition: all 0.3s ease;
+  }
+
+  .container-box:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    transform: translateY(-3px);
+  }
+
+  h4,
+  h5 {
+    font-weight: 600;
+    color: #1976d2;
+  }
+
+  .form-group label {
+    font-weight: 500;
+    color: #333;
+  }
+
+  .table {
+    background: #fafafa;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .btn-primary {
+    background-color: #1976d2;
+    border: none;
+  }
+
+  .btn-primary:hover {
+    background-color: #125aa0;
+  }
+
+  .btn-secondary {
+    background-color: #9e9e9e;
+    border: none;
+  }
+
+  .btn-secondary:hover {
+    background-color: #757575;
+  }
+
+  .btn-danger {
+    border: none;
+  }
+
+  .text-muted {
+    font-style: italic;
+  }
+
+  .form-select {
+    cursor: pointer;
+  }
+
+  .table th {
+    background-color: #e3f2fd;
+  }
+
+  .btn i {
+    margin-right: 4px;
+  }
+</style>
+
+<div class="container-box">
+  <h4 class="mb-3"><i class="bi bi-receipt-cutoff me-1"></i> เพิ่มรายการในใบแจ้งหนี้ #{{ invoice.invoice_id }}</h4>
+
+  <!-- ฟอร์มเพิ่มรายการ -->
+  <form method="POST" class="mb-4">
+    <div class="form-group mt-2">
+      <label>รายละเอียด</label>
+      <input type="text" class="form-control" name="description" required>
+    </div>
+    <div class="form-group mt-2">
+      <label>จำนวน (Quantity)</label>
+      <input type="number" class="form-control" name="quantity" value="1" min="1" step="0.01" required>
+    </div>
+    <div class="form-group mt-2">
+      <label>ราคา/หน่วย (Unit Price)</label>
+      <input type="number" class="form-control" name="unit_price" step="0.01" required>
+    </div>
+    <div class="form-group mt-2">
+      <label>ประเภท (Type)</label>
+      <select class="form-select" name="type" required>
+        <option style="color: green;" value="discount">ส่วนลด</option>
+        <option style="color: red;" value="penalty">ค่าปรับ</option>
+        <option style="color: #1976d2;" value="service">บริการเสริม</option>
+      </select>
+    </div>
+    <div class="d-flex justify-content-between mt-4">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save"></i> บันทึกรายการ
+      </button>
+      <a href="javascript:history.back()"  class="btn btn-secondary">
+        <i class="bi bi-arrow-left-circle"></i> กลับ Pending Invoices
+      </a>
+    </div>
+  </form>
+
+  <!-- ตารางรายการที่มีอยู่ -->
+  <h5 class="mb-2"><i class="bi bi-list-ul me-1"></i> รายการปัจจุบัน</h5>
+  <table class="table table-bordered table-hover">
+    <thead>
+      <tr>
+        <th>รายละเอียด</th>
+        <th>จำนวน</th>
+        <th>ราคา/หน่วย</th>
+        <th>รวม</th>
+        <th>ประเภท</th>
+        <th>จัดการ</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>{{ '%.2f'|format(item.unit_price) }}</td>
+        <td>{{ '%.2f'|format(item.total_price) }}</td>
+        <td>
+          {% if item.type == 'discount' %}
+          <span class="text-success">ส่วนลด</span>
+          {% elif item.type == 'penalty' %}
+          <span class="text-danger">ค่าปรับ</span>
+          {% elif item.type == 'service' %}
+          <span style="color: #1976d2;">บริการเสริม</span>
+          {% elif item.type == 'option' %}
+          <span style="color: rgb(25, 147, 163);">Option ตามสัญญา</span>
+          {% elif item.type == 'meter_adjustment' %}
+          <span style="color: rgb(9, 65, 150);">ค่ามิเตอร์ เก่าที่มีการเปลี่ยนมิเตอร์</span>
+          {% else %}
+          <span class="text-muted">{{ item.type }}</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('delete_invoice_item', item_id=item.id, invoice_id=invoice.invoice_id) }}"
+            class="btn btn-sm btn-danger" onclick="return confirm('ลบรายการนี้?');">
+            <i class="bi bi-trash3"></i> ลบ
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-center text-muted">ไม่มีรายการ</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  function confirmCancelInvoice(invoiceId) {
+        Swal.fire({
+          title: "ยืนยันการลบรายการ?",
+          text: "คุณต้องการยกเลิกบิลใบนี้ใช่หรือไม่? (การกระทำนี้ย้อนกลับไม่ได้)",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonColor: "#d33",
+          confirmButtonText: "ใช่, ยกเลิกเลย",
+          cancelButtonText: "ปิด",
+        }).then((result) => {
+          if (result.isConfirmed) {
+            fetch(`/delete_invoice_item/${invoiceId}`, { method: "POST" })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.status === "success") {
+                  Swal.fire("สำเร็จ!", data.message, "success").then(() =>
+                    location.reload(),
+                  ); // รีโหลดหน้าเพื่อดูสถานะใหม่
+                } else {
+                  Swal.fire("ล้มเหลว", data.message, "error");
+                }
+              });
+          }
+        });
+      }
+</script>
+
+</body>
+</html>

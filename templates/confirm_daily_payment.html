@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ยืนยันการชำระเงินรายวัน</title>
+    <style>
+        body {
+            font-family: "Sarabun", Tahoma, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 360px;
+            margin: auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        td,
+        th {
+            border-bottom: 1px solid #ccc;
+            padding: 4px;
+            font-size: 0.9rem;
+        }
+
+        th {
+            text-align: left;
+        }
+
+        h5 {
+            margin-top: 20px;
+            font-size: 1rem;
+            border-bottom: 1px solid #ccc;
+            color: #2980b9;
+            margin: 4px 0;
+            line-height: 1.5;
+        }
+
+        select,
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 12px;
+        }
+
+        button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 12px;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1e914e;
+        }
+
+        .qr-box {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .qr-box img {
+            width: 160px;
+            height: 160px;
+            border: 1px solid #ccc;
+            padding: 6px;
+            background-color: #fff;
+        }
+
+        .slip-label {
+            margin-top: 10px;
+            font-weight: 500;
+        }
+
+        @media print {
+            body {
+                width: 80mm;
+                font-size: 12px;
+                margin: 0;
+            }
+
+            .container {
+                box-shadow: none;
+                border: none;
+                padding: 10px;
+            }
+
+            button,
+            input,
+            select {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>📋 ยืนยันการชำระเงินรายวัน</h2>
+
+        <p><strong>ชื่อผู้เช่า:</strong> {{ invoice.guest_fname }} {{ invoice.guest_lname }}</p>
+        <p><strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building }} ชั้น {{ invoice.floor }}</p>
+
+        <p><strong>วันที่เข้าพัก:</strong> {{ invoice.billing_period_start.strftime('%d/%m/%Y') }}
+            ถึง {{ invoice.billing_period_end.strftime('%d/%m/%Y') }}</p>
+
+        <!-- ตารางค่าเช่ารายวัน -->
+        <h5>🏠 ค่าเช่ารายวัน / ค่าใช้จ่ายเพิ่มเติม:</h5>
+        <table>
+            <tr>
+                <th>รายการ</th>
+                <th style="text-align:center;">จํานวนวัน</th>
+                <th style="text-align:right;">ราคา/วัน</th>
+                <th style="text-align:right;">รวม</th>
+            </tr>
+            <tr>
+                <td>ค่าเช่าห้อง</td>
+                <td style="text-align:center;">{{ ((invoice.billing_period_end - invoice.billing_period_start).days + 1)
+                    }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(price_daily) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.rent_amount) }}</td>
+            </tr>
+        </table>
+
+        {% if invoice.overdue_days > 0 %}
+        <h5>📅 ค่าปรับค้างชำระ:</h5>
+        <table>
+            <tr>
+                <th>จำนวนวันค้างชำระ</th>
+                <th>ค่าปรับต่อวัน</th>
+                <th>รวมค่าปรับ</th>
+            </tr>
+            <tr>
+                <td>{{ invoice.overdue_days }}</td>
+                <td>{{ "{:,.2f}".format(late_fee_per_day) }} ฿</td>
+                <td>{{ "{:,.2f}".format(invoice.late_penalty) }} ฿</td>
+            </tr>
+        </table>
+        {% endif %}
+
+        {% if discount %}
+        <h4 style="color: green; line-height: 0.2;">ส่วนลด:</h4>
+        <table class="discount-table">
+            <thead>
+                <tr>
+                    <th>รายการ</th>
+                    <th style="text-align:center;">จำนวน</th>
+                    <th style="text-align:right;">ราคา/หน่วย</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for discount in discount %}
+                <tr>
+                    <td>{{ discount.description }}</td>
+                    <td style="text-align:center;">{{ "%.0f"|format(discount.quantity or 1) }}</td>
+                    <td style="text-align:right;">{{ "{:,.2f}".format(discount.unit_price or 0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if invoice.total_amount < 0 %} <p style="color: red;" class="mt-2">*คืนจํานวนเงิน หลังจากหักค่าต่างๆ
+            </p>
+            {% endif %}
+
+            <h4>💰 ยอดรวมทั้งหมด: {{ "{:,.2f}".format(invoice.total_amount) }} บาท</h4>
+            <form action="{{ url_for('confirm_daily_payment', invoice_id=invoice.invoice_id) }}" method="POST"
+                enctype="multipart/form-data">
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">เลือกช่องทางการชำระเงิน:</label>
+                    <select name="payment_method" id="payment_method" class="form-select" required
+                        onchange="updatePaymentUI()">
+                        <option value="cash">💵 เงินสด</option>
+                        <option value="bank_transfer">🏦 โอนผ่านบัญชีธนาคาร</option>
+                        <option value="promptpay">📱 PromptPay (QR Code)</option>
+                    </select>
+                </div>
+
+                <div id="payment_details_box" class="card bg-light mb-3 d-none">
+                    <div class="card-body">
+
+                        <div id="info_bank" class="payment-info d-none">
+                            <h3 class="text-primary mb-0">ข้อมูลบัญชีธนาคาร</h3>
+                            <div class="d-flex align-items-center mb-2">
+                                {% if biz.bank_name == 'กสิกรไทย' %}
+                                <img src="{{ url_for('static', filename='bank_logo/KBANK.png') }}" width="65"
+                                    class="me-2">
+                                {% elif biz.bank_name == 'ไทยพาณิชย์' %}
+                                <img src="{{ url_for('static', filename='bank_logo/SCB.png') }}" width="65"
+                                    class="me-2">
+                                {% elif biz.bank_name == 'กรุงไทย' %}
+                                <img src="{{ url_for('static', filename='bank_logo/KTB.png') }}" width="65"
+                                    class="me-2">
+                                {% elif biz.bank_name == 'กรุงเทพ' %}
+                                <img src="{{ url_for('static', filename='bank_logo/BBL.png') }}" width="65"
+                                    class="me-2">
+                                {% else %}
+                                <i class="bi bi-bank text-primary me-2"></i>
+                                {% endif %}
+                            </div>
+                            <p class="mb-1"><strong>ธนาคาร:</strong> {{ biz.bank_name }}</p>
+                            <p class="mb-1"><strong>เลขบัญชี:</strong> <span class="text-primary fw-bold"
+                                    id="bank_acc">{{
+                                    biz.bank_account_no }}</span></p>
+                            <p class="mb-1"><strong>ชื่อบัญชี:</strong> {{ biz.account_name }}</p>
+                        </div>
+
+                        <div id="info_promptpay" class="payment-info d-none text-center">
+                            <h6 class="text-primary text-start mb-3"><i class="bi bi-qr-code-scan"></i> สแกนจ่ายผ่าน
+                                PromptPay</h6>
+                            <img src="https://promptpay.io/{{ biz.promptpay_id }}/{{ invoice.total_amount }}.png"
+                                class="img-fluid my-2 shadow-sm border p-2 bg-white" style="max-width: 200px;">
+                            <p class="small text-muted mt-2 mb-0">ชื่อบัญชี: {{ biz.account_name }}</p>
+                            <p class="fw-bold">ยอดเงิน: {{ "{:,.2f}".format(invoice.total_amount) }} ฿</p>
+                        </div>
+
+                        <div id="info_cash" class="payment-info d-none text-center py-3">
+                            <i class="bi bi-cash-stack fs-1 text-success"></i>
+                            <p class="mt-2 fw-bold">โปรดชำระเงินสดที่เคาน์เตอร์สำนักงาน</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="slip_upload_section" class="mb-3">
+                    <label class="form-label fw-bold">แนบหลักฐานการโอน (สลิป):</label>
+                    <input type="file" name="slip" id="slip_input" class="form-control" accept="image/*">
+                    <div class="form-text text-danger">* กรุณาตรวจสอบความถูกต้องของสลิปก่อนยืนยัน</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 py-2 fs-5">✔ ยืนยันการชำระเงิน</button>
+            </form>
+    </div>
+
+    <script>
+        function updatePaymentUI() {
+            const method = document.getElementById('payment_method').value;
+            const detailsBox = document.getElementById('payment_details_box');
+            const slipSection = document.getElementById('slip_upload_section');
+            const slipInput = document.getElementById('slip_input');
+
+            // รายชื่อ ID ของข้อมูลช่องทางชำระเงิน
+            const infoIds = ['info_cash', 'info_bank', 'info_promptpay'];
+
+            // 1. ซ่อนข้อมูลทั้งหมดก่อน
+            infoIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none'; // ใช้ inline style เพื่อความแน่นอน
+            });
+
+            // 2. แสดงกล่องใหญ่
+            detailsBox.classList.remove('d-none');
+            detailsBox.style.display = 'block';
+
+            // 3. เงื่อนไขตามการเลือก
+            if (method === 'cash') {
+                document.getElementById('info_cash').style.display = 'block';
+                slipSection.style.display = 'none'; // ซ่อนส่วนอัปโหลดสลิป
+                slipInput.required = false;
+            }
+            else if (method === 'bank_transfer') {
+                document.getElementById('info_bank').style.display = 'block';
+                slipSection.style.display = 'block';
+                slipInput.required = true;
+            }
+            else if (method === 'promptpay') {
+                document.getElementById('info_promptpay').style.display = 'block';
+                slipSection.style.display = 'block';
+                slipInput.required = true;
+            }
+        }
+
+        // เรียกทำงานเมื่อโหลดหน้าเสร็จ
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log("Payment UI Script Ready"); // ตรวจสอบใน Console ว่าทำงานไหม
+            updatePaymentUI();
+        });
+    </script>
+</body>
+
+</html>

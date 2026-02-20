@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สร้างบิลเพิ่มเติม - สัญญา #{{ contract_id }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #c3c9eb;
+            font-family: "Sarabun", sans-serif;
+        }
+
+        .container {
+            max-width: 700px;
+        }
+
+        .page-box {
+            background: white;
+            border-radius: 18px;
+            padding: 30px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, .1);
+            margin-top: 20px;
+        }
+
+        .btn-back-modern {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 14px;
+            color: #ffffff;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-back-modern:hover {
+            transform: translateY(-2px);
+            color: white;
+            opacity: 0.9;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .form-control,
+        .form-select {
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .item-row {
+            background: #fcfcfc;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+
+        .btn-remove-item {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: #ff4d4d;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .total-box {
+            background: #eef2ff;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: right;
+            border: 2px dashed #4f46e5;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #28a745, #218838);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-weight: 700;
+            width: 100%;
+            margin-top: 20px;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+
+        .room-info-badge {
+            background: #eef2ff;
+            color: #4f46e5;
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border-left: 4px solid #4f46e5;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container py-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="fw-bold text-dark mb-0 text-white">ออกบิลเพิ่มเติม</h3>
+            <a href="javascript:history.back()" class="btn-back-modern">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    width="18">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                กลับ
+            </a>
+        </div>
+
+        <div class="page-box">
+            <div class="room-info-badge">
+                <strong>ข้อมูลห้อง:</strong> ห้อง {{ room_name }} | <strong>สัญญา:</strong> #{{ contract_id }}
+            </div>
+
+            <form action="/create_invoice_extra_bill/{{ contract_id }}" method="POST">
+                <input type="hidden" name="contract_id" value="{{ contract_id }}">
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <label class="form-label mb-0">รายการเรียกเก็บเงิน</label>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addItem()">+ เพิ่มรายการ</button>
+                </div>
+
+                <div id="items-container">
+                    <div class="item-row" id="item-0">
+                        <div class="row g-2">
+                            <div class="col-md-5">
+                                <label class="small text-muted">ชื่อรายการ</label>
+                                <input type="text" class="form-control" name="items[0][description]"
+                                    placeholder="เช่น ค่าล้างแอร์" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="small text-muted">ประเภท</label>
+                                <select class="form-select" name="items[0][type]">
+                                    <option value="service">ค่าบริการ/ซ่อมแซม</option>
+                                    <option value="penalty">ค่าปรับ</option>
+                                    <option value="discount">ส่วนลด</option>
+                                    <option value="option">ส่วนเสริม/อุปกรณ์</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="small text-muted">จำนวนเงิน</label>
+                                <input type="number" step="0.01" class="form-control item-amount"
+                                    name="items[0][amount]" placeholder="0.00" oninput="calculateTotal()" required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-12 mb-4">
+                        <label for="due_date" class="form-label">กำหนดชำระเงิน</label>
+                        <input type="date" class="form-control" id="due_date" name="due_date" value="{{ today_date }}"
+                            required>
+                    </div>
+                </div>
+
+                <div class="total-box mb-4">
+                    <div class="text-muted small">ยอดรวมสุทธิที่จะบันทึก</div>
+                    <div class="fs-2 fw-bold text-primary">
+                        <span id="display-total">0.00</span> <small class="fs-6 text-dark">บาท</small>
+                    </div>
+                    <input type="hidden" name="total_amount" id="input-total" value="0">
+                </div>
+
+                <div class="mb-4">
+                    <label for="remark" class="form-label">หมายเหตุ (สำหรับเจ้าของหอ)</label>
+                    <textarea class="form-control" id="remark" name="remark" rows="2"
+                        placeholder="บันทึกช่วยจำ..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-submit">
+                    💾 บันทึกและออกบิล
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let itemIndex = 1;
+
+        function addItem() {
+            const container = document.getElementById('items-container');
+            const itemHtml = `
+                <div class="item-row" id="item-${itemIndex}">
+                    <button type="button" class="btn-remove-item" onclick="removeItem(${itemIndex})">×</button>
+                    <div class="row g-2">
+                        <div class="col-md-5">
+                            <input type="text" class="form-control" name="items[${itemIndex}][description]" placeholder="รายการใหม่" required>
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select" name="items[${itemIndex}][type]">
+                                <option value="service">ค่าบริการเพิ่มเติม</option>
+                                <option value="penalty">ค่าปรับ</option>
+                                <option value="option">ส่วนเสริมตามสัญญา</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="number" step="0.01" class="form-control item-amount" name="items[${itemIndex}][amount]" placeholder="0.00" oninput="calculateTotal()" required>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', itemHtml);
+            itemIndex++;
+        }
+
+        function removeItem(index) {
+            document.getElementById(`item-${index}`).remove();
+            calculateTotal();
+        }
+
+        function calculateTotal() {
+            let total = 0;
+            const amounts = document.getElementsByClassName('item-amount');
+            for (let input of amounts) {
+                total += parseFloat(input.value) || 0;
+            }
+            document.getElementById('display-total').innerText = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('input-total').value = total.toFixed(2);
+        }
+    </script>
+</body>
+
+</html>

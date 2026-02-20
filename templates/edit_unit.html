@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+
+{% block title %}แก้ไขข้อมูลห้องพัก - {{ room.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>แก้ไขข้อมูลห้องพัก: {{ room.name }}</h2>
+
+    <form method="POST" action="{{ url_for('edit_unit', unit_id=room.unit_id) }}"
+        class="row g-3 border rounded p-4 shadow">
+        <div class="col-md-3">
+            <label for="name" class="form-label">ชื่อห้อง</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ room.name }}" required>
+        </div>
+
+        <div class="col-md-2">
+            <label for="building" class="form-label">ตึก</label>
+            <input type="number" class="form-control" id="building" name="building" value="{{ room.building }}" required>
+        </div>
+
+        <div class="col-md-2">
+            <label for="floor" class="form-label">ชั้น</label>
+            <input type="number" class="form-control" id="floor" name="floor" value="{{ room.floor }}" required>
+        </div>
+
+        <div class="col-md-3">
+            <label for="zone" class="form-label">โซน</label>
+            <input type="text" class="form-control" id="zone" name="zone" value="{{ room.zone }}">
+        </div>
+
+        <div class="col-md-4">
+            <label for="type_unit_id" class="form-label">ประเภทห้อง</label>
+            <select class="form-select" id="type_unit_id" name="type_unit_id" required>
+                {% for t in types %}
+                <option value="{{ t.type_id }}" {% if t.type_id==room.type_unit_id %}selected{% endif %}>
+                    {{ t.n_type }} ({{ t.price }} บาท)
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <label for="status_id" class="form-label">สถานะ</label>
+        <select class="form-select" id="status_id" name="status_id" required>
+            {% for s in statuses %}
+            <option value="{{ s.status_id }}" {% if room.status_id==s.status_id %}selected{% endif %}>
+                {{ s.name_status }}
+            </option>
+            {% endfor %}
+        </select>
+
+
+        <div class="col-md-12 text-end">
+            <a href="{{ url_for('manage_units') }}" class="btn btn-secondary">ยกเลิก</a>
+            <button type="submit" class="btn btn-primary">บันทึกการแก้ไข</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

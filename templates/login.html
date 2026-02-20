@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body,
+        html {
+            height: 100%;
+            margin: 0;
+            background: url('https://www.sppcorp.net/uploads/customer/d5b99e04b8cb0e66ec0c51065888da91.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .login-box {
+            background: rgba(255, 255, 255, 0.3);
+            /* ใส โปร่งใส */
+            backdrop-filter: blur(10px);
+            /* ทำเบลอพื้นหลัง */
+            -webkit-backdrop-filter: blur(10px);
+            /* รองรับ Safari */
+            border-radius: 16px;
+            padding: 40px 30px;
+            color: #333;
+            box-shadow: 0px 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+
+        .login-box h4 {
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #1f2937;
+        }
+
+        .login-box input[type="text"],
+        .login-box input[type="password"] {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            color: #333;
+        }
+
+        .login-box input::placeholder {
+            color: #aaa;
+        }
+
+        .login-box .form-check-label {
+            color: #444;
+        }
+
+        .login-box .btn {
+            background: #6366f1;
+            color: white;
+            font-weight: bold;
+            margin-top: 20px;
+            border-radius: 6px;
+        }
+
+        .login-icon {
+            font-size: 48px;
+            background: white;
+            color: #6366f1;
+            border-radius: 50%;
+            width: 70px;
+            height: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 20px auto;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+</head>
+
+<body>
+
+    <div class="container h-100 d-flex justify-content-center align-items-center">
+        <div class="col-md-4 login-box text-center">
+            <div class="login-icon">
+                <i class="bi bi-person-circle"></i>
+            </div>
+            <h4>LOG IN</h4>
+
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <script>
+                {% for category, message in messages %}
+                Swal.fire({
+                    icon: "{{ 'success' if category == 'success' else 'error' }}", // ปรับ icon ตาม category
+                    title: "{{ 'สำเร็จ' if category == 'success' else 'แจ้งเตือน' }}",
+                    text: "{{ message }}",
+                    confirmButtonColor: '#3085d6',
+                });
+                {% endfor %}
+            </script>
+            {% endif %}
+            {% endwith %}
+
+            <!-- Login form -->
+            <form method="POST">
+                <div class="mb-3 text-start">
+                    <label class="form-label">Username</label>
+                    <input type="text" name="username" class="form-control" placeholder="Enter your username" required>
+                </div>
+                <div class="mb-3 text-start">
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" class="form-control" placeholder="Enter your password"
+                        required>
+                </div>
+                <div class="form-check text-start">
+                    <input class="form-check-input" type="checkbox" id="remember">
+                    <label class="form-check-label" for="remember">Remember me</label>
+                </div>
+                <button type="submit" class="btn w-100">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS & Icons -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+</body>
+
+</html>

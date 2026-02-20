@@ -1,0 +1,1254 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>Room Overview - ภาพรวมห้อง</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<div id="flash-data" data-messages='{{ get_flashed_messages(with_categories=true) | tojson | safe }}'></div>
+
+{% set status_choices = {
+1: '🟢ว่าง',
+2: '🔵มีผู้เช่า',
+3: '⚪ทำสัญญาเช่า',
+4: '🔴ปิดปรับปรุง',
+5: '🟡รอการชำระ',
+6: '⚫ตรวจสภาพห้อง / ชําระบิลสุดท้าย',
+7: '🟠 แจ้งย้ายออก'
+} %}
+
+{% set status_badge = {
+1: "bg-success",
+2: "bg-primary",
+3: "bg-info",
+4: "bg-danger",
+5: "bg-warning text-dark"
+} %}
+
+{% set contract_status_map = {
+1: 'ร่าง', 2: 'รอชำระ', 3: 'ใช้งาน',
+4: 'ใกล้หมดอายุ', 5: 'หมดอายุ',
+6: 'ย้ายออก', 7: 'ยกเลิก'
+} %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="container mt-3">
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<style>
+    .room-card {
+        padding: 8px !important;
+    }
+
+    .room-card .card-body {
+        padding: 10px !important;
+        font-size: 0.85rem;
+    }
+
+    .room-card h5 {
+        font-size: 1rem;
+        margin-bottom: 4px;
+    }
+
+    .room-card p,
+    .room-card small {
+        font-size: 0.85rem;
+        line-height: 1.1rem;
+    }
+
+    .room-card .badge {
+        font-size: 0.75rem;
+    }
+
+    body {
+        justify-content: center;
+    }
+
+    .container-dashboard {
+        background: #ffffff;
+        border-radius: 14px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .dashboard-header {
+        border-bottom: 1px solid #eee;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+    }
+
+    .dashboard-header h4 {
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .dashboard-body {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+    }
+
+    .dashboard-left {
+        width: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+    }
+
+    .dashboard-right {
+        flex: 1;
+    }
+
+    #statusPieChart {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    .chart-container {
+        position: relative;
+        width: 100%;
+        max-width: 280px;
+        aspect-ratio: 1 / 1;
+        margin: 0 auto 20% auto;
+    }
+
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+    }
+
+    .status-card {
+        border-radius: 12px;
+        padding: 10px 14px;
+        color: #fff;
+        min-height: 90px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .status-card::after {
+        content: "";
+        position: absolute;
+        right: -30px;
+        top: -30px;
+        width: 70px;
+        height: 70px;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 50%;
+    }
+
+    .status-card .label {
+        font-size: 0.85rem;
+        margin-bottom: 2px;
+        font-weight: 500;
+        opacity: 0.95;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .status-card .value {
+        font-size: 1.8rem;
+        font-weight: 800;
+        margin-top: 6px;
+        line-height: 1.2;
+    }
+
+    /* สีเฉพาะแต่ละสถานะ */
+    .bg-empty {
+        background: linear-gradient(135deg, #28a745, #5cd65c);
+    }
+
+    .bg-occupied {
+        background: linear-gradient(135deg, #0d6efd, #4dabf7);
+    }
+
+    .bg-contract {
+        background: linear-gradient(135deg, #17a2b8, #63cdda);
+    }
+
+    .bg-maintenance {
+        background: linear-gradient(135deg, #dc3545, #ff6b6b);
+    }
+
+    .bg-waiting {
+        background: linear-gradient(135deg, #ffc107, #ffe066);
+        color: #212529;
+    }
+
+    .bg-checkout {
+        background: linear-gradient(135deg, #343a40, #6c757d);
+    }
+
+    .room-alert-bar {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        padding: 6px 8px;
+        background: #f8f9fa;
+        border-top: 1px solid #eee;
+        border-bottom: 1px solid #eee;
+        align-items: center;
+        min-height: 40px;
+        scrollbar-width: thin;
+    }
+
+    .room-alert-bar::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .room-alert-bar::-webkit-scrollbar-thumb {
+        background: #ced4da;
+        border-radius: 10px;
+    }
+
+    .alert-chip {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        border-radius: 6px;
+    }
+
+    .room-alert-bar:empty {
+        display: none;
+    }
+
+    .alert-warning {
+        background: #fff3bf;
+        color: #f08c00;
+    }
+
+    .alert-danger {
+        background: #fde1e1;
+        color: #c92a2a;
+    }
+
+    .alert-success {
+        background: #d0f5bf;
+        color: #28a745;
+    }
+
+    .finance-card {
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+    }
+</style>
+
+<body>
+    <div class="row g-3 mb-4 mt-2">
+        <div class="col-md-8">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm finance-card">
+                    <div
+                        class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 px-3">
+                        <h6 class="fw-bold mb-0 text-dark">
+                            <i class="bi bi-bar-chart-fill me-2 text-primary"></i> รายได้ - รายจ่าย
+                        </h6>
+
+                        <div class="d-flex gap-2 align-items-center">
+                            <div class="position-relative">
+                                <input list="year-options" id="filter-year"
+                                    class="form-control form-control-sm bg-light border-0 shadow-none"
+                                    style="width: 100px; font-size: 12px;" placeholder="ระบุปี ค.ศ.">
+                                <datalist id="year-options"></datalist>
+                            </div>
+
+                            <a href="{{ url_for('finance_page') }}" class="btn btn-warning btn-sm">จัดการการเงิน</a>
+                        </div>
+                    </div>
+
+                    <div class="card-body p-3">
+                        <div style="height: 250px;">
+                            <canvas id="financeBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm p-3 finance-card h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0" style="font-size: 14px;">สถานะการจัดเก็บค่าเช่า</h6>
+
+                    <div class="d-flex gap-1 align-items-center">
+                        <input list="year-options" id="filter-year-donut"
+                            class="form-control form-control-sm bg-light border-0" style="font-size: 10px; width: 70px;"
+                            placeholder="ปี ค.ศ.">
+
+                        <select id="filter-month-donut" class="form-select form-select-sm bg-light border-0"
+                            style="font-size: 10px; width: 85px;">
+                        </select>
+
+                        <button class="btn btn-sm btn-primary py-1 px-2" onclick="loadDonutAndStats()">
+                            <i class="bi bi-arrow-clockwise" style="font-size: 10px;"></i>
+                        </button>
+
+                        <datalist id="year-options"></datalist>
+                    </div>
+                </div>
+
+                <div class="position-relative py-2" style="height: 160px; cursor: default;">
+                    <canvas id="paymentPieChart" style="pointer-events: none;"></canvas>
+                    <div class="position-absolute top-50 start-50 translate-middle text-center">
+                        <h3 class="fw-bold mb-0" id="pay-percent">0%</h3>
+                        <small class="text-muted" style="font-size: 11px;">จ่ายแล้ว</small>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between align-items-end mb-1">
+                        <div>
+                            <small class="text-muted d-block" style="font-size: 10px;">รายได้ที่เก็บได้จริง</small>
+                            <span class="fw-bold text-success" id="income-sum" style="font-size: 1.1rem;">฿ 0</span>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted d-block" style="font-size: 10px;">เป้าหมายทั้งหมด</small>
+                            <small class="fw-bold text-secondary" id="income-total">฿ 0</small>
+                        </div>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-success" id="pay-progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="unpaid-section">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0" style="font-size: 13px;">
+                            <i class="bi bi-exclamation-circle text-danger me-1"></i> ห้องที่ค้างชำระ
+                        </h6>
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none" onclick="location.href='/billing'"
+                            style="font-size: 11px;">ดูทั้งหมด</button>
+                    </div>
+                    <div id="unpaid-room-list" class="overflow-auto" style="max-height: 150px;">
+                        <div class="text-center py-2"><small class="text-muted">กำลังโหลด...</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="container-dashboard">
+        <div class="dashboard-header">
+            <h4>Overview Room</h4>
+        </div>
+
+        <div class="dashboard-body">
+            <div class="dashboard-left">
+                <div class="chart-container">
+                    <canvas id="statusPieChart"></canvas>
+                </div>
+            </div>
+
+            <div class="dashboard-right">
+                <div class="status-grid">
+                    <div class="status-card bg-empty">
+                        <div class="label">🟢 ห้องว่าง</div>
+                        <div class="value" id="sum-empty">0</div>
+                        <div><strong>ห้อง</strong></div>
+                    </div>
+
+                    <div class="status-card bg-occupied">
+                        <div class="label">🙍‍♂️ มีผู้เช่า</div>
+                        <div class="value" id="sum-occupied">0</div>
+                        <div><strong>ห้อง</strong></div>
+                    </div>
+
+                    <div class="status-card bg-contract">
+                        <div class="label">📄 ทำสัญญาเช่า</div>
+                        <div class="value" id="sum-contract">0</div>
+                        <div><strong>ห้อง</strong></div>
+                    </div>
+
+                    <div class="status-card bg-maintenance">
+                        <div class="label">🚧🛠️ ปิดปรับปรุง</div>
+                        <div class="value" id="sum-maintenance">0</div>
+                        <div><strong>ห้อง</strong></div>
+                    </div>
+
+                    <div class="status-card bg-waiting">
+                        <div class="label">💰 รอการชำระ</div>
+                        <div class="value" id="sum-waiting">0</div>
+                        <div><strong>ห้อง</strong></div>
+                    </div>
+
+                    <div class="status-card bg-checkout">
+                        <div class="label">🗓️ ตรวจสภาพ / บิลสุดท้าย</div>
+                        <div class="value" id="sum-checkout">0</div>
+                        <div><strong>ห้อง</strong></div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <div class="card border-0 shadow-sm p-3" style="border-left: 5px solid #ff9f43 !important;">
+                            <small class="text-muted">ค้างชำระ</small>
+                            <h4 class="fw-bold mb-0 text-warning">
+                                {{ rooms | selectattr('has_pending_bill', 'equalto', True) | list | length }}
+                                <span class="fs-6 fw-normal text-muted">ห้อง</span>
+                            </h4>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card border-0 shadow-sm p-3" style="border-left: 5px solid #32a1eb !important;">
+                            <small class="text-muted">ยังไม่จดมิเตอร์</small>
+                            <h4 class="fw-bold mb-0 text-primary" id="pending-meter">
+                                {{ rooms | selectattr('meter_saved', 'equalto', 0) | list | length }}
+                                <span class="fs-6 fw-normal text-muted">ห้อง</span>
+                            </h4>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card border-0 shadow-sm p-3" style="border-left: 5px solid #10ac84 !important;">
+                            <small class="text-muted">สัญญาใกล้หมดอายุ</small>
+                            <h4 class="fw-bold mb-0 text-success">
+                                {{ rooms | selectattr('contract_status', 'equalto', 4) | list | length }}
+                                <span class="fs-6 fw-normal text-muted">สัญญา</span>
+                            </h4>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card border-0 shadow-sm p-3" style="border-left: 5px solid #e01c1c !important;">
+                            <small class="text-muted">ห้องที่ไม่ได้ผูกกับมิเตอร์</small>
+                            <h4 class="fw-bold mb-0 text-danger">
+                                {{ rooms | selectattr('meter_id', 'equalto', none) | list | length }}
+                                <span class="fs-6 fw-normal text-muted">ห้อง</span>
+                            </h4>
+                        </div>
+                    </div>
+
+                    <button id="syncBtn" class="btn btn-primary">
+                        🔄 อ่านค่ามิเตอร์ล่าสุดลงทุกบิล Draft
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="GET" class="mb-2">
+        <div class="row">
+            <div class="col-md-3" style="width: 170px;">
+                <input type="text" name="number" class="form-control border border-primary text-dark fw-bold"
+                    placeholder="เลขห้อง" value="{{ request.args.get('number', '') }}">
+            </div>
+            <div class="col-md-2" style="width: 170px;">
+                <input type="text" name="building" class="form-control border border-primary text-dark fw-bold"
+                    placeholder="ตึก" value="{{ request.args.get('building', '') }}">
+            </div>
+            <div class="col-md-2" style="width: 170px;">
+                <input type="text" name="floor" class="form-control border border-primary text-dark fw-bold"
+                    placeholder="ชั้น" value="{{ request.args.get('floor', '') }}">
+            </div>
+            <div class="col-md-2" style="width: 170px;">
+                <select name="status_id" class="form-select border border-primary text-dark fw-bold">
+                    <option value="">ทุกสถานะ</option>
+                    {% for id, label in status_choices.items() %}
+                    <option value="{{ id }}" {% if request.args.get('status_id')==id | string %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-start">
+                <button type="submit" class="btn btn-primary w-100">ค้นหา</button>
+            </div>
+        </div>
+    </form>
+
+    <hr>
+
+    <div class="row row-cols-2 row-cols-md-4 g-3 mt-2 mb-2">
+        {% for room in rooms %}
+        <div class="col">
+            <div class="card shadow-sm border-0 rounded-4 bg-light position-relative room-card" style="padding: 8px;">
+                <div class="card-body p-2">
+                    <h5 class="card-title">🏠 ห้อง {{ room.number }}</h5>
+                    <p class="mb-1">ตึก: {{ room.building }} | ชั้น: {{ room.floor }}</p>
+                    <p>
+                        <span class="badge {{ status_badge.get(room.status_id, 'bg-secondary') }}">
+                            {{ status_choices.get(room.status_id, 'ไม่ทราบ') }}
+                        </span>
+                    </p>
+
+                    {% set has_alerts =
+                    not (room.meter_id or room.meter_water_id) or
+                    room.has_pending_bill or
+                    room.expired_contract or
+                    room.meter_saved in [0, 1] or
+                    room.contract_status == 4 or room.bill == 0
+                    %}
+                    {% if has_alerts %}
+                    <div class="room-alert-bar">
+
+                        {% if not (room.meter_id or room.meter_water_id) %}
+                        <span class="alert-chip alert-danger">⛔ ไม่มีการผูกกับมิเตอร์</span>
+                        {% endif %}
+
+                        {# --- ค้างชำระ --- #}
+                        {% if room.has_pending_bill %}
+                        <span class="alert-chip alert-warning">💵 ค้างชำระ</span>
+                        {% endif %}
+
+                        {# --- สถานะมิเตอร์ล่าสุด --- #}
+                        {% if room.meter_saved == 1 %}
+                        <span class="alert-chip alert-success">✅ บันทึกค่าน้ำ-ไฟเรียบร้อย</span>
+                        {% elif room.meter_saved == 0 %}
+                        {% if room.current_electricity_reading == None %}
+                        <span class="alert-chip alert-warning"><i class="fi fi-rr-gauge-circle-bolt"></i> ⚡
+                            ยังไม่บันทึกค่าไฟ</span>
+                        {% endif %}
+                        {% if room.current_water_reading == None %}
+                        <span class="alert-chip alert-warning">💧 ยังไม่บันทึกค่าน้ำ</span>
+                        {% endif %}
+                        {% endif %}
+
+                        {# --- สถานะบิลสุดท้าย/หมดสัญญา --- #}
+                        {% if room.contract_status == 4 %}
+                        {# เช็คสถานะการจ่ายเงินบิลสุดท้าย #}
+                        {% if room.i_status == 'paid' %}
+                        <span class="alert-chip alert-success">✅ ชําระบิลสุดท้ายเเล้ว</span>
+                        {% elif room.i_status == 'draft' %}
+                        <span class="alert-chip alert-warning">⚠️ บิลสุดท้ายยังไม่ชําระ</span>
+                        {% endif %}
+
+                        {# เช็ควันหมดสัญญา #}
+                        {% if room.contract_end %}
+                        {% if room.contract_end == room.today %}
+                        <span class="alert-chip alert-danger">⚠️ หมดอายุเเล้ว ({{ room.contract_end.strftime('%d/%m/%Y')
+                            }})</span>
+                        {% else %}
+                        <span class="alert-chip alert-danger">⚠️ ใกล้หมดอายุ ({{ room.contract_end.strftime('%d/%m/%Y')
+                            }})</span>
+                        {% endif %}
+                        {% endif %}
+                        {% endif %}
+
+                        {% if room.bill == 0 %}
+                        <span class="alert-chip alert-danger">⚠️ มีการเปลี่ยนมิเตอร์ </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if (room.i_status == 'draft' or room.meter_saved == 0) and room.status_id in [2,5,6] %}
+                    <button class="btn btn-success btn-sm w-50 mb-1 mt-2 d-flex justify-content-center"
+                        onclick="openMeterModal('{{ room.unit_id }}', '{{ room.number }}', '{{ room.previous_electricity_reading or 0 }}', '{{ room.previous_water_reading or 0 }}', '{{ room.current_electricity_reading }}', '{{ room.current_water_reading }}')">
+                        ⚡💧 บันทึกค่าน้ำ-ไฟ
+                    </button>
+                    {% endif %}
+
+                    {% if room.status_id in [2,5,6,7] and room.latest_daily_invoice_id %}
+                    <a href="{{ url_for('daily_pending', invoice_id=room.latest_daily_invoice_id) }}"
+                        class="btn btn-info btn-sm mt-1">จัดการบิลห้อง {{ room.number }}</a>
+                    {% endif %}
+
+                    {% if room.status_id in [2,5,6,7] and room.contract_id %}
+                    <a href="{{ url_for('unit_pending', contract_id=room.contract_id) }}"
+                        class="btn btn-info btn-sm mt-1">
+                        จัดการบิลห้อง {{ room.number }}
+                    </a>
+                    {% endif %}
+
+                    {% if room.contract_status == 4 and room.status_id == 6 %}
+                    <a href="{{ url_for('renew_contracts', contract_id=room.contract_id) }}"
+                        class="btn btn-warning btn-sm mt-1">
+                        ต่อสัญญา
+                    </a>
+                    {% endif %}
+
+                    {% if room.contract_id and room.actual_move_out_date %}
+                    <span class="badge bg-dark">ย้ายออกจริง: {{ room.actual_move_out_date }}</span>
+                    {% elif room.notice_move_out_date %}
+                    <span class="badge bg-warning text-dark mt-2">แจ้งย้ายออก: {{
+                        room.notice_move_out_date.strftime('%d/%m/%Y')
+                        }}</span>
+                    {% endif %}
+
+                    {% if room.has_daily_booking %}
+                    <span class="badge bg-success w-100 mt-2">มีการจองรายวัน</span>
+                    <p class="small text-dark mt-2">ตั้งแต่ : {{ room.billing_period_start.strftime('%d/%m/%Y') if
+                        room.billing_period_start else '-' }}
+                        ถึง : {{ room.billing_period_end.strftime('%d/%m/%Y') if room.billing_period_end else '-' }}
+                    </p>
+                    {% endif %}
+
+                    {% if room.contract_id and room.contract_status == 2 %}
+                    <p class="small text-muted mt-2">ต้องชำระก่อนวันที่: {{ room.pay_date }}</p>
+                    {% endif %}
+
+                    <p class="small text-muted mt-2">👤
+                        {{ room.guest_fname ~ ' ' ~ room.guest_lname if room.guest_fname else (room.tenant_name or
+                        '-')
+                        }}
+                    </p>
+
+                    <button class="btn btn-outline-primary btn-sm w-100" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#roomDetail{{ room.id }}">🔍 ดูรายละเอียด</button>
+
+                    <div class="collapse mt-3" id="roomDetail{{ room.id }}">
+                        <hr>
+                        <h6>Options ที่เลือก</h6>
+                        {% if room.options_selected %}
+                        <ul class="list-group list-group-flush small">
+                            {% for option in room.options_selected %}
+                            <li class="list-group-item">{{ option }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted small">ไม่มีรายการ options</p>
+                        {% endif %}
+
+                        {% if room.contract_id %}
+                        <a href="{{ url_for('contract_options', contract_id=room.contract_id) }}"
+                            class="btn btn-sm btn-outline-primary mt-2">⚙️ จัดการ Options</a>
+                        {% endif %}
+
+
+                        {% if room.status_id == 1 %}
+                        <a href="{{ url_for('create_lease', unit_id=room.id) }}" class="btn btn-sm btn-success mb-2"><i
+                                class="bi bi-calendar-month"></i> ทำสัญญาเช่า
+                            (รายเดือน)</a>
+                        <a href="{{ url_for('daily_booking', unit_id=room.id) }}" class="btn btn-warning btn-sm mb-2"><i
+                                class="bi bi-journal-check"></i> จองรายวัน</a>
+                        {% endif %}
+
+                        {% if room.contract_id and room.status_id == 3 %}
+                        <a href="{{ url_for('generate_docx', contract_id=room.contract_id) }}"
+                            class="btn btn-sm btn-primary mt-2">🖨 ปริ้นเอกสาร</a>
+                        <form action="{{ url_for('upload_signed_contract', contract_id=room.contract_id) }}"
+                            method="POST" enctype="multipart/form-data" class="mt-2">
+
+                            <input type="file" id="contractFiles{{ room.contract_id }}" name="files[]"
+                                accept=".pdf,.doc,.docx,.jpg,.png" class="form-control mb-2" multiple required
+                                id="contractFiles{{ room.contract_id }}" onchange="previewFiles(this)">
+
+                            <div id="filePreview{{ room.contract_id }}"
+                                class="border rounded p-2 bg-light small d-none">
+                                <strong>📂 ไฟล์ที่เลือก:</strong>
+                                <ul class="mb-0 mt-1 ps-3"></ul>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-primary mt-2">
+                                📤 อัปโหลดเอกสารสัญญา
+                            </button>
+                        </form>
+
+                        <p style="font-size:0.85rem; color:red; font-style:italic;">
+                            *กรุณาตรวจสอบเอกสารสัญญาพร้อมการเซ็นสัญญา เเละ จัดเตรียมเอกสารให้เรียบร้อย
+                            ก่อนอัพโหลด(สามารถอัพโหลดไฟล์เป็นรูปภาพ 1ไฟล์)*
+                        </p>
+                        {% endif %}
+
+                        {% if (room.contract_id or room.has_daily_booking) and room.status_id in [2,3,5,6,7] %}
+                        <hr>
+                        <h6>สถานะสัญญา</h6>
+                        <p><span class="badge bg-secondary">{{ contract_status_map.get(room.contract_status,
+                                'ไม่มีสัญญา')
+                                }}</span></p>
+
+                        {% if room.status_id == 6 or room.has_daily_booking%}
+                        <form id="checkout-form-{{ room.id }}"
+                            action="{{ url_for('confirm_checkout', unit_id=room.id) }}" method="POST">
+                            <button type="button" class="btn btn-success w-100"
+                                onclick="confirmCheckout('{{ room.id }}', '{{ room.name }}')">
+                                <i class="bi bi-box-arrow-left"></i> ยืนยัน Checkout (ห้องนี้)
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if room.contract_id %}
+                        {% if not room.notice_move_out_date and room.contract_status != 4 %}
+                        <form action="{{ url_for('notice_move_out', contract_id=room.contract_id) }}" method="POST"
+                            class="mt-2 p-3 rounded shadow-sm border">
+                            <label class="form-label fw-bold text-primary">📢 แจ้งย้ายออกวันที่:</label>
+                            <input type="text" id="notice_date" name="notice_date" class="form-control"
+                                placeholder="เลือกวันที่แจ้งย้ายออก" required>
+                            <button type="submit"
+                                class="btn btn-sm btn-warning w-100 mt-2">บันทึกการแจ้งย้ายออก</button>
+                        </form>
+                        {% elif room.notice_move_out_date and room.status_id == 7 %}
+                        <form action="{{ url_for('notice_move_out', contract_id=room.contract_id) }}" method="POST"
+                            class="mt-2 p-3 rounded shadow-sm border">
+                            <label class="form-label fw-bold text-primary">📆 แก้ไขวันที่แจ้งย้ายออก:</label>
+                            <input type="text" id="notice_date" name="notice_date" class="form-control"
+                                value="{{ room.notice_move_out_date }}" required>
+                            <button type="submit"
+                                class="btn btn-sm btn-warning w-100 mt-2">อัปเดตวันที่แจ้งย้ายออก</button>
+                        </form>
+                        <form action="{{ url_for('create_invoice_move_out', contract_id=room.contract_id) }}"
+                            method="POST" class="mt-2 p-3 rounded shadow-sm border">
+                            <button type="submit" class="btn btn-sm btn-success w-100 mt-2">คลิกยืนย้ายออก /
+                                สร้างบิลสุดท้าย</button>
+                        </form>
+                        <form action="{{ url_for('cancel_move_out', unit_id=room.unit_id) }}" method="POST"
+                            class="mt-2">
+                            <button type="submit" class="btn btn-sm btn-danger">❌ ยกเลิกการแจ้งย้ายออก</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="meterModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                        <div class="modal-header border-0 p-4 pb-0">
+                            <h5 class="modal-title fw-bold text-primary">🏠 บันทึกมิเตอร์ห้อง <span
+                                    id="display_unit_number"></span></h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form action="{{ url_for('update_meter') }}" method="POST" id="meterForm">
+                            <div class="modal-body p-4">
+                                <input type="hidden" name="unit_id" id="modal_unit_id">
+
+                                <div id="elec_section" class="card border-0 bg-light p-3 mb-3"
+                                    style="border-radius: 15px;">
+                                    <label class="form-label fw-bold text-primary mb-1"><i
+                                            class="bi bi-lightning-charge-fill"></i> ค่าไฟฟ้า</label>
+                                    <p class="text-muted small mb-2">เลขมิเตอร์ครั้งก่อน: <strong
+                                            class="text-danger"><span id="prev_elec"></span> kWh</strong></p>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" name="electricity" id="total_kWh"
+                                            class="form-control" placeholder="ระบุเลขมิเตอร์ปัจจุบัน" required>
+                                        <button class="btn btn-secondary" type="button"
+                                            onclick="fetchMeter('electricity') ">อ่าน</button>
+                                    </div>
+
+                                    <div id="elec_old_div" style="display:none;" class="mt-2">
+                                        <small class="text-warning fw-bold">หน่วยไฟค้างจากตัวเก่า:</small>
+                                        <input type="number" step="0.01" name="elec_old_units" id="elec_old_units"
+                                            class="form-control form-control-sm border-warning bg-warning-subtle"
+                                            readonly>
+                                    </div>
+                                </div>
+
+                                <div id="water_section" class="card border-0 bg-light p-3" style="border-radius: 15px;">
+                                    <label class="form-label fw-bold text-info mb-1"><i class="bi bi-droplet-fill"></i>
+                                        ค่าน้ำ</label>
+                                    <p class="text-muted small mb-2">เลขมิเตอร์ครั้งก่อน: <strong
+                                            class="text-danger"><span id="prev_water"></span> m³</strong></p>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" name="water" id="total_m3" class="form-control"
+                                            placeholder="ระบุเลขมิเตอร์ปัจจุบัน" required>
+                                        <button class="btn btn-secondary" type="button"
+                                            onclick="fetchMeter('water')">อ่าน</button>
+                                    </div>
+
+                                    <div id="water_old_div" style="display:none;" class="mt-2">
+                                        <small class="text-info fw-bold">หน่วยน้ำค้างจากตัวเก่า:</small>
+                                        <input type="number" step="0.01" name="water_old_units" id="water_old_units"
+                                            class="form-control form-control-sm border-info bg-info-subtle" readonly>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer border-0 p-4 pt-0">
+                                <button type="button" class="btn btn-light rounded-pill px-4"
+                                    data-bs-dismiss="modal">ยกเลิก</button>
+                                <button type="submit" class="btn btn-success rounded-pill px-4 shadow-sm">💾 บันทึก &
+                                    ปิดรอบบิล</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+</body>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+<script>
+    // 1. ประกาศตัวแปร Global สำหรับ Charts
+    let financeBarChart;
+    let paymentPieChart;
+    let statusPieChart;
+
+    function toggleInput(divId, checkbox) {
+        const targetDiv = document.getElementById(divId);
+        targetDiv.style.display = checkbox.checked ? 'block' : 'none';
+        if (!checkbox.checked) {
+            targetDiv.querySelector('input').value = ''; // ล้างค่าถ้าไม่ได้ติ๊ก
+        }
+    }
+    // --- ฟังก์ชันยืนยันต่างๆ ---
+    function confirmCheckout(roomId, roomName) {
+        Swal.fire({
+            title: 'ยืนยันการคืนห้อง?',
+            html: `คุณกำลังจะทำเรื่อง Checkout <b>ห้อง ${roomName}</b><br>กรุณาตรวจสอบค่าน้ำ-ไฟ และสภาพห้องก่อนกดยืนยัน`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745', // สีเขียว Success
+            cancelButtonColor: '#3085d6',  // สีฟ้าปุ่มยกเลิก
+            confirmButtonText: 'ยืนยัน, คืนห้องว่าง',
+            cancelButtonText: 'ยังไม่ทำตอนนี้',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // ค้นหาฟอร์มด้วย ID ที่ระบุไว้ และสั่งส่งข้อมูล
+                document.getElementById(`checkout-form-${roomId}`).submit();
+            }
+        });
+    }
+
+    async function openMeterModal(unitId, unitNumber, prevElec, prevWater, currElec, currWater) {
+        const modalEl = document.getElementById('meterModal');
+
+        // 1. ตั้งค่าเบื้องต้น: ชื่อห้อง และ Unit ID ลงใน Hidden Input
+        modalEl.querySelector('#display_unit_number').innerText = unitNumber;
+        modalEl.querySelector('#modal_unit_id').value = unitId;
+
+        try {
+            // 2. ดึงข้อมูลประวัติการเปลี่ยนมิเตอร์จาก API
+            const response = await fetch(`/api/get_unit_meter_data/${unitId}`);
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                // --- ⚡ จัดการส่วนไฟฟ้า ---
+                const elecLabel = modalEl.querySelector('#prev_elec');
+                const elecOldDiv = modalEl.querySelector('#elec_old_div');
+                const elecOldInput = modalEl.querySelector('input[name="elec_old_units"]');
+                const elecCurrInput = modalEl.querySelector('#total_kWh');
+
+                if (data.adjustments && data.adjustments.electricity > 0) {
+                    elecLabel.innerText = "0.0";
+                    elecOldDiv.style.display = 'block';
+                    elecOldInput.value = data.adjustments.electricity;
+                    elecCurrInput.value = currElec || '';
+                } else {
+                    // สภาวะปกติ: ใช้เลขครั้งก่อนที่ส่งมาจากหน้า Dashboard
+                    elecLabel.innerText = prevElec || "0.0";
+                    elecOldDiv.style.display = 'none';
+                    elecOldInput.value = 0;
+                    elecCurrInput.value = currElec || '';
+                }
+
+                // --- 💧 จัดการส่วนน้ำ ---
+                const waterLabel = modalEl.querySelector('#prev_water');
+                const waterOldDiv = modalEl.querySelector('#water_old_div');
+                const waterOldInput = modalEl.querySelector('input[name="water_old_units"]');
+                const waterCurrInput = modalEl.querySelector('#total_m3');
+
+                if (data.adjustments && data.adjustments.water > 0) {
+                    waterLabel.innerText = "0.0";
+                    waterOldDiv.style.display = 'block';
+                    waterOldInput.value = data.adjustments.water;
+                    waterCurrInput.value = currWater || '';
+                } else {
+                    // สภาวะปกติ
+                    waterLabel.innerText = prevWater || "0.0";
+                    waterOldDiv.style.display = 'none';
+                    waterOldInput.value = 0;
+                    waterCurrInput.value = currWater || '';
+                }
+            }
+        } catch (e) {
+            console.error("Error fetching meter data:", e);
+            // Fallback: หาก API มีปัญหา ให้แสดงค่าปกติที่ส่งมาจาก Dashboard
+            modalEl.querySelector('#prev_elec').innerText = prevElec || "0.0";
+            modalEl.querySelector('#prev_water').innerText = prevWater || "0.0";
+        }
+
+        // 3. สั่งแสดง Modal
+        const myModal = new bootstrap.Modal(modalEl);
+        myModal.show();
+    }
+
+    document.getElementById('meterForm').addEventListener('submit', async function (e) {
+        e.preventDefault(); // หยุดการรีโหลดหน้าจอแบบปกติ
+
+        // แสดง Loading ระหว่างรอ Server
+        Swal.fire({
+            title: 'กำลังบันทึกข้อมูล...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        const formData = new FormData(this);
+
+        try {
+            const response = await fetch('/update_meter', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'สำเร็จ!',
+                    text: result.message,
+                    timer: 1500,
+                    timerProgressBar: true,
+                    showConfirmButton: false
+                }).then(() => {
+                    location.reload();
+                });
+
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'ล้มเหลว',
+                    text: result.message
+                });
+            }
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'ไม่สามารถติดต่อ Server ได้ (ตรวจสอบว่าคืนค่าเป็น JSON หรือไม่)'
+            });
+        }
+    });
+
+    // --- ฟังก์ชันจัดการ Filter 
+    function setupYearFilters() {
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+
+        // 1. สร้างตัวเลือกปีใน datalist (ย้อนหลัง 15 ปี)
+        const yearDataList = document.getElementById('year-options');
+        if (yearDataList) {
+            yearDataList.innerHTML = '';
+            for (let i = currentYear + 1; i >= currentYear - 5; i--) {
+                let opt = document.createElement('option');
+                opt.value = i;
+                yearDataList.appendChild(opt);
+            }
+        }
+
+        // 2. ตั้งค่า Default ให้ช่องกรอกปีเป็นปีปัจจุบัน
+        const yearInput1 = document.getElementById('filter-year'); // ฝั่งกราฟแท่ง
+        const yearInput2 = document.getElementById('filter-year-donut'); // ฝั่งวงกลม
+
+        if (yearInput1) yearInput1.value = currentYear;
+        if (yearInput2) yearInput2.value = currentYear;
+
+        // 3. ตั้งค่า Select เดือน (ไม่มี 'all' และเป็นภาษาไทย)
+        const monthSelect = document.getElementById('filter-month-donut');
+        if (monthSelect) {
+            const monthNames = [
+                "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+            ];
+            monthSelect.innerHTML = ''; // ล้างค่าเดิมที่มีคำว่า 'ทั้งหมด' ออก
+            monthNames.forEach((name, index) => {
+                let opt = new Option(name, index + 1);
+                if (index + 1 === currentMonth) opt.selected = true;
+                monthSelect.add(opt);
+            });
+        }
+    }
+
+    // --- 1. กราฟแท่ง (ฝั่งซ้าย) ---
+    function loadFinanceBarChart() {
+        const year = document.getElementById('filter-year').value;
+        fetch(`/api/finance_summary?year=${year}&month=all`)
+            .then(res => res.json())
+            .then(data => {
+                if (financeBarChart && data.income_list) {
+                    financeBarChart.data.datasets[0].data = data.income_list;
+                    financeBarChart.data.datasets[1].data = data.expense_list;
+                    financeBarChart.data.datasets[2].data = data.profit_loss_list;
+                    financeBarChart.update();
+                }
+            })
+            .catch(err => console.error("Error loading Bar Chart:", err));
+    }
+
+    // --- 2. วาด UI รายชื่อห้อง ---
+    function updateUnpaidListUI(data) {
+        const listContainer = document.getElementById('unpaid-room-list');
+        if (!listContainer) return;
+        listContainer.innerHTML = '';
+
+        if (data.paid_percent === 100 && data.paid_amount > 0) {
+            listContainer.innerHTML = `
+            <div class="text-center py-4">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 2.5rem;"></i>
+                <h6 class="fw-bold text-success mt-2">จ่ายครบทุกห้องแล้ว</h6>
+                <small class="text-muted">ไม่มีรายการค้างชำระในรอบนี้</small>
+            </div>`;
+        }
+        else if (data.unpaid_rooms && data.unpaid_rooms.length > 0) {
+            data.unpaid_rooms.forEach(room => {
+                const item = document.createElement('div');
+                item.className = 'd-flex justify-content-between align-items-center p-2 mb-2 bg-light rounded border-start border-danger border-3 shadow-sm';
+                item.style.fontSize = '12px';
+                item.innerHTML = `
+                <div>
+                    <div class="fw-bold">ห้อง ${room.room_}</div>
+                    <small class="text-muted">${room.tenant_name}</small>
+                </div>
+                <span class="text-danger fw-bold">฿${parseFloat(room.amount).toLocaleString()}</span>
+            `;
+                listContainer.appendChild(item);
+            });
+        }
+        else {
+            listContainer.innerHTML = '<div class="text-center py-4 text-muted small">ไม่มีข้อมูลการเรียกเก็บเงินในเดือนนี้</div>';
+        }
+    }
+
+    // --- 3. กราฟวงกลมและรายชื่อห้อง (ฝั่งขวา) ---
+    function loadDonutAndStats() {
+        const yearInput = document.getElementById('filter-year-donut');
+        const monthSelect = document.getElementById('filter-month-donut');
+
+        if (!yearInput || !monthSelect) return;
+
+        let year = yearInput.value;
+        let month = monthSelect.value;
+
+        // ถ้าผู้ใช้ลบปีจนว่าง ให้กลับไปใช้ปีปัจจุบัน
+        if (!year) year = new Date().getFullYear();
+
+        fetch(`/api/payment_summary?year=${year}&month=${month}`)
+            .then(res => res.json())
+            .then(data => {
+                const paidPercent = data.paid_percent || 0;
+                const remainPercent = 100 - paidPercent;
+
+                // 1. อัปเดตกราฟวงกลม
+                if (paymentPieChart) {
+                    paymentPieChart.data.datasets[0].data = [paidPercent, remainPercent];
+                    paymentPieChart.update();
+                }
+
+                // 2. อัปเดตตัวเลขเปอร์เซ็นต์ตรงกลางกราฟ
+                const percentEl = document.getElementById('pay-percent');
+                if (percentEl) percentEl.innerText = paidPercent + '%';
+
+                // 3. อัปเดต "รายได้จริง" (ยอดที่จ่ายแล้ว)
+                const incomeEl = document.getElementById('income-sum');
+                if (incomeEl) {
+                    const paidAmt = parseFloat(data.paid_amount) || 0;
+                    incomeEl.innerText = '฿ ' + paidAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+
+                // 4. อัปเดต "ยอดทั้งหมดที่ต้องเก็บ" 
+                const totalEl = document.getElementById('income-total'); // ต้องมี id="income-total" ใน HTML
+                if (totalEl) {
+                    const totalAmt = parseFloat(data.total_amount) || 0;
+                    totalEl.innerText = 'จากทั้งหมด ฿ ' + totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                }
+
+                // 5. อัปเดต Progress Bar ความคืบหน้า
+                const pb = document.getElementById('pay-progress-bar');
+                if (pb) {
+                    pb.style.width = paidPercent + '%';
+                    // เปลี่ยนสีตามความคืบหน้า (ทางเลือก)
+                    if (paidPercent === 100) {
+                        pb.className = "progress-bar bg-success";
+                    } else {
+                        pb.className = "progress-bar bg-primary";
+                    }
+                }
+
+                // 6. อัปเดตรายชื่อห้องที่ค้างชำระ
+                updateUnpaidListUI(data);
+            })
+            .catch(err => console.error("Error loading Donut Stats:", err));
+    }
+
+    function fetchMeter(type) {
+        const roomId = document.getElementById('modal_unit_id').value;
+        const fd = new FormData();
+        fd.append('room_id', roomId);
+        fd.append('read_type', type);
+
+        Swal.fire({
+            title: 'กำลังเชื่อมต่อมิเตอร์...',
+            text: 'โปรดรอสักครู่...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        fetch('/read_meter_unit', {
+            method: 'POST',
+            body: fd
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // อัปเดตช่อง Input โดยหาจาก ID ที่ DB ส่งมา (เช่น total_kWh หรือ total_m3)
+                    const finalInputId = (type === 'water') ? 'total_m3' : 'total_kWh';
+                    const el = document.getElementById(finalInputId);
+                    if (el) {
+                        el.value = data.value;
+                        el.classList.add('is-valid');
+                        el.classList.remove('is-invalid');
+                    }
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'อ่านค่าสำเร็จ',
+                        html: `ค่าที่อ่านได้: <h2 class="text-success">${data.value} ${data.unit}</h2>`
+                    });
+                } else {
+                    Swal.fire('การเชื่อมต่อล้มเหลว', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                Swal.fire('Error', 'ไม่สามารถติดต่อ Backend ได้', 'error');
+            });
+    }
+
+    document.getElementById('syncBtn').addEventListener('click', function () {
+        Swal.fire({
+            title: 'ดึงค่ามิเตอร์ล่าสุด?',
+            text: "ระบบจะดึงค่าที่จดล่าสุดมาใส่ในบิล Draft ที่ไม่มีรายการเปลี่ยนมิเตอร์ค้างอยู่",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'ตกลง, ดึงข้อมูลเลย!',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // แสดง Loading
+                Swal.fire({
+                    title: 'กำลังประมวลผล...',
+                    text: 'ระบบกำลังตรวจสอบและซิงค์ข้อมูลมิเตอร์',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
+                fetch('/api/sync-meters', { method: 'POST' })
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 'success') {
+                            let warningHtml = '';
+                            if (data.warnings && data.warnings.length > 0) {
+                                warningHtml = `
+                                <div style="text-align: left; margin-top: 10px; color: #856404; background: #fff3cd; padding: 12px; border-radius: 8px; border: 1px solid #ffeeba; font-size: 0.9em;">
+                                    <b>⚠️ พบปัญหาบางรายการ:</b>
+                                    <ul style="margin: 5px 0 0 0; padding-left: 20px;">
+                                        ${data.warnings.map(w => `<li>${w}</li>`).join('')}
+                                    </ul>
+                                </div>`;
+                            }
+
+                            Swal.fire({
+                                icon: data.warnings.length > 0 ? 'warning' : 'success',
+                                title: 'ซิงค์ข้อมูลเรียบร้อย',
+                                html: `อัปเดตไปทั้งหมด <b>${data.updated_count}</b> ห้อง ${warningHtml}`,
+                                confirmButtonText: 'รับทราบ'
+                            }).then(() => {
+                                location.reload(); // รีเฟรชหน้าเพื่อดูยอดเงินที่คำนวณใหม่
+                            });
+                        } else {
+                            // กรณี Backend ส่ง status: error กลับมา
+                            Swal.fire('เกิดข้อผิดพลาด', data.message || 'ไม่สามารถซิงค์ข้อมูลได้', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
+                    });
+            }
+        });
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const dataElement = document.getElementById('flash-data');
+        if (dataElement) {
+            const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
+            messages.forEach(([category, message]) => {
+                Swal.fire({
+                    icon: category === 'success' ? 'success' : (category === 'danger' ? 'error' : 'info'),
+                    title: category === 'success' ? 'สำเร็จ' : 'แจ้งเตือน',
+                    text: message,
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+            });
+        }
+        // [A] Setup Filter ให้เสร็จก่อนเพื่อให้มี Default Value
+        setupYearFilters();
+
+        // [B] ตั้งค่าเครื่องมืออื่นๆ
+        flatpickr("#notice_date", { dateFormat: "d-m-Y" });
+        flatpickr("#startDate, #endDate", { dateFormat: "d-m-Y", locale: "th" });
+
+        // [C] สร้าง Chart Objects รอไว้ (สำคัญ: ต้องสร้างก่อนโหลด Data)
+        statusPieChart = new Chart(document.getElementById("statusPieChart"), {
+            type: "pie",
+            data: { labels: [], datasets: [{ data: [], backgroundColor: ['#28a745', '#0d6efd', '#17a2b8', '#dc3545', '#ffc107', '#343a40'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        financeBarChart = new Chart(document.getElementById("financeBarChart"), {
+            type: 'bar',
+            data: {
+                labels: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'],
+                datasets: [
+                    { label: 'รายรับ', data: [], backgroundColor: '#28a745', order: 2 },
+                    { label: 'รายจ่าย', data: [], backgroundColor: '#dc3545', order: 2 },
+                    { label: 'กำไร/ขาดทุน', data: [], type: 'line', borderColor: '#ffc107', borderWidth: 2, fill: true, tension: 0.1, order: 1 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        paymentPieChart = new Chart(document.getElementById("paymentPieChart"), {
+            type: 'doughnut',
+            data: { datasets: [{ data: [0, 100], backgroundColor: ['#28a745', '#e9ecef'], borderWidth: 0 }] },
+            options: { cutout: '80%', plugins: { legend: { display: false } } }
+        });
+
+        // [D] ผูก Event Listeners
+        document.getElementById('filter-year').addEventListener('change', loadFinanceBarChart);
+        document.getElementById('filter-year-donut').addEventListener('change', loadDonutAndStats);
+        document.getElementById('filter-month-donut').addEventListener('change', loadDonutAndStats);
+
+        // [E] ดึงข้อมูลสถานะห้อง (ทำงานแยกกัน)
+        fetch("/api/status_pie")
+            .then(res => res.json())
+            .then(data => {
+                statusPieChart.data.labels = data.labels;
+                statusPieChart.data.datasets[0].data = data.counts;
+                statusPieChart.update();
+                Object.keys(data.summary).forEach(key => {
+                    const el = document.getElementById("sum-" + key);
+                    if (el) el.innerText = data.summary[key];
+                });
+            });
+
+        // [F] โหลดข้อมูลกราฟทั้งสอง
+        loadFinanceBarChart();
+        loadDonutAndStats();
+    });
+</script>
+
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block title %}เพิ่ม Option{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <h2>เพิ่ม Option ใหม่</h2>
+    <form method="POST">
+        <div class="mb-3">
+            <label for="name" class="form-label">ชื่อ Option</label>
+            <input type="text" class="form-control" id="name" name="name" required>
+        </div>
+        <div class="mb-3">
+            <label for="price" class="form-label">ราคา</label>
+            <input type="number" step="0.01" class="form-control" id="price" name="price" required>
+        </div>
+        <div class="mb-3">
+            <label for="option_type" class="form-label">ประเภท</label>
+            <select class="form-select" id="option_type" name="option_type" required>
+                <option value="fixed">Fixed</option>
+                <option value="discount">Discount</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="unit_name" class="form-label">หน่วย</label>
+            <input type="text" class="form-control" id="unit_name" name="unit_name" required>
+        </div>
+        <button type="submit" class="btn btn-primary">บันทึก</button>
+        <a href="{{ url_for('manage_option') }}" class="btn btn-secondary">ยกเลิก</a>
+    </form>
+</div>
+{% endblock %}

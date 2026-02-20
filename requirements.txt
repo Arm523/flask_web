@@ -1,0 +1,11 @@
+flask
+mysql-connector-python
+python-docx
+beautifulsoup4
+python-dateutil
+APScheduler 
+num2words
+pymodbus
+pyserial
+requests
+gunicorn

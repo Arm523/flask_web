@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+{% block title %}สร้างสัญญาเช่า{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>สร้างสัญญาเช่า ห้อง {{ room.room_name }} (ชั้น {{ room.floor }}, ตึก {{ room.building }})</h2>
+
+  <form method="POST" action="{{ url_for('save_contract') }}">
+
+    <!-- ข้อมูลพื้นฐาน -->
+    <input type="hidden" name="tenant_id" value="{{ tenant.tenant_id }}">
+    <input type="hidden" name="room_id" value="{{ room.unit_id }}">
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="start_date">วันที่เริ่มสัญญา</label>
+        <input type="date" class="form-control" id="start_date" name="start_date" required>
+      </div>
+      <div class="col-md-6">
+        <label for="end_date">วันที่สิ้นสุดสัญญา</label>
+        <input type="date" class="form-control" id="end_date" name="end_date" required>
+      </div>
+    </div>
+
+    <!-- ประเภทสัญญา -->
+    <div class="mb-3">
+      <label for="contract_type_id">ประเภทสัญญา</label>
+      <select name="contract_type_id" class="form-select" required>
+        {% for ct in contract_types %}
+          <option value="{{ ct.id }}">{{ ct.name|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- ค่าเช่า ประกัน ล่วงหน้า -->
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <label for="price">ค่าเช่าห้อง (บาท)</label>
+        <input type="number" class="form-control" name="price" required>
+      </div>
+      <div class="col-md-4">
+        <label for="payout">ค่าประกัน (บาท)</label>
+        <input type="number" class="form-control" name="payout" value="0">
+      </div>
+      <div class="col-md-4">
+        <label for="advance_rent">ค่าเช่าล่วงหน้า (บาท)</label>
+        <input type="number" class="form-control" name="advance_rent" value="0">
+      </div>
+    </div>
+
+    <!-- วันจ่ายเงิน -->
+    <div class="mb-3">
+      <label for="pay_date">วันที่ชำระเงินทุกเดือน (1-31)</label>
+      <input type="number" class="form-control" name="pay_date" min="1" max="31" value="1">
+    </div>
+
+    <!-- บริการเพิ่มเติม -->
+    <div class="mb-3">
+      <label>บริการเพิ่มเติม</label>
+      <div class="row">
+        {% for opt in options %}
+        <div class="col-md-6">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="option_ids" value="{{ opt.id }}" id="opt{{ opt.id }}">
+            <label class="form-check-label" for="opt{{ opt.id }}">
+              {{ opt.name }} ({{ opt.price }} บาท)
+            </label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- เลือกเทมเพลต -->
+    <div class="mb-3">
+      <label for="template_id">เทมเพลตสัญญา</label>
+      <select name="template_id" class="form-select">
+        {% for t in templates %}
+        <option value="{{ t.id }}">{{ t.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- ปุ่ม -->
+    <div class="mt-4">
+      <button type="submit" class="btn btn-success">💾 บันทึกสัญญา</button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">ย้อนกลับ</a>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

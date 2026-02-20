@@ -1,0 +1,45 @@
+{% extends 'layout.html' %}
+{% block title %}บันทึกการอ่านมิเตอร์{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>บันทึกการอ่านมิเตอร์</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>ห้อง</th>
+                    <th>ค่าน้ำล่าสุด</th>
+                    <th>อ่านค่าน้ำใหม่</th>
+                    <th>ค่าไฟล่าสุด</th>
+                    <th>อ่านค่าไฟใหม่</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for room in rooms %}
+                <tr>
+                    <td>{{ room.name }}</td>
+                    <td>{{ room.prev_water or 0 }}</td>
+                    <td>
+                        <input type="number" step="0.01" name="water_{{ room.unit_id }}" class="form-control" required>
+                    </td>
+                    <td>{{ room.prev_electric or 0 }}</td>
+                    <td>
+                        <input type="number" step="0.01" name="electric_{{ room.unit_id }}" class="form-control" required>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" class="btn btn-success">บันทึก</button>
+    </form>
+</div>
+{% endblock %}

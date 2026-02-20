@@ -1,0 +1,407 @@
+{% extends "layout.html" %} {% block title %}แก้ไขข้อมูลผู้ใช้ & เอกสาร{%
+endblock %} {% block content %}
+<style>
+  .edit-card {
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    background: #fff;
+  }
+  .form-label {
+    font-weight: 700;
+    color: #444;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .form-control,
+  .form-select {
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid #ebedf2;
+    background: #f8f9fa;
+  }
+  .form-control:focus {
+    background: #fff;
+    border-color: #4e73df;
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.1);
+  }
+
+  /* Upload Styling */
+  .upload-box {
+    border: 2px dashed #d1d3e2;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    transition: 0.3s;
+    cursor: pointer;
+    background: #fdfdfd;
+  }
+  .upload-box:hover {
+    border-color: #4e73df;
+    background: #f8faff;
+  }
+  .upload-box p {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    padding: 0 10px;
+  }
+  .preview-img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    margin: 2rem 0 1rem;
+  }
+  .section-header hr {
+    flex-grow: 1;
+    margin: 0 1rem;
+    opacity: 0.1;
+  }
+  .section-title {
+    font-weight: 800;
+    color: #4e73df;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+</style>
+
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <div class="card edit-card">
+        <div class="card-body p-4 p-md-5">
+          <div class="text-center mb-5">
+            <div class="position-relative d-inline-block">
+                {% if user.profile_img %}
+                    <img src="{{ url_for('static', filename='profile_user/' + user.profile_img) }}?v={{ range(1, 9999) | random }}" 
+                        id="profile-preview" class="preview-img mb-3">
+                {% else %}
+                    {# ถ้าไม่มีรูป ให้เช็คเพศเพื่อแสดงรูป Default เหมือนใน Layout #}
+                    {% if user.gender == 'female' %}
+                        <img src="{{ url_for('static', filename='profile_user/default-female.png') }}" 
+                            id="profile-preview" class="preview-img mb-3">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='profile_user/default-male.png') }}" 
+                            id="profile-preview" class="preview-img mb-3">
+                    {% endif %}
+                {% endif %}
+            </div>
+            <h2 class="fw-bold">จัดการข้อมูลผู้ใช้</h2>
+            <p class="text-muted small">อัปเดตข้อมูลส่วนตัวและเอกสารสำคัญ</p>
+          </div>
+
+          <form
+            method="POST"
+            enctype="multipart/form-data"
+            onsubmit="return validatePassword()"
+          >
+            <div class="section-header">
+              <span class="section-title">ข้อมูลพื้นฐาน</span>
+              <hr />
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">ชื่อผู้ใช้</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  value="{{ user.username }}"
+                  readonly
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">ชื่อจริง</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  name="fname"
+                  value="{{ user.fname }}"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">นามสกุล</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  name="lname"
+                  value="{{ user.lname }}"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">สิทธิ์การใช้งาน</label>
+                <select name="role_id" class="form-select">
+                    {% for role in roles %}
+                        <option value="{{ role.role_id }}" {% if role.role_id == user.role_id %}selected{% endif %}>{{ role.r_name }}</option>
+                    {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">อีเมล</label>
+                <input
+                  type="email"
+                  class="form-control"
+                  name="email"
+                  value="{{ user.email }}"
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">เบอร์โทรศัพท์</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  name="tel"
+                  value="{{ user.tel }}"
+                />
+              </div>
+            </div>
+
+            <div class="section-header">
+              <span class="section-title">เอกสารยืนยันตัวตน</span>
+              <hr />
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">เลขบัตรประชาชน</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  name="id_card"
+                  value="{{ user.id_card }}"
+                  maxlength="13"
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">วันออกบัตร</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  name="start_card"
+                  value="{{ user.start_card }}"
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">วันหมดอายุ</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  name="end_card"
+                  value="{{ user.end_card }}"
+                />
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label">รูปโปรไฟล์</label>
+                <div class="upload-box" id="box-profile" onclick="document.getElementById('profile_img').click()">
+                    <i class="bi bi-image text-primary fs-2" id="icon-profile"></i>
+                    <p class="mb-0 small text-muted" id="text-profile">คลิกเพื่อเปลี่ยนรูปภาพใหม่</p>
+                    
+                    {% if user.profile_img %}
+                    <div class="mt-3 pt-2 border-top">
+                    <p class="mb-2 small text-success"><i class="bi bi-check-circle"></i> มีรูปภาพเดิมในระบบแล้ว</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{{ url_for('static', filename='profile_user/' + user.profile_img) }}" 
+                        target="_blank" class="btn btn-sm btn-outline-primary" 
+                        onclick="event.stopPropagation();">
+                        <i class="bi bi-eye"></i> ดูรูป
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-danger" 
+                                onclick="apiDeleteFile('profile', '{{ user.user_id }}', event)">
+                        <i class="bi bi-trash"></i> ลบรูป
+                        </button>
+                    </div>
+                    </div>
+                    {% endif %}
+
+                    <input type="file" id="profile_img" name="profile_img" hidden accept="image/*"
+                        onchange="updateFileName(this, 'text-profile', 'icon-profile', 'profile-preview')" />
+                </div>
+                </div>
+
+              <div class="col-md-6">
+                <label class="form-label">ไฟล์สำเนาบัตรประชาชน</label>
+                <div class="upload-box" id="box-idcard" onclick="document.getElementById('id_card_file').click()">
+                    <i class="bi bi-file-earmark-pdf text-danger fs-2" id="icon-idcard"></i>
+                    <p class="mb-0 small text-muted" id="text-idcard">คลิกเพื่ออัปโหลดไฟล์ใหม่</p>
+
+                    {% if user.id_card_file %}
+                    <div class="mt-3 pt-2 border-top">
+                    <p class="mb-2 small text-info"><i class="bi bi-file-earmark-text"></i> อัปโหลดเอกสารแล้ว</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{{ url_for('static', filename='profile_user/' + user.id_card_file) }}" 
+                        target="_blank" class="btn btn-sm btn-outline-primary" 
+                        onclick="event.stopPropagation();">
+                        <i class="bi bi-file-earmark-arrow-down"></i> ดูไฟล์
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-danger" 
+                                onclick="apiDeleteFile('idcard', '{{ user.user_id }}', event)">
+                        <i class="bi bi-trash"></i> ลบไฟล์
+                        </button>
+                    </div>
+                    </div>
+                    {% endif %}
+
+                    <input type="file" id="id_card_file" name="id_card_file" hidden
+                        onchange="updateFileName(this, 'text-idcard', 'icon-idcard', null)" />
+                </div>
+                </div>
+
+            <div class="section-header">
+              <span class="section-title">ความปลอดภัย</span>
+              <hr />
+            </div>
+
+            <div class="row g-3 bg-light p-3 rounded-4 mb-4">
+              <div class="col-md-6">
+                <label class="form-label">รหัสผ่านใหม่</label>
+                <input
+                  type="password"
+                  class="form-control bg-white"
+                  name="password"
+                  id="password"
+                  placeholder="••••••••"
+                />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">ยืนยันรหัสผ่านใหม่</label>
+                <input
+                  type="password"
+                  class="form-control bg-white"
+                  id="confirm_password"
+                  placeholder="••••••••"
+                />
+                <div
+                  id="passwordError"
+                  class="text-danger mt-1 small"
+                  style="display: none"
+                >
+                  รหัสผ่านไม่ตรงกัน
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 d-flex justify-content-between align-items-center">
+              <a
+                href="{{ url_for('user_settings') }}"
+                class="btn btn-link text-decoration-none text-muted"
+                >ยกเลิก</a
+              >
+              <button
+                type="submit"
+                class="btn btn-primary px-5 py-3 shadow-lg fw-bold"
+                style="border-radius: 15px"
+              >
+                <i class="bi bi-save2 me-2"></i> บันทึกการเปลี่ยนแปลง
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function previewImage(input, previewId) {
+    if (input.files && input.files[0]) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        document.getElementById(previewId).src = e.target.result;
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
+
+  function validatePassword() {
+    const password = document.getElementById("password").value;
+    const confirm = document.getElementById("confirm_password").value;
+    const error = document.getElementById("passwordError");
+    if (password && password !== confirm) {
+      error.style.display = "block";
+      return false;
+    }
+    return true;
+  }
+
+  function updateFileName(input, textId, iconId, previewId) {
+    const fileText = document.getElementById(textId);
+    const fileIcon = document.getElementById(iconId);
+
+    if (input.files && input.files[0]) {
+      const fileName = input.files[0].name;
+
+      // 1. แสดงชื่อไฟล์ที่เลือก
+      fileText.innerHTML = `<strong class="text-success">เลือกสำเร็จ:</strong> ${fileName}`;
+
+      // 2. เปลี่ยนไอคอนเป็นเครื่องหมายถูก
+      fileIcon.classList.remove(
+        "bi-image",
+        "bi-file-earmark-pdf",
+        "text-primary",
+        "text-danger"
+      );
+      fileIcon.classList.add("bi-check-circle-fill", "text-success");
+
+      // 3. ถ้าเป็นรูปโปรไฟล์ ให้แสดงรูป Preview ด้วย
+      if (previewId) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          document.getElementById(previewId).src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+      }
+    } else {
+      // กรณีไม่ได้เลือกไฟล์ (กด Cancel)
+      fileText.innerText = "คลิกเพื่อเลือกไฟล์ใหม่";
+      fileIcon.classList.add("text-primary");
+      fileIcon.classList.remove("bi-check-circle-fill", "text-success");
+    }
+  }
+
+  function apiDeleteFile(type, userId, event) {
+    event.stopPropagation();
+    
+    // ตั้งชื่อภาษาไทยตามประเภท
+    const label = type === 'profile' ? 'รูปโปรไฟล์' : 'เอกสารบัตรประชาชน';
+    
+    Swal.fire({
+        title: `ยืนยันการลบ ${label}?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ลบข้อมูล',
+        cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // แก้ชื่อ URL ให้ตรงกับที่แก้ใน Python
+            fetch(`/remove_user_file/${type}/${userId}`, { 
+                method: 'POST' 
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Swal.fire('สำเร็จ', data.message, 'success').then(() => {
+                        location.reload(); 
+                    });
+                } else {
+                    Swal.fire('ผิดพลาด', data.message, 'error');
+                }
+            });
+        }
+    });
+}
+
+</script>
+{% endblock %}

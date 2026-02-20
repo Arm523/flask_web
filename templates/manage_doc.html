@@ -1,0 +1,97 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container">
+  <h2 class="mb-4 mt-4"><i class="bi bi-folder2-open"></i> จัดการเอกสาร</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="card mb-4 shadow-sm border-0 bg-light">
+    <div class="card-body">
+      <form method="POST" enctype="multipart/form-data">
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label small fw-bold">เลือกไฟล์</label>
+            <input type="file" class="form-control" name="file" required />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">ประเภทเอกสาร</label>
+            <select name="category" class="form-select" required>
+              <option value="">-- เลือกประเภท --</option>
+              <option value="template">🎯 Template สำหรับ Gen สัญญา (.docx)</option>
+              <option value="general_doc">📁 เอกสารทั่วไป / อื่นๆ</option>
+            </select>
+          </div>
+          <div class="col-md-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">อัปโหลดไฟล์</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <h5 class="text-primary mb-3"><i class="bi bi-archive"></i> Template สำหรับสร้างสัญญาอัตโนมัติ</h5>
+  <div class="card mb-4 border-primary shadow-sm">
+    <div class="card-body">
+      {% if files.template %}
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <tbody>
+              {% for f in files.template %}
+              <tr>
+                <td><i class="bi bi-file-earmark-word-fill text-primary"></i> <strong>{{ f }}</strong></td>
+                <td class="text-end">
+                  <a href="{{ url_for('download_doc', filename='templates/' + f) }}" class="btn btn-sm btn-outline-primary">ทดสอบดาวน์โหลด</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0 small">ยังไม่ได้อัปโหลดเทมเพลต (ระบบจะสร้างสัญญาอัตโนมัติไม่ได้)</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <hr class="my-4">
+
+  <h5 class="mb-3"><i class="bi bi-files"></i> เอกสารทั่วไปในระบบ</h5>
+  <div class="list-group shadow-sm">
+    {% if files.general %}
+      {% for f in files.general %}
+      <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+        <div>
+          {% if f.lower().endswith('.pdf') %}
+            <i class="bi bi-file-earmark-pdf-fill text-danger me-2"></i>
+          {% elif f.lower().endswith(('.docx', '.doc')) %}
+            <i class="bi bi-file-earmark-word-fill text-primary me-2"></i>
+          {% else %}
+            <i class="bi bi-file-earmark-fill text-secondary me-2"></i>
+          {% endif %}
+          <span>{{ f }}</span>
+        </div>
+        <div>
+          <a href="{{ url_for('download_doc', filename=f) }}" class="btn btn-sm btn-success me-2" target="_blank">ดู / โหลด</a>
+          <form action="{{ url_for('delete_doc', filename=f) }}" method="POST" class="d-inline">
+            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('ลบไฟล์ {{ f }} ?')">ลบ</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="list-group-item text-center text-muted py-4">
+        ไม่มีเอกสารทั่วไปในโฟลเดอร์ uploaded_docs
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

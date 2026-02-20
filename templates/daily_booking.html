@@ -1,0 +1,152 @@
+{% extends "layout.html" %}
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+
+<style>
+  body {
+    font-family: "Sarabun", sans-serif;
+    background: linear-gradient(135deg, #e0f2fe, #bfdbfe);
+    min-height: 100vh;
+  }
+
+  .booking-card {
+    background: #ffffffee;
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-top: 50px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  }
+
+  h3 {
+    color: #1d4ed8;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .date-group {
+    position: relative;
+  }
+
+  .date-group i {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #2563eb;
+    pointer-events: none;
+  }
+
+  input.form-control {
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    padding: 10px 15px;
+    transition: all 0.2s ease;
+  }
+
+  input.form-control:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+
+  /* ซ่อน date picker จริง */
+  input[type="date"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #2563eb, #1e3a8a);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 25px;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+  }
+</style>
+
+<div class="container">
+  <div class="col-lg-6 mx-auto booking-card">
+    <h3>จองห้องรายวัน - ห้อง {{ room.name }}</h3>
+
+    <form method="post">
+      <div class="mb-3">
+        <label>ชื่อ</label>
+        <input type="text" name="guest_fname" class="form-control" required>
+      </div>
+
+      <div class="mb-3">
+        <label>นามสกุล</label>
+        <input type="text" name="guest_lname" class="form-control" required>
+      </div>
+
+      <div class="mb-3">
+        <label>เบอร์โทร</label>
+        <input type="text" name="guest_phone" class="form-control" maxlength="10" required>
+      </div>
+
+      <!-- วันที่เริ่ม -->
+      <div class="mb-3 date-group">
+        <label>วันที่เริ่ม</label>
+        <input type="text" id="display_start" class="form-control" placeholder="เลือกวันที่เริ่ม (dd/mm/yyyy)" readonly required>
+        <input type="date" id="start_date" name="start_date">
+      </div>
+
+      <!-- วันที่สิ้นสุด -->
+      <div class="mb-3 date-group">
+        <label>วันที่สิ้นสุด</label>
+        <input type="text" id="display_end" class="form-control" placeholder="เลือกวันที่สิ้นสุด (dd/mm/yyyy)" readonly required>
+        <input type="date" id="end_date" name="end_date">
+      </div>
+
+      <!-- วันที่ชำระเงิน -->
+      <div class="mb-3 date-group">
+        <label>กำหนดวันที่ชำระเงิน</label>
+        <input type="text" id="display_pay" class="form-control" placeholder="เลือกวันที่ชำระเงิน (dd/mm/yyyy)" readonly required>
+        <input type="date" id="due_date" name="due_date">
+      </div>
+
+      <div class="mb-3">
+        <label>ราคาต่อวัน</label>
+        <input type="text" class="form-control" value="{{ room.price_daily }} บาท" disabled>
+      </div>
+
+      <div class="text-center">
+        <button type="submit" class="btn btn-primary">✔ จองและออกใบแจ้งหนี้</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // กำหนดวันปัจจุบันเป็น minimum
+  const today = new Date().toISOString().split("T")[0];
+  document.querySelectorAll('input[type="date"]').forEach(el => el.min = today);
+
+  // เมื่อคลิก input text → เปิด date picker ที่ซ่อนอยู่
+  function setupDatePair(displayId, realId) {
+    const display = document.getElementById(displayId);
+    const real = document.getElementById(realId);
+
+    display.addEventListener("click", () => real.showPicker());
+    real.addEventListener("change", () => {
+      const [y, m, d] = real.value.split("-");
+      display.value = `${d}/${m}/${y}`;
+    });
+  }
+
+  setupDatePair("display_start", "start_date");
+  setupDatePair("display_end", "end_date");
+  setupDatePair("display_pay", "due_date");
+
+  // บังคับให้ end_date >= start_date
+  document.getElementById("start_date").addEventListener("change", e => {
+    document.getElementById("end_date").min = e.target.value;
+  });
+</script>
+{% endblock %}

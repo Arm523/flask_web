@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>จัดการ - Options</title>
+<div class="container mt-4">
+    <h2>⌨︎ จัดการ Options</h2>
+    <a href="{{ url_for('add_option') }}" class="btn btn-success mb-3">+ เพิ่ม Option</a>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>ชื่อ Option</th>
+                <th>ราคา</th>
+                <th>ประเภท</th>
+                <th>หน่วย</th>
+                <th>จัดการ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for opt in options %}
+            <tr>
+                <td>{{ opt.name }}</td>
+                <td>{{ opt.price }}</td>
+                <td>{{ opt.option_type }}</td>
+                <td>{{ opt.unit_name }}</td>
+                <td>
+                    <a href="{{ url_for('edit_option', option_id=opt.id) }}" class="btn btn-warning btn-sm">แก้ไข</a>
+                    <a href="{{ url_for('delete_option', option_id=opt.id) }}" class="btn btn-danger btn-sm"
+                        onclick="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบ?');">ลบ</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

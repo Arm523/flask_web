@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+  <style>
+    * {
+      font-family: "Sarabun", sans-serif !important;
+    }
+
+    body {
+      font-family: "Sarabun", sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #c2e7dc;
+      -webkit-font-smoothing: antialiased;
+      /* ช่วยให้ตัวหนังสือคมชัดขึ้น */
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .sidebar {
+      width: 220px;
+      height: 100vh;
+      position: fixed;
+      top: 56px;
+      left: 0;
+      background-color: #1c5fa7;
+      color: white;
+      padding: 15px 10px;
+      overflow-y: auto;
+      transition: width 0.3s ease;
+      z-index: 1000;
+    }
+
+    .sidebar.collapsed {
+      width: 70px;
+    }
+
+    /* ซ่อนเฉพาะข้อความ */
+    .sidebar.collapsed .nav-text,
+    .sidebar.collapsed h5,
+    .sidebar.collapsed .welcome-text {
+      display: none !important;
+    }
+
+    .sidebar img {
+      width: 80px;
+      border-radius: 8px;
+      display: block;
+      margin: 10px auto 15px;
+    }
+
+    .sidebar h5 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .sidebar .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      background-color: transparent;
+      color: white;
+      transition: background-color 0.2s;
+    }
+
+    .sidebar .nav-link i {
+      font-size: 18px;
+      min-width: 22px;
+      text-align: center;
+    }
+
+    .sidebar .nav-link:hover {
+      background-color: #0452a5;
+      color: #fff;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .sidebar .nav-link.active {
+      background-color: rgb(230, 125, 6);
+      color: white;
+    }
+
+    .floating-toggle {
+      position: fixed;
+      left: 206px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px;
+      height: 28px;
+      background: #ffffff;
+      color: #1c5fa7;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 2001;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      border: 1px solid #ddd;
+    }
+
+    .sidebar.collapsed+.floating-toggle {
+      left: 56px;
+    }
+
+    .floating-toggle:hover {
+      background: #b9c1d8;
+      color: #e67d06;
+      /* เปลี่ยนเป็นสีส้มตอนชี้ */
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transform: translateY(-50%) scale(1.1);
+      /* ขยายใหญ่ขึ้นนิดหน่อย */
+    }
+
+    .main-content {
+      font-size: 14px;
+      font-family: "Sarabun", sans-serif;
+      padding-left: 250px;
+      padding-top: 56px;
+      max-width: none;
+      margin: 0;
+      padding-right: 20px;
+      padding-bottom: 20px;
+      background-color: #c2e7dc;
+      min-height: 100vh;
+      transition: all 0.3s ease;
+      box-sizing: border-box;
+    }
+
+    .main-content.expanded {
+      padding-left: 100px;
+      margin-left: 0;
+    }
+
+    /* ไอคอนหมุน */
+    .rotate-icon {
+      transition: transform 0.3s ease;
+      display: inline-block;
+    }
+
+    .rotate-icon.open {
+      transform: rotate(180deg);
+    }
+
+    .card {
+      transition: box-shadow 0.3s ease-in-out;
+    }
+
+    .card:hover {
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    }
+
+    /* สำหรับ container ที่มี scroll */
+    .scroll-container {
+      overflow-y: auto;
+      padding-right: 10px;
+      /* ให้ไม่ชน content */
+    }
+
+    .scroll-container::-webkit-scrollbar {
+      width: 10px;
+      /* ความกว้างของ scroll bar */
+    }
+
+    .scroll-container::-webkit-scrollbar-track {
+      background: #26b7e4;
+      /* สี background ของ track */
+      border-radius: 20px;
+    }
+
+    .scroll-container::-webkit-scrollbar-thumb {
+      background-color: #4bc0c0;
+      border-radius: 4px;
+      border: 1.2px solid;
+    }
+
+    .scroll-container::-webkit-scrollbar-thumb:hover {
+      background-color: #36a2eb;
+    }
+
+    .floating-toggle i {
+      font-size: 14px;
+      line-height: 0;
+      transition: transform 0.3s ease;
+    }
+
+    .floating-toggle.rotated i {
+      transform: rotate(180deg);
+    }
+
+    /* เมนูหลักตอนที่มีลูกน้องถูกเลือก */
+    .active-parent {
+      background-color: rgba(255, 255, 255, 0.1) !important;
+      color: #ffcc00 !important;
+      /* เปลี่ยนสีข้อความหรือไอคอนให้เด่นขึ้น */
+    }
+
+    /* ปรับการหมุนไอคอน (จากขวา หมุนลงล่าง) */
+    .rotate-icon {
+      font-size: 12px;
+      transition: transform 0.3s ease;
+    }
+
+    .rotate-icon.open {
+      transform: rotate(90deg);
+    }
+
+    /* สไตล์เมนูย่อย */
+    .sub-link {
+      font-size: 13px !important;
+      /* เล็กลงกว่าเมนูหลักนิดหน่อย */
+      padding: 6px 10px !important;
+      opacity: 0.8;
+      transition: all 0.2s;
+    }
+
+    .sub-link:hover {
+      opacity: 1;
+      background-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    .sub-link.active {
+      background-color: #e67d06 !important;
+      /* สีส้มที่คุณชอบ */
+      opacity: 1;
+      font-weight: bold;
+    }
+
+    /* ซ่อนเส้นขอบเมื่อ sidebar ถูกพับ */
+    .sidebar.collapsed .border-start {
+      border: none !important;
+    }
+
+    /* บังคับรูปให้เป็นวงกลม 100% */
+    .sidebar-avatar {
+      width: 85px !important;
+      height: 85px !important;
+      object-fit: cover !important;
+      /* ห้ามรูปเบี้ยว */
+      border-radius: 50% !important;
+      /* บังคับวงกลม */
+
+      display: block;
+      margin: 15px auto 10px;
+      transition: all 0.3s ease;
+    }
+
+    /* เมื่อ Sidebar ย่อ (Collapsed) */
+    .sidebar.collapsed .sidebar-avatar {
+      width: 45px !important;
+      height: 45px !important;
+      border-width: 2px !important;
+      margin: 10px auto !important;
+    }
+
+    /* กำจัดเงาหรือกรอบสี่เหลี่ยมที่อาจมาจาก Class shadow-sm ของ Bootstrap */
+    .shadow-sm {
+      box-shadow: none !important;
+    }
+
+    /* ปรับแต่งข้อความต้อนรับให้ซ่อนเมื่อย่อ */
+    .sidebar.collapsed .welcome-text {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Navbar/Header -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-white fixed-top shadow">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">
+        <img src="{{ url_for('static', filename='precise-logo.png') }}" alt="Logo" height="40" />
+      </a>
+      <time id="current-datetime" datetime=""></time>
+      <div class="d-flex">
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-primary">Logout</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Sidebar -->
+  <div class="sidebar scroll-container" id="sidebar">
+    <div class="text-center mb-3">
+      <div class="profile-container mb-2">
+        {% if current_user_img %}
+        <img src="{{ url_for('static', filename='profile_user/' + current_user_img) }}?v={{ range(1, 999) | random }}"
+          class="sidebar-avatar shadow-sm" alt="User Profile" />
+        {% else %} {% if current_user_gender == 'female' %}
+        <img src="{{ url_for('static', filename='profile_user/default-female.png') }}" class="sidebar-avatar shadow-sm"
+          alt="Default Female" />
+        {% else %}
+        <img src="{{ url_for('static', filename='profile_user/default-male.png') }}" class="sidebar-avatar shadow-sm"
+          alt="Default Male" />
+        {% endif %} {% endif %}
+      </div>
+
+      <h5 class="welcome-text mt-2">
+        ยินดีต้อนรับ<br /><strong>{{ current_username }}</strong>
+      </h5>
+    </div>
+
+    <ul class="nav nav-pills flex-column">
+      <li class="nav-item mb-1">
+        <a class="nav-link parent-link d-flex align-items-center {% if request.path in ['/dashboard', '/meter_analysis', '/room_overview'] %}active-parent{% endif %}"
+          data-bs-toggle="collapse" href="#dashboardMenu" role="button"
+          aria-expanded="{% if request.path in ['/dashboard', '/meter_analysis', '/room_overview'] %}true{% else %}false{% endif %}"
+          aria-controls="dashboardMenu">
+          <i class="bi bi-speedometer2"></i>
+          <span class="nav-text ms-2">Dashboard</span>
+
+          <i id="dashboardIcon"
+            class="bi bi-chevron-right ms-auto rotate-icon {% if request.path in ['/dashboard', '/meter_analysis', '/room_overview'] %}open{% endif %}">
+          </i>
+        </a>
+
+        <div
+          class="collapse {% if request.path in ['/dashboard', '/meter_analysis', '/room_overview'] %}show{% endif %}"
+          id="dashboardMenu">
+          <ul class="nav flex-column ms-3 ps-2 border-start border-white border-opacity-25">
+            <li class="nav-item">
+              <a href="/dashboard" class="nav-link sub-link {% if request.path == '/dashboard' %}active{% endif %}">
+                <i class="bi bi-house-door"></i>
+                <span class="nav-text">Room Overview</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="/meter_analysis"
+                class="nav-link sub-link {% if request.path == '/meter_analysis' %}active{% endif %}">
+                <i class="bi bi-speedometer"></i>
+                <span class="nav-text">Meter Data Analytics</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="nav-item mb-1">
+        <a class="nav-link parent-link d-flex align-items-center {% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}active-parent{% endif %}"
+          data-bs-toggle="collapse" href="#manageMenu" role="button"
+          aria-expanded="{% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}true{% else %}false{% endif %}"
+          aria-controls="manageMenu">
+          <i class="bi bi-gear-fill"></i>
+          <span class="nav-text ms-2">Manage</span>
+
+          <i id="gearIcon"
+            class="bi bi-chevron-right ms-auto rotate-icon {% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}open{% endif %}">
+          </i>
+        </a>
+
+        <div
+          class="collapse {% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}show{% endif %}"
+          id="manageMenu">
+          <ul class="nav flex-column ms-3 ps-2 border-start border-white border-opacity-25">
+            <li class="nav-item">
+              <a href="{{ url_for('manage_units') }}"
+                class="nav-link sub-link {% if request.path == '/manage_units' %}active{% endif %}">
+                <i class="bi bi-house-door"></i>
+                <span class="nav-text">Manage Units</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ url_for('manage_roles') }}"
+                class="nav-link sub-link {% if request.path == '/manage_roles' %}active{% endif %}">
+                <i class="bi bi-person-badge"></i>
+                <span class="nav-text">Manage Roles</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ url_for('manage_option') }}"
+                class="nav-link sub-link {% if request.path == '/manage_option' %}active{% endif %}">
+                <i class="bi bi-sliders"></i>
+                <span class="nav-text">Manage Option</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ url_for('manage_meter') }}"
+                class="nav-link sub-link {% if request.path == '/manage_meter' %}active{% endif %}">
+                <i class="bi bi-speedometer2"></i>
+                <span class="nav-text">Manage Meter</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ url_for('manage_doc') }}"
+                class="nav-link sub-link {% if request.path == '/manage_doc' %}active{% endif %}">
+                <i class="bi bi-folder2-open"></i>
+                <span class="nav-text">Manage Documents</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="{{ url_for('manage_tenants') }}"
+                class="nav-link sub-link {% if request.path == '/manage_tenants' %}active{% endif %}">
+                <i class="bi bi-person-vcard"></i>
+                <span class="nav-text">Manage Tranets</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </li>
+
+      <a href="/business" class="nav-link {% if '/business' in request.path %}active{% endif %}">
+        <i class="bi bi-briefcase"></i>
+        <span class="nav-text">ตั้งค่าข้อมูลกิจการ</span>
+      </a>
+
+      <a href="/user_settings" class="nav-link {% if '/user_settings' in request.path %}active{% endif %}">
+        <i class="bi bi-person-fill-gear"></i>
+        <span class="nav-text">การตั้งค่า User</span>
+      </a>
+
+      <a href="/settings" class="nav-link {% if '/settings' in request.path %}active{% endif %}">
+        <i class="bi bi-gear"></i>
+        <span class="nav-text">การตั้งค่าระบบ</span>
+      </a>
+
+      <a href="/leases_uploaded" class="nav-link {% if '/leases_uploaded' in request.path %}active{% endif %}">
+        <i class="bi bi-file-check"></i>
+        <span class="nav-text">สัญญาเช่า</span>
+      </a>
+
+      <a href="/tool_meter" class="nav-link {% if '/tool_meter' in request.path %}active{% endif %}">
+        <i class="bi bi-speedometer"></i>
+        <span class="nav-text">Tool Meter</span>
+      </a>
+    </ul>
+  </div>
+
+  <div id="toggleSidebar" class="floating-toggle">
+    <i class="bi bi-chevron-left"></i>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content" id="main-content">
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Bootstrap 5.3 JS (for collapse to work) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- JavaScript ควบคุมการหมุนไอคอนเฟืองตามสถานะ collapse -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const sidebar = document.getElementById("sidebar");
+      const mainContent = document.getElementById("main-content");
+      const toggleBtn = document.getElementById("toggleSidebar");
+      const manageMenu = document.getElementById("manageMenu");
+      const gearIcon = document.getElementById("gearIcon");
+
+      // --- 1. จัดการสถานะ Sidebar (เปิด/ปิด) ---
+      // ตรวจสอบจาก localStorage ว่าก่อนหน้านี้ปิดอยู่หรือไม่
+      const isCollapsed = localStorage.getItem("sidebarCollapsed") === "true";
+
+      if (isCollapsed) {
+        sidebar.classList.add("collapsed");
+        mainContent.classList.add("expanded");
+        toggleBtn.classList.add("rotated");
+      }
+
+      // ฟังก์ชันกดปุ่ม Toggle
+      toggleBtn.addEventListener("click", () => {
+        sidebar.classList.toggle("collapsed");
+        mainContent.classList.toggle("expanded");
+        toggleBtn.classList.toggle("rotated");
+
+        // บันทึกสถานะไว้ใน Browser
+        localStorage.setItem(
+          "sidebarCollapsed",
+          sidebar.classList.contains("collapsed"),
+        );
+      });
+
+      // --- 2. จัดการไอคอนเฟือง (Manage Menu) ---
+      // เช็คสถานะตอนโหลดหน้า (ถ้าเมนูเปิดอยู่ให้หมุนไอคอนรอไว้)
+      if (manageMenu && manageMenu.classList.contains("show")) {
+        gearIcon.classList.add("open");
+      }
+
+      // ฟัง Event ตอนเมนูย่อย กาง/หุบ
+      if (manageMenu) {
+        manageMenu.addEventListener("show.bs.collapse", function () {
+          gearIcon.classList.add("open");
+        });
+
+        manageMenu.addEventListener("hide.bs.collapse", function () {
+          gearIcon.classList.remove("open");
+        });
+      }
+
+      const dashboardMenu = document.getElementById("dashboardMenu");
+      const dashboardIcon = document.getElementById("dashboardIcon");
+
+      // เช็คสถานะตอนโหลดหน้า
+      if (dashboardMenu && dashboardMenu.classList.contains("show")) {
+        dashboardIcon.classList.add("open");
+      }
+
+      // ฟัง Event ตอน Dashboard Menu กาง/หุบ
+      if (dashboardMenu) {
+        dashboardMenu.addEventListener("show.bs.collapse", function () {
+          dashboardIcon.classList.add("open");
+        });
+
+        dashboardMenu.addEventListener("hide.bs.collapse", function () {
+          dashboardIcon.classList.remove("open");
+        });
+      }
+
+      // --- 3. อัปเดตเวลา (ฟังก์ชันเดิมของคุณ) ---
+      function updateDateTime() {
+        const now = new Date();
+        const timeElement = document.getElementById("current-datetime");
+        if (timeElement) {
+          timeElement.datetime = now.toISOString();
+          const options = {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          };
+          timeElement.innerHTML = now.toLocaleDateString(undefined, options);
+        }
+      }
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+    });
+  </script>
+</body>
+
+</html>

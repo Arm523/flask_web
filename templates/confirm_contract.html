@@ -1,0 +1,604 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Tool Meter Setup{% endblock %}</title>
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body {
+      background: linear-gradient(135deg, #a3c9f1, #d9e9ff);
+      margin: 0;
+      padding: 40px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #0d3c61;
+      margin-bottom: 25px;
+    }
+
+    .container {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    /* กล่องซ้าย */
+    .left-panel {
+      flex: 0.9;
+      background: #fff;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      flex-direction: column;
+      max-height: 500px;
+      overflow: hidden;
+    }
+
+    .left-panel h3 {
+      margin-top: 0;
+      color: #084b8a;
+    }
+
+    .search {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.8px solid #c7d6e6;
+      border-radius: 16px;
+      font-size: 15px;
+      margin-bottom: 12px;
+      transition: all 0.25s ease-in-out;
+    }
+
+    .search:focus {
+      border-color: #4e91ff;
+      outline: none;
+      box-shadow: 0 0 6px rgba(78, 145, 255, 0.4);
+    }
+
+    .table-container {
+      flex: 1;
+      overflow-y: auto;
+      border-radius: 12px;
+      border: 1px solid #d0d8e5;
+      background-color: #fefefe;
+      padding: 5px;
+    }
+
+    .table-container::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .table-container::-webkit-scrollbar-thumb {
+      background-color: #b3c7e6;
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid #e0e0e0;
+      padding: 8px 10px;
+      text-align: center;
+    }
+
+    th {
+      background-color: #bde4ff;
+      color: #0b3b6f;
+      font-weight: bold;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tr:hover {
+      background: #f2f8ff;
+    }
+
+    /* กล่องขวา */
+    .right-panel {
+      flex: 1;
+      background: #fff;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .right-panel h2 {
+      color: #0d3c61;
+      margin-top: 0;
+    }
+
+    select,
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      margin-top: 6px;
+      border: 1.5px solid #c7d6e6;
+      border-radius: 14px;
+      font-size: 15px;
+      transition: all 0.2s ease-in-out;
+      background-color: #f9fbff;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: #4e91ff;
+      outline: none;
+      box-shadow: 0 0 5px rgba(78, 145, 255, 0.3);
+      background: #fff;
+    }
+
+    .section-divider {
+      height: 1px;
+      background: #d0d8e5;
+      margin: 15px 0;
+      border-radius: 2px;
+    }
+
+    button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 15px;
+      font-weight: bold;
+      font-size: 15px;
+      margin-top: 18px;
+      margin-right: 8px;
+      color: rgb(255, 255, 255);
+      cursor: pointer;
+      transition: 0.2s;
+      background-color: #4e91ff;
+    }
+
+    button:hover {
+      background-color: #2c70ff;
+    }
+
+    .disabled {
+      background: #e9eef7 !important;
+      color: #6e7b8b;
+      border-color: #d0d8e5;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Tool Meter Setup</h1>
+  <div class="container">
+
+    <!-- ซ้าย -->
+    <div class="left-panel">
+      <h3>📋 รายการห้องและมิเตอร์</h3>
+
+      <input type="text" id="searchRoom" class="search" placeholder="🔍 ค้นหาห้อง...">
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Room</th>
+              <th>Serial Meter</th>
+            </tr>
+          </thead>
+          <tbody id="meterTable">
+            {% for meter in meters %}
+            <tr>
+              <td>{{ meter.room_name or '-' }}</td>
+              <td>{{ meter.serial_meter or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="2">ไม่มีข้อมูลมิเตอร์</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ขวา -->
+    <div class="right-panel">
+      <h2>⚙️ ตั้งค่า Tool Meter</h2>
+
+      <label>เลือก Module:</label>
+      <select id="module">
+        <option value="" disabled selected>-- เลือก Module --</option>
+        {% for key in modules_json.keys() %}
+        <option value="{{ key }}">{{ key }}</option>
+        {% endfor %}
+        <option value="custom">🛠️ Others</option>
+      </select>
+
+      <label>Serial/TCP</label>
+      <select id="connType">
+        <option value="" disabled selected>-- เลือกประเภทการเชื่อมต่อ --</option>
+        <option value="serial">Serial</option>
+        <option value="tcp">TCP</option>
+      </select>
+
+      <div class="section-divider"></div>
+      <div id="formFields"></div>
+    </div>
+  </div>
+
+  <script id="modules-data" type="application/json">{{ modules_json|tojson }}</script>
+
+  <script>
+    const portInput = document.getElementById("port");
+    const selectPortBtn = document.getElementById("selectPortBtn");
+    const socket = io("http://192.168.137.20:3000");
+
+    // ---------- ค้นหาในตาราง ----------
+    $("#searchRoom").on("keyup", function () {
+      const value = $(this).val().toLowerCase();
+      $("#meterTable tr").filter(function () {
+        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+      });
+    });
+
+    const modules = JSON.parse(document.getElementById('modules-data').textContent || '{}');
+    // ---------- เมื่อเลือก Module ----------
+    $("#module").change(function () {
+      const moduleName = $(this).val();
+      const moduleData = modules[moduleName] || {};
+      const $connType = $("#connType");
+
+      $connType.val(""); // รีเซ็ต connType
+
+      if (moduleName === "custom") {
+        $connType.prop("disabled", false);
+        $("#formFields").html("");
+        return;
+      }
+
+      if (moduleData.type) {
+        const type = moduleData.type.toLowerCase();
+        $connType.val(type);
+        $connType.prop("disabled", true);
+        renderForm(type, moduleData, moduleName);
+      } else {
+        $connType.prop("disabled", false);
+        $("#formFields").html(`<p style="color:#d33;">⚠️ ไม่มีข้อมูล type สำหรับโมดูลนี้</p>`);
+      }
+    });
+
+    // ---------- เมื่อเลือกประเภท Serial/TCP ----------
+    $("#connType").change(function () {
+      const type = $(this).val();
+      const moduleName = $("#module").val()
+      renderForm(type, {}, moduleName);
+    });
+
+    // ---------- สร้างฟอร์มการตั้งค่า ----------
+    function renderForm(type, moduleData = {}, moduleName = "") {
+      let html = "";
+
+      let registerOptions = "";
+      if (moduleData.config_register || moduleData.read_register) {
+        const merged = { ...(moduleData.config_register || {}), ...(moduleData.read_register || {}) };
+        for (const [key, obj] of Object.entries(merged)) {
+          const addr = obj.address || 0;
+          registerOptions += `<option value="${key}">${key} (${addr})</option>`;
+        }
+      }
+
+      if (type === "serial" && moduleName !== "custom") {
+        html = `
+            <label>Modbus address</label>
+            <select id="modbusSelect">
+              <option value="">- Select command -</option>
+              ${registerOptions}
+            </select>
+
+            <label>Serial Port</label>
+            <select id="serial_ports">
+              {% for p in serial_ports %}
+              <option value="{{ p }}">{{ p }}</option>
+              {% endfor %}
+            </select>
+
+            <label>Unit ID (0-255)</label>
+            <input type="number" id="unit_id" placeholder="เช่น 1">
+
+            <label>Data in DEC format (Separate by comma)</label>
+            <input type="text" id="data_dec" placeholder="ใส่ค่าเมื่อเขียน Write / แสดงค่าเมื่อ Read">
+
+            <button id="readBtn">📖 Read</button>
+            <button id="writeBtn">✏️ Write</button>
+          `;
+      } else if (type === "tcp" && moduleName !== "custom") {
+        html = `           
+          <label>Modbus address</label>
+            <select id="modbusSelect">
+              <option value="">- Select command -</option>
+              ${registerOptions}
+            </select>
+            <label>IP Address</label>
+            <input type="text" id="ip" placeholder="192.168.x.xx" value="${moduleData.ip || ''}">
+            <label>Port</label>
+            <input type="number" id="tcp_port" placeholder="502" value="${moduleData.port || ''}">
+            <label>Unit ID</label>
+            <input type="number" id="unit_id" placeholder="1-255" value="${moduleData.config_register?.unit_id || ''}">
+            <label>Data in DEC format (Separate by comma)</label>
+            <input type="text" id="data_dec" placeholder="ใส่ค่าเมื่อเขียน Write / แสดงค่าเมื่อ Read">
+          `;
+      } if (type === "serial" && moduleName === "custom") {
+        html = `
+          <label>Serial Port</label>
+          <label>Serial Port</label>
+            <select id="serial_ports">
+              {% for p in serial_ports %}
+              <option value="{{ p }}">{{ p }}</option>
+              {% endfor %}
+            </select>
+
+          <label>Address</label><input type="number" id="address">
+          <select id="baudrate">
+            <option value="110">110</option>
+            <option value="300">300</option>
+            <option value="600">600</option>
+            <option value="1200">1200</option>
+            <option value="2400">2400</option>
+            <option value="4800">4800</option>
+            <option value="9600" selected>9600</option>
+            <option value="14400">14400</option>
+            <option value="19200">19200</option>
+            <option value="28800">28800</option>
+            <option value="38400">38400</option>
+            <option value="57600">57600</option>
+            <option value="115200">115200</option>
+            <option value="128000">128000</option>
+            <option value="256000">256000</option>
+          </select>
+
+          <label>Function code</label>
+          <select id="function_code">
+            <option value="1">01 Read Coils</option>
+            <option value="2">02 Read Discrete Inputs</option>
+            <option value="3">03 Read Holding Registers</option>
+            <option value="4">04 Read Input Registers</option>
+            <option value="5">05 Write Single Coil</option>
+            <option value="6">06 Write Single Holding Register</option>
+            <option value="15">15 Write Multiple Coils</option>
+            <option value="16">16 Write Multiple Holding Registers</option>
+          </select>
+
+          <label>Data type</label>
+          <select id="data_type">
+            <option value="int16">int16</option>
+            <option value="uint16">uint16</option>
+            <option value="int32">int32</option>
+            <option value="uint32">uint32</option>
+            <option value="float32">float32</option>
+            <option value="float64">float64</option>
+            <option value="bcd">bcd</option>
+            </select>
+
+          <label>Data in DEC format (Separate by comma)</label>
+          <input type="text" id="data_dec" placeholder="ใส่ค่าเมื่อเขียน Write / แสดงค่าเมื่อ Read">
+      `;
+      }
+      else if (type === "tcp" && moduleName === "custom") {
+        html = `
+        <label>IP Address</label>
+          <input type="text" id="ip" placeholder="192.xxx.x.xx">
+
+        <label>Port(1-65535)</label>
+        <input type="number" id="port">
+
+        <label>Function code</label>
+        <select id="function_code">
+          <option value="01">01 (0x01) Read Coil</option>
+          <option value="02">02 (0x02) Read Discrete Input</option>
+          <option value="03">03 (0x03) Read Holding Registers</option>
+          <option value="04">04 (0x04) Read Input Registers</option>
+          <option value="05">05 (0x05) Write Single Coil</option>
+          <option value="06">06 (0x06) Write Single Holding Register</option>
+          <option value="15">15 (0x0F) Write Multiple Coils</option>
+          <option value="16">16 (0x10) Write Multiple Holding Registers</option>
+        </select>
+
+        <label>Data type</label>
+        <select id="data_type">
+          <option value="int16">int16</option>
+          <option value="uint16">uint16</option>
+          <option value="int32">int32</option>
+          <option value="uint32">uint32</option>
+          <option value="float">float</option>
+          <option value="double">double</option>
+        </select>
+
+        <label>Byte order</label>
+        <select id="byte_order">
+          <option value="1234">1234</option>
+          <option value="4321">4321</option>
+          <option value="3412">3412</option>
+          <option value="2143">2143</option>
+        </select>
+
+        <label>Word swap</label>
+        <select id="word_swap">
+          <option value="no">No</option>
+          <option value="yes">Yes</option>
+        </select>
+
+        <label>Unit ID (0-255)</label>
+        <input type="number" id="unit_id" placeholder="1">
+
+        <label>Data in DEC format (Separate by comma)</label>
+        <input type="text" id="data_dec" placeholder="ใส่ค่าเมื่อเขียน Write / แสดงค่าเมื่อ Read">
+      `;
+      }
+
+      $("#formFields").html(html);
+
+    }
+
+    $(document).on('click', '#sendBtn', function () {
+      const port = $('#serial_port_select').val();
+      const baudrate = parseInt($('#baudrate').val());
+      const unit_id = parseInt($('#unit_id').val());
+      const function_code = parseInt($('#function_code').val());
+      const address = $('#address').val();
+      const count = parseInt($('#count').val(), 10) || 1;
+      const data_type = $('#data_type').val();
+      const gain = $('#gain').val();
+      const byte_order = $('#byte_order').val();
+      const word_swap = $('#word_swap').val();
+      const parameters = $('#parameters').val() || "8N1";
+
+      const frame = frameStr.split(",").map(v => parseInt(v.trim(), 16));
+      socket.emit("send_frame", { port, frame });
+
+      if (!port) {
+        alert("⚠️ กรุณาเลือกพอร์ตก่อนส่งคำสั่ง");
+        return;
+      }
+
+      // ส่งไป Pi ผ่าน SocketIO
+      socket.emit('modbus_command', {
+        port,
+        baudrate,
+        unit_id,
+        function_code,
+        address,
+        count,
+        data_type,
+        byte_order,
+        word_swap,
+        gain,
+        parameters
+      });
+    });
+
+    // ---------- Read Button ----------
+    $(document).on("click", "#readBtn", function () {
+      const btn = $(this);
+      const allBtns = $("button");
+      allBtns.prop("disabled", true);
+
+      const data = {
+        pc_port: $("#serial_port_select").val(),
+        model_name: $("#module").val(),
+        register_key: $("#modbusSelect").val(),
+        data_type: $("#data_type").val(),
+        connType: $("#connType").val(),
+        parameters: $("#parameters").val(),
+        function_code: $("#function_code").val(),
+        unit_id: $("#unit_id").val(),
+        serial_ports: $("#serial_ports").val() || undefined,
+        ip: $("#ip").val() || undefined,
+        baudrate: $("#baudrate").val() || undefined,
+        word_swap: $("#word_swap").val() || undefined
+      };
+
+      $.ajax({
+        url: '/read_meter',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function (res) {
+          if (res.success) {
+            $("#data_dec").val(res.value);
+            alert(`✅ Data in DEC format: ${res.value}`);
+          } else {
+            alert(`❌ Data Error`);
+          }
+        },
+        error: function () {
+          alert("❌ เกิดข้อผิดพลาดในการเชื่อมต่อ");
+        },
+        complete: function () {
+          let cooldown = 2;
+          btn.html(`<i class="fas fa-spinner fa-spin"></i> รอ ${cooldown}s`);
+          const interval = setInterval(() => {
+            cooldown--;
+            if (cooldown > 0) {
+              btn.html(`<i class="fas fa-spinner fa-spin"></i> รอ ${cooldown}s`);
+            } else {
+              clearInterval(interval);
+              btn.prop("disabled", false);
+              btn.html('<i class="fas fa-book"></i> Read');
+              allBtns.prop("disabled", false);
+            }
+          }, 1000);
+        }
+      });
+    });
+
+    // ---------- Write Button ----------
+    $(document).on("click", "#writeBtn", function () {
+      const btn = $(this);
+      const allBtns = $("button");
+      allBtns.prop("disabled", true);
+
+      const valStr = $("#data_dec").val().trim();
+      if (!valStr) {
+        alert("⚠️ กรุณากรอกค่า Data ก่อน");
+        allBtns.prop("disabled", false);
+        return;
+      }
+
+      let vals = valStr.split(",").map(v => parseFloat(v.trim()));
+      if (vals.some(isNaN)) {
+        alert("❌ มีค่าที่ไม่ใช่ตัวเลข");
+        btn.prop("disabled", false);
+        return;
+      }
+
+      const data = {
+        model_name: $("#module").val(),
+        register_key: $("#modbusSelect").val(),
+        unit_id: $("#unit_id").val(),
+        serial_ports: $("#serial_ports").val() || $("#serial_port_select").val(),
+        ip: $("#ip").val() || undefined,
+        baudrate: $("#baudrate").val() || undefined,
+        data_dec: vals
+      };
+
+      $.ajax({
+        url: '/write_meter',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function (res) {
+          if (res.success) {
+            alert(`✅ Write Data in DEC format: ${res.value}`);
+          } else {
+            alert(`❌ Data Error`);
+          }
+        },
+        error: function () {
+          alert("❌ เกิดข้อผิดพลาดในการเชื่อมต่อ");
+        },
+        complete: function () {
+          let cooldown = 2;
+          btn.html(`<i class="fas fa-spinner fa-spin"></i> รอ ${cooldown}s`);
+          const interval = setInterval(() => {
+            cooldown--;
+            if (cooldown > 0) {
+              btn.html(`<i class="fas fa-spinner fa-spin"></i> รอ ${cooldown}s`);
+            } else {
+              clearInterval(interval);
+              btn.prop("disabled", false);
+              btn.html('<i class="fas fa-book"></i> Write');
+            }
+          }, 1000);
+        }
+      });
+    });
+
+    refreshPorts();
+  </script>
+</body>
+{% endblock %}

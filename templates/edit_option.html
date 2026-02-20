@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+
+{% block title %}แก้ไข Option{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2 class="mb-4">แก้ไขข้อมูล Option</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label for="name" class="form-label">ชื่อ Option</label>
+            <input type="text" class="form-control" id="name" name="name" required value="{{ option.name }}">
+        </div>
+
+        <div class="mb-3">
+            <label for="price" class="form-label">ราคา</label>
+            <input type="number" class="form-control" id="price" name="price" step="0.01" required value="{{ option.price }}">
+        </div>
+
+        <div class="mb-3">
+            <label for="option_type" class="form-label">ประเภท Option</label>
+            <select class="form-select" id="option_type" name="option_type" required>
+                <option value="fixed" {% if option.option_type == 'fixed' %}selected{% endif %}>Fixed</option>
+                <option value="discount" {% if option.option_type == 'discount' %}selected{% endif %}>Discount</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="unit_name" class="form-label">หน่วย (unit)</label>
+            <input type="text" class="form-control" id="unit_name" name="unit_name" value="{{ option.unit_name }}">
+        </div>
+
+        <button type="submit" class="btn btn-primary">บันทึกการเปลี่ยนแปลง</button>
+        <a href="{{ url_for('manage_option') }}" class="btn btn-secondary">ยกเลิก</a>
+    </form>
+</div>
+{% endblock %}

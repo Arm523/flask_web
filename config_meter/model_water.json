@@ -1,0 +1,66 @@
+{
+    "modelC-tcp-water": {
+        "type": "tcp",
+        "ip": "192.168.1.1",
+        "port": "8000",
+        "config_register": {
+            "total_m3": {
+                "address": 61504,
+                "count": 1,
+                "data_type": "int16",
+                "word_swap": false,
+                "gain": 1
+            }
+        },
+        "read_register": {
+            "total_m3": {
+                "address": 4352,
+                "count": 2,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 0.01
+            }
+        }
+    },
+    "DDS730_WATER": {
+        "type": "serial",
+        "baudrate": 1200,
+        "parameters": "8N1",
+        "config_register": {
+            "total_m3": {
+                "address": 61504,
+                "count": 1,
+                "data_type": "int16",
+                "word_swap": false,
+                "gain": 1
+            },
+            "meter_no": {
+                "address": 61440,
+                "count": 3,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 1
+            }
+        },
+        "read_register": {
+            "total_m3": {
+                "address": 4352,
+                "count": 2,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 0.01
+            }
+        }
+    },
+    "modelC_API_Water": {
+        "type": "api",
+        "read_register": {
+            "Total_m3": {
+                "key_name": "m3",
+                "gain": 1
+            }
+        },
+        "config_register": {},
+        "path": "/234/log"
+    }
+}

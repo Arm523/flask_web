@@ -1,0 +1,213 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>User Settings - ตั้งค่าUserผู้ใช้</title>
+
+<div id="flash-data" data-messages='{{ get_flashed_messages(with_categories=true) | tojson | safe }}'></div>
+
+<style>
+  /* สไตล์เฉพาะหน้า Manage Users */
+  .user-card {
+    background: #ffffff;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border: none;
+    overflow: hidden;
+  }
+
+  .table thead th {
+    background-color: #f8f9fa;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #edf2f7;
+    color: #718096;
+    padding: 15px;
+  }
+
+  .table tbody td {
+    vertical-align: middle;
+    padding: 15px;
+    border-bottom: 1px solid #edf2f7;
+  }
+
+  .badge-role {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.8rem;
+  }
+
+  .btn-action {
+    border-radius: 8px;
+    padding: 6px 12px;
+    transition: all 0.2s;
+  }
+
+  .btn-action:hover {
+    transform: translateY(-2px);
+  }
+
+  .search-input {
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 10px 20px;
+  }
+
+  /* ปรับให้รองรับรูปภาพที่อยู่ข้างใน */
+  .avatar-circle {
+    width: 45px;
+    /* ปรับขนาดให้ใหญ่ขึ้นเล็กน้อยเพื่อให้เห็นชัด */
+    height: 45px;
+    background-color: #e2e8f0;
+    color: #4a5568;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    overflow: hidden;
+    /* บังคับให้รูปที่ล้นออกมาถูกตัดทิ้งเป็นทรงกลม */
+    margin-right: 12px;
+    border: 1px solid #edf2f7;
+  }
+
+  .user-table-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="fw-bold mb-0">จัดการผู้ใช้งาน</h2>
+      <p class="text-muted">ตรวจสอบและจัดการสิทธิ์การเข้าถึงของทีมงาน</p>
+    </div>
+    <a href="{{ url_for('add_user') }}" class="btn btn-primary shadow-sm"
+      style="border-radius: 10px; padding: 10px 20px">
+      <i class="fas fa-plus me-2"></i> + เพิ่มผู้ใช้งานใหม่
+    </a>
+  </div>
+
+  <div class="card user-card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>ผู้ใช้งาน</th>
+            <th>ข้อมูลติดต่อ</th>
+            <th>บทบาท</th>
+            <th class="text-end">การจัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td>
+              <div class="d-flex align-items-center">
+                <div class="avatar-circle">
+                  {% if user.profile_img %}
+                  <img
+                    src="{{ url_for('static', filename='profile_user/' + user.profile_img|string) }}?v={{ range(1, 999) | random }}"
+                    class="sidebar-avatar shadow-sm" alt="User Profile" />
+
+                  {% else %}
+                  {% if user.gender == 'female' %}
+                  <img src="{{ url_for('static', filename='profile_user/default-female.png') }}"
+                    class="sidebar-avatar shadow-sm" alt="Default Female" />
+                  {% else %}
+                  <img src="{{ url_for('static', filename='profile_user/default-male.png') }}"
+                    class="sidebar-avatar shadow-sm" alt="Default Male" />
+                  {% endif %}
+                  {% endif %}
+                </div>
+                <div>
+                  <div class="fw-bold text-dark">
+                    {{ user.fname }} {{ user.lname }}
+                  </div>
+                  <div class="text-muted small">
+                    @{{ user.username }} (ID: {{ user.user_id }})
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="small">
+                <i class="bi bi-envelope"></i> {{ user.email }}
+              </div>
+              <div class="small text-muted">
+                <i class="bi bi-telephone"></i> {{ user.tel }}
+              </div>
+            </td>
+            <td>
+              {% if user.role_id == 1 %}
+              <span class="badge bg-label-danger badge-role" style="
+                  background-color: #fff5f5;
+                  color: #e53e3e;
+                  border: 1px solid #feb2b2;
+                ">Admin</span>
+              {% elif user.role_id == 2 %}
+              <span class="badge bg-label-success badge-role" style="
+                  background-color: #f0fff4;
+                  color: #38a169;
+                  border: 1px solid #9ae6b4;
+                ">Staff</span>
+              {% else %}
+              <span class="badge bg-light text-dark badge-role">ทั่วไป</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <a href="{{ url_for('edit_user', user_id=user.user_id) }}"
+                class="btn btn-outline-primary btn-action me-1">
+                แก้ไข
+              </a>
+              <button class="btn btn-outline-danger btn-action"
+                onclick="confirmDelete('{{ user.user_id }}', '{{ user.username }}')">
+                ลบ
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+  function confirmDelete(userId, username) {
+    Swal.fire({
+      title: "ยืนยันการลบ?",
+      text: `คุณต้องการลบผู้ใช้ @${username} ใช่หรือไม่?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e53e3e",
+      cancelButtonColor: "#718096",
+      confirmButtonText: "ใช่, ลบเลย!",
+      cancelButtonText: "ยกเลิก",
+      borderRadius: "15px",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        window.location.href = `/delete_user/${userId}`;
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const dataElement = document.getElementById('flash-data');
+    if (dataElement) {
+      const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
+      messages.forEach(([category, message]) => {
+        Swal.fire({
+          icon  : category === 'success' ? 'success' : (category === 'danger' ? 'error' : 'info'),
+          title: category === 'success' ? 'สำเร็จ' : 'แจ้งเตือน',
+          text: message,
+          timer: 3000,
+          showConfirmButton: false
+        });
+      });
+    }
+  });
+</script>
+{% endblock %}

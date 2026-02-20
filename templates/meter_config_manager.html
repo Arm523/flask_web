@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meter Config Master</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: "Inter", sans-serif;
+        }
+
+        .main-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background: #2c3e50;
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+        }
+
+        .settings-panel {
+            border-left: 5px solid #ddd;
+            transition: 0.3s;
+        }
+
+        .panel-serial {
+            border-color: #ffc107;
+            background: #fffcf0;
+        }
+
+        .panel-tcp {
+            border-color: #0dcaf0;
+            background: #f0faff;
+        }
+
+        .btn-add-reg {
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+
+<script id="json-data-elec" type="application/json">
+    {{ elec | tojson | safe }}
+  </script>
+<script id="json-data-water" type="application/json">
+    {{ water | tojson | safe }}
+  </script>
+
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-11">
+                <div class="card main-card">
+                    <div class="card-header p-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gear-wide-connected me-2"></i>Meter Protocol
+                            Manager
+                        </h5>
+                        <span id="edit_status" class="badge bg-info d-none">กำลังแก้ไข...</span>
+                    </div>
+
+                    <div class="card-body p-4">
+                        <div class="col-md-2 mb-2">
+                            <a href="{{ url_for('tool_meter') }}" class="btn btn-secondary w-100">
+                                <i class="bi bi-house-door me-1"></i> กลับ
+                            </a>
+                        </div>
+                        <div class="row g-3 mt-2 mb-4 p-3 bg-light rounded border">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">1. เลือกประเภทมิเตอร์</label>
+                                <div class="btn-group w-100">
+                                    <input type="radio" class="btn-check" name="target_group" id="t_elec" value="elec"
+                                        checked onchange="updateQuickLoadList()" />
+                                    <label class="btn btn-outline-primary" for="t_elec">⚡ ไฟฟ้า</label>
+                                    <input type="radio" class="btn-check" name="target_group" id="t_water" value="water"
+                                        onchange="updateQuickLoadList()" />
+                                    <label class="btn btn-outline-info" for="t_water">💧 น้ำ</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">2. เลือกจากไฟล์ JSON (ถ้ามี)</label>
+                                <select id="quick_load" class="form-select border-primary text-primary fw-bold"
+                                    onchange="loadFromJSON()">
+                                    <option value="">-- สร้างรุ่นใหม่ (New) --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mt-2 mb-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i>
+                                แนะนำ: สำหรับมิเตอร์ไฟควรมี <b>total_kWh</b>,
+                                สำหรับมิเตอร์น้ำควรมี <b>total_m3</b>
+                                สําหรับอ่านค่าหลัก
+                            </small>
+                        </div>
+
+                        <form id="configForm">
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-8">
+                                    <label class="form-label fw-bold">ชื่อรุ่น (Model Name)</label>
+                                    <input type="text" id="model_name" class="form-control form-control-lg"
+                                        placeholder="เช่น Meter Module" required />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Interface</label>
+                                    <select id="conn_type" class="form-select form-select-lg"
+                                        onchange="toggleInterface()">
+                                        <option value="serial">Serial (RS485)</option>
+                                        <option value="tcp">TCP (Ethernet)</option>
+                                        <option value="api">API</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="serial_box" class="settings-panel panel-serial p-3 rounded mb-4">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="small fw-bold">Baudrate</label>
+                                        <select id="baudrate" class="form-select">
+                                            <option value="1200">1200</option>
+                                            <option value="2400">2400</option>
+                                            <option value="4800">4800</option>
+                                            <option value="9600" selected>9600</option>
+                                            <option value="14400">14400</option>
+                                            <option value="19200">19200</option>
+                                            <option value="28800">28800</option>
+                                            <option value="38400">38400</option>
+                                            <option value="57600">57600</option>
+                                            <option value="115200">115200</option>
+                                            <option value="128000">128000</option>
+                                            <option value="256000">256000</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="small fw-bold">Parameters</label>
+                                        <input type="text" id="params" class="form-control" value="8N1" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="tcp_box" class="settings-panel panel-tcp p-3 rounded mb-4 d-none">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="small fw-bold">IP</label>
+                                        <input type="text" id="ip" class="form-control" value="192.x.x.x" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="small fw-bold">Port</label>
+                                        <input type="number" id="port" class="form-control" value="502" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="api_box" class="settings-panel border-success p-3 rounded mb-4 d-none"
+                                style="background: #f0fff4; border-left: 5px solid #198754">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="small fw-bold">API Path</label>
+                                        <input type="text" id="path" class="form-control" placeholder="/meter_id/log" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold text-secondary mb-0">
+                                    <i class="bi bi-list-ul me-2"></i>Register Mapping
+                                </h6>
+                                <button type="button" class="btn btn-primary btn-sm btn-add-reg" onclick="addRegRow()">
+                                    + Add Row
+                                </button>
+                            </div>
+
+                            <div class="table-responsive border rounded bg-white mb-4">
+                                <table class="table table-hover mb-0" id="regTable">
+                                    <thead id="regHead" class="table-light small">
+                                    </thead>
+                                    <tbody id="regList">
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-outline-danger" onclick="deleteCurrentModel()">
+                                    <i class="bi bi-trash"></i> ลบทิ้ง
+                                </button>
+                                <div>
+                                    <button type="button" class="btn btn-light me-2" onclick="resetForm()">
+                                        ล้างฟอร์ม
+                                    </button>
+                                    <button type="button" class="btn btn-success px-5 fw-bold shadow"
+                                        onclick="saveConfig()">
+                                        💾 บันทึก JSON
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ข้อมูลที่ส่งมาจาก Python
+        const rawData = {
+            elec: JSON.parse(document.getElementById("json-data-elec").textContent),
+            water: JSON.parse(
+                document.getElementById("json-data-water").textContent,
+            ),
+        };
+
+        // 1. อัปเดตรายชื่อรุ่นใน Dropdown
+        function updateQuickLoadList() {
+            const target = document.querySelector(
+                'input[name="target_group"]:checked',
+            ).value;
+            const select = document.getElementById("quick_load");
+            const models = rawData[target]; // ใช้ข้อมูลที่คุณดึงมาจาก JSON
+
+            // 1. อัปเดตรายชื่อใน Dropdown ตามปกติ
+            select.innerHTML =
+                '<option value="">-- สร้างรุ่นใหม่ (New Model) --</option>';
+            Object.keys(models).forEach((name) => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+
+            // 2. ล้างตารางเดิม และใส่ "ค่าตั้งต้นแนะนำ"
+            resetForm();
+            if (target === "elec") {
+                // แนะนำค่าสำหรับมิเตอร์ไฟ
+                addRegRow({
+                    name: "total_kWh",
+                    address: "",
+                    count: 2,
+                    data_type: "float32",
+                    gain: "",
+                    group: "read_register",
+                });
+            } else {
+                // แนะนำค่าสำหรับมิเตอร์น้ำ
+                addRegRow({
+                    name: "total_m3",
+                    address: "",
+                    count: 2,
+                    data_type: "float32",
+                    gain: "",
+                    group: "read_register",
+                });
+            }
+        }
+
+        // 2. โหลดข้อมูลเมื่อเลือกจาก Dropdown
+        function loadFromJSON() {
+            const target = document.querySelector('input[name="target_group"]:checked').value;
+            const name = document.getElementById('quick_load').value;
+            if (!name) { resetForm(); return; }
+
+            const cfg = rawData[target][name];
+
+            // 1. ตั้งค่า Interface ก่อน เพื่อให้หัวตารางเปลี่ยน
+            document.getElementById('conn_type').value = cfg.type;
+            toggleInterface();
+            document.getElementById('model_name').value = name;
+
+            if (cfg.type === 'api') {
+                document.getElementById('path').value = cfg.path || '';
+            } else if (cfg.type === 'tcp') {
+                document.getElementById('ip').value = cfg.ip || '';
+                document.getElementById('port').value = cfg.port || 502;
+            } else {
+                document.getElementById('baudrate').value = cfg.baudrate || 9600;
+                document.getElementById('params').value = cfg.parameters || '8N1';
+            }
+
+            // 3. วาดแถว Register Mapping ใหม่ (ล้างของเก่าที่ toggleInterface เพิ่มมาให้ตอนแรก)
+            document.getElementById('regList').innerHTML = '';
+            ['read_register', 'config_register'].forEach(group => {
+                if (cfg[group]) {
+                    Object.entries(cfg[group]).forEach(([rName, rVal]) => {
+                        addRegRow({ ...rVal, name: rName, group: group });
+                    });
+                }
+            });
+        }
+
+        // 3. ฟังก์ชันพื้นฐาน (Add Row, Toggle, Reset)
+        function addRegRow(d = null) {
+            const connType = document.getElementById('conn_type').value;
+            const tbody = document.getElementById('regList');
+            const row = document.createElement('tr');
+            row.className = "text-center align-middle";
+
+            if (connType === 'api') {
+                // แถวสำหรับโหมด API (4 คอลัมน์ + 1 ปุ่มลบ)
+                row.innerHTML = `
+            <td>
+                <select class="form-select form-select-sm r-group">
+                    <option value="read_register">Read</option>
+                </select>
+            </td>
+            <td><input type="text" class="form-control form-control-sm r-name" placeholder="เช่น Total kWh" value="${d ? d.name : ''}"></td>
+            <td><input type="text" class="form-control form-control-sm r-key" placeholder="เช่น kwh" value="${d ? (d.key_name || '') : ''}"></td>
+            <td><input type="number" step="0.001" class="form-control form-control-sm r-gain" value="${d ? d.gain : 1}"></td>
+            <td>
+                <button type="button" class="btn btn-sm text-danger" onclick="this.closest('tr').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+            } else {
+                // แถวสำหรับโหมด Modbus (7 คอลัมน์ + 1 ปุ่มลบ)
+                row.innerHTML = `
+            <td>
+                <select class="form-select form-select-sm r-group">
+                    <option value="read_register">Read</option>
+                    <option value="config_register">Config</option>
+                </select>
+            </td>
+            <td><input type="text" class="form-control form-control-sm r-name" value="${d ? d.name : ''}"></td>
+            <td><input type="number" class="form-control form-control-sm r-addr" value="${d ? (d.address || '') : ''}"></td>
+            <td><input type="number" class="form-control form-control-sm r-count" value="${d ? (d.count || 2) : 2}"></td>
+            <td>
+                <select class="form-select form-select-sm r-type">
+                    <option value="float32">float32</option>
+                    <option value="int16">int16</option>
+                    <option value="bcd">bcd</option>
+                </select>
+            </td>
+            <td><input type="number" step="0.001" class="form-control form-control-sm r-gain" value="${d ? d.gain : 1}"></td>
+            <td><input type="checkbox" class="form-check-input r-swap" ${d && d.word_swap ? 'checked' : ''}></td>
+            <td>
+                <button type="button" class="btn btn-sm text-danger" onclick="this.closest('tr').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+                if (d) row.querySelector('.r-type').value = d.data_type || 'float32';
+            }
+
+            if (d) row.querySelector('.r-group').value = d.group || 'read_register';
+            tbody.appendChild(row);
+        }
+
+        function toggleInterface() {
+            const connType = document.getElementById('conn_type').value;
+
+            // 1. สลับการแสดงผล Panels (Serial, TCP, API)
+            document.getElementById('serial_box').classList.toggle('d-none', connType !== 'serial');
+            document.getElementById('tcp_box').classList.toggle('d-none', connType !== 'tcp');
+            document.getElementById('api_box').classList.toggle('d-none', connType !== 'api');
+
+            // 2. เปลี่ยนหัวตารางใหม่ยกชุด (Dynamic Header)
+            const thead = document.getElementById('regHead');
+            if (connType === 'api') {
+                thead.innerHTML = `
+            <tr class="text-center">
+                <th style="width: 15%">Group</th>
+                <th style="width: 25%">Name (Display)</th>
+                <th style="width: 25%">Key Name (from API)</th>
+                <th style="width: 15%">Gain</th>
+                <th style="width: 10%">Action</th>
+            </tr>`;
+            } else {
+                thead.innerHTML = `
+            <tr class="text-center">
+                <th>Group</th>
+                <th>Name</th>
+                <th>Addr</th>
+                <th>Count</th>
+                <th>Type</th>
+                <th>Gain</th>
+                <th>Swap</th>
+                <th>Action</th>
+            </tr>`;
+            }
+            document.getElementById('regList').innerHTML = '';
+        }
+
+        function resetForm() {
+            document.getElementById("configForm").reset();
+            document.getElementById("regList").innerHTML = "";
+            document.getElementById("edit_status").classList.add("d-none");
+            toggleInterface();
+        }
+
+        // 4. ส่งข้อมูลไป Save หรือ Delete
+        function saveConfig() {
+            const model_name = document.getElementById('model_name').value.trim();
+            const conn_type = document.getElementById('conn_type').value;
+            const target = document.querySelector('input[name="target_group"]:checked').value;
+
+            if (!model_name) {
+                Swal.fire('กรุณากรอกข้อมูล', 'กรุณาระบุ ชื่อรุ่น (Model Name)', 'warning');
+                return;
+            }
+
+            const config = { type: conn_type, read_register: {}, config_register: {} };
+
+            if (conn_type === 'api') {
+                const path = document.getElementById('path').value.trim();
+
+                if (!path ) {
+                    Swal.fire('กรุณากรอกข้อมูล', 'สำหรับ API กรุณากรอก Path ให้ครบ', 'warning');
+                    return;
+                }
+                config.path = path;
+
+            } else if (conn_type === 'tcp') {
+                const ip = document.getElementById('ip').value.trim();
+                const port = document.getElementById('port').value.trim();
+
+                if (!ip || !port) {
+                    Swal.fire('กรุณากรอกข้อมูล', 'สำหรับ TCP กรุณากรอก IP และ Port ให้ครบ', 'warning');
+                    return;
+                }
+                config.ip = ip;
+                config.port = parseInt(port);
+
+            } else { // Serial (RS485)
+                const baudrate = document.getElementById('baudrate').value;
+                const params = document.getElementById('params').value.trim();
+
+                if (!params) {
+                    Swal.fire('กรุณากรอกข้อมูล', 'กรุณาระบุ Parameters (เช่น 8N1)', 'warning');
+                    return;
+                }
+                config.baudrate = parseInt(baudrate);
+                config.parameters = params;
+            }
+
+            // --- 3. ตรวจสอบตาราง Register (ต้องมีอย่างน้อย 1 แถวและห้ามว่าง) ---
+            const rows = document.querySelectorAll('#regList tr');
+            if (rows.length === 0) {
+                Swal.fire('ตารางว่างเปล่า', 'กรุณาเพิ่ม Register Mapping อย่างน้อย 1 รายการ', 'warning');
+                return;
+            }
+
+            let isTableValid = true;
+            rows.forEach(row => {
+                const rName = row.querySelector('.r-name').value.trim();
+                const group = row.querySelector('.r-group').value;
+
+                if (!rName) {
+                    isTableValid = false;
+                } else {
+                    if (conn_type === 'api') {
+                        const rKey = row.querySelector('.r-key').value.trim();
+                        if (!rKey) isTableValid = false;
+                        config[group][rName] = {
+                            key_name: rKey,
+                            gain: parseFloat(row.querySelector('.r-gain').value) || 1
+                        };
+                    } else {
+                        const rAddr = row.querySelector('.r-addr').value.trim();
+                        if (!rAddr) isTableValid = false;
+                        config[group][rName] = {
+                            address: parseInt(rAddr),
+                            count: parseInt(row.querySelector('.r-count').value) || 2,
+                            data_type: row.querySelector('.r-type').value,
+                            gain: parseFloat(row.querySelector('.r-gain').value) || 1,
+                            word_swap: row.querySelector('.r-swap').checked
+                        };
+                    }
+                }
+            });
+
+            if (!isTableValid) {
+                Swal.fire('ข้อมูลตารางไม่ครบ', 'กรุณากรอก Name และ Address/Key ในตารางให้ครบทุกช่อง', 'error');
+                return;
+            }
+
+            // --- 4. ส่งข้อมูลไป Server เมื่อทุกอย่างผ่าน ---
+            Swal.fire({
+                title: 'ยืนยันการบันทึก?',
+                text: `คุณต้องการบันทึกรุ่น ${model_name} ใช่หรือไม่?`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                confirmButtonText: 'ยืนยัน',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('/api/manage_config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'save', target, model_name, config })
+                    })
+                        .then(res => res.json())
+                        .then(d => {
+                            Swal.fire('สำเร็จ!', d.message, 'success').then(() => location.reload());
+                        })
+                        .catch(err => {
+                            Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อกับ Server ได้', 'error');
+                        });
+                }
+            });
+        }
+
+        function deleteCurrentModel() {
+            const name = document.getElementById("model_name").value;
+            const target = document.querySelector(
+                'input[name="target_group"]:checked',
+            ).value;
+            if (!name || !confirm(`ลบรุ่น ${name} ใช่หรือไม่?`)) return;
+
+            fetch("/api/manage_config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "delete", target, model_name: name }),
+            })
+                .then((res) => res.json())
+                .then((d) => {
+                    alert(d.message);
+                    location.reload();
+                });
+        }
+
+        window.onload = updateQuickLoadList;
+
+    </script>
+</body>
+
+</html>

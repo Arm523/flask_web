@@ -1,0 +1,208 @@
+{% extends "layout.html" %}
+{% block title %}จัดการ Option สัญญา #{{ contract.contract_id }}{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+<style>
+    .card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    .form-select {
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        padding: 10px;
+        height: 350px !important;
+    }
+
+    .form-select:focus {
+        border-color: #3f6791;
+        box-shadow: 0 0 0 0.2rem rgba(63, 103, 145, 0.25);
+    }
+
+    .btn-action {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: 0.3s;
+    }
+
+    .btn-save {
+        border-radius: 10px;
+        padding: 12px 30px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .info-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 30px;
+    }
+
+    label {
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #495057;
+        display: block;
+    }
+</style>
+
+<div id="flash-data" {% with messages=get_flashed_messages(with_categories=true) %} {% if messages %}
+    data-messages='{{ messages | tojson | safe }}' {% endif %} {% endwith %}>
+</div>
+
+<div class="container mt-4 mb-5">
+    <div class="info-header shadow">
+        <h2 class="mb-1"><i class="bi bi-archive me-2"></i>แก้ไข Option สัญญา</h2>
+        <p class="mb-0 opacity-75">
+            <i class="bi bi-door-open me-1"></i> ห้อง {{ contract.room_name }} |
+            <i class="bi bi-building me-1"></i> ตึก {{ contract.building }} ชั้น {{ contract.floor }}
+        </p>
+    </div>
+
+    <form method="POST" id="optionForm">
+        <div class="row g-4 align-items-center">
+            <div class="col-md-5">
+                <div class="card p-3">
+                    <label><i class="me-2 text-primary"></i>บริการที่พร้อมให้บริการ</label>
+                    <select multiple class="form-select" id="availableOptions">
+                        {% for opt in all_options %}
+                        {% if opt.id|string not in selected_ids %}
+                        <option value="{{ opt.id }}">
+                            {{ opt.name }} ({{ "{:,.2f}".format(opt.price) }} บาท{% if opt.option_type=='per_unit' %}/{{
+                            opt.unit_name }}{% endif %})
+                        </option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted mt-2 px-1">* กด Ctrl หรือ Shift ค้างไว้เพื่อเลือกหลายรายการ</small>
+                </div>
+            </div>
+
+            <div class="col-md-2 d-flex flex-column align-items-center">
+                <button type="button" class="btn btn-primary btn-action mb-3 shadow-sm" onclick="addOption()"
+                    title="เพิ่ม">
+                    <i class="bi bi-caret-right-fill"></i>
+                </button>
+                <button type="button" class="btn btn-danger btn-action shadow-sm" onclick="removeOption()"
+                    title="เอาออก">
+                    <i class="bi bi-caret-left"></i>
+                </button>
+            </div>
+
+            <div class="col-md-5">
+                <div class="card p-3 border-primary" style="border-width: 2px !important;">
+                    <label class="text-primary"><i
+                            class="bi bi-arrow-down-circle me-2"></i>บริการที่เลือกใช้ในสัญญานี้</label>
+                    <select multiple class="form-select" id="selectedOptions">
+                        {% for opt in all_options %}
+                        {% if opt.id|string in selected_ids %}
+                        <option value="{{ opt.id }}">
+                            {{ opt.name }} ({{ "{:,.2f}".format(opt.price) }} บาท{% if opt.option_type=='per_unit' %}/{{
+                            opt.unit_name }}{% endif %})
+                        </option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                    <div id="hiddenOptions"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-5">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-light btn-save me-2">
+                <i class="me-1"></i> ยกเลิก
+            </a>
+            <button type="submit" class="btn btn-primary btn-save px-5 shadow">
+                <i class="bi bi-floppy me-2"></i> บันทึกข้อมูล Option ทั้งหมด
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // จัดการ Flash Messages ด้วย SweetAlert2
+    document.addEventListener('DOMContentLoaded', function () {
+        const flashElem = document.getElementById('flash-data');
+        if (flashElem && flashElem.dataset.messages) {
+            const messages = JSON.parse(flashElem.dataset.messages);
+            messages.forEach(([category, message]) => {
+                Swal.fire({
+                    icon: category === 'success' ? 'success' : 'error',
+                    title: category === 'success' ? 'สำเร็จ!' : 'แจ้งเตือน',
+                    text: message,
+                    timer: 3000
+                });
+            });
+        }
+        updateHiddenOptions();
+    });
+
+    function addOption() {
+        let available = document.getElementById("availableOptions");
+        let selected = document.getElementById("selectedOptions");
+        if (available.selectedOptions.length === 0) return;
+
+        Array.from(available.selectedOptions).forEach(option => {
+            selected.appendChild(option.cloneNode(true));
+            option.remove();
+        });
+        updateHiddenOptions();
+    }
+
+    function removeOption() {
+        let selected = document.getElementById("selectedOptions");
+        let available = document.getElementById("availableOptions");
+        if (selected.selectedOptions.length === 0) return;
+
+        Array.from(selected.selectedOptions).forEach(option => {
+            available.appendChild(option.cloneNode(true));
+            option.remove();
+        });
+        updateHiddenOptions();
+    }
+
+    function updateHiddenOptions() {
+        let selected = document.getElementById("selectedOptions");
+        let hiddenDiv = document.getElementById("hiddenOptions");
+        hiddenDiv.innerHTML = "";
+
+        Array.from(selected.options).forEach(option => {
+            let input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "options";
+            input.value = option.value;
+            hiddenDiv.appendChild(input);
+        });
+    }
+
+    // เพิ่ม Confirmation ก่อน Submit
+    document.getElementById('optionForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        Swal.fire({
+            title: 'ยืนยันการบันทึก?',
+            text: "รายการในใบแจ้งหนี้ที่ยังไม่ได้จ่ายจะถูกอัปเดตตามนี้",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#aaa',
+            confirmButtonText: 'ตกลง, บันทึกเลย!',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                this.submit();
+            }
+        });
+    });
+</script>
+{% endblock %}

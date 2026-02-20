@@ -1,0 +1,354 @@
+{% extends "layout.html" %}
+{% block title %}สร้างสัญญาเช่า - ห้อง {{ room.name }}{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="container mt-3">
+  {% for category, message in messages %}
+  <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- Flatpickr -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<!-- Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+<style>
+  body {
+    font-family: "Sarabun", sans-serif;
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe, #93c5fd);
+    min-height: 100vh;
+  }
+
+  .lease-card {
+    background: #ffffffee;
+    backdrop-filter: blur(8px);
+    border-radius: 20px;
+    padding: 2rem 2.5rem;
+    margin-top: 50px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+  }
+
+  .lease-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  }
+
+  h2 {
+    font-weight: 700;
+    color: #1e3a8a;
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-label {
+    font-weight: 600;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #2563eb, #1e40af);
+    border: none;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #1e3a8a, #1e40af);
+    transform: scale(1.02);
+  }
+
+  .btn-success {
+    border-radius: 10px;
+  }
+
+  select.form-select,
+  input.form-control {
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+  }
+
+  .form-select:focus,
+  .form-control:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+
+  input:read-only {
+    background-color: #f3f4f6;
+  }
+
+  label i {
+    color: #2563eb;
+    margin-right: 6px;
+  }
+
+  .option-box {
+    background-color: #f9fafb;
+    border-radius: 12px;
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+  }
+</style>
+
+<div class="container">
+  <div class="col-lg-8 mx-auto lease-card">
+    <h2>สร้างสัญญาเช่า - ห้อง {{ room.name }} <small class="text-muted">(ตึก {{ room.building }} ชั้น {{ room.floor
+        }})</small></h2>
+
+    <!-- ปุ่มเพิ่มผู้เช่า -->
+    <div class="mb-3 text-end">
+      <a href="{{ url_for('add_tenant', unit_id=room['unit_id']) }}" class="btn btn-success">
+        <i class="bi bi-person-plus-fill"></i> เพิ่มผู้เช่าใหม่
+      </a>
+    </div>
+
+    {% if tenants %}
+    <form method="POST" action="{{ url_for('create_lease', unit_id=room.unit_id) }}">
+
+      <!-- เลือกผู้เช่า -->
+      <div class="mb-3">
+        <label for="tenant_id" class="form-label"><i class="bi bi-person-lines-fill"></i> เลือกผู้เช่า</label>
+        <select class="form-select" id="tenant_id" name="tenant_id" required>
+          <option value="">-- เลือกผู้เช่า --</option>
+          {% for tenant in tenants %}
+          <option value="{{ tenant.tenant_id }}">{{ tenant.fname }} {{ tenant.lname }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- วันที่เริ่มและสิ้นสุดเช่า -->
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label for="lease_start" class="form-label"><i class="bi bi-calendar-event"></i> วันที่เริ่มเช่า</label>
+          <input type="text" class="form-control" id="lease_start" name="lease_start" required>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label for="lease_end" class="form-label"><i class="bi bi-calendar-check"></i> วันที่สิ้นสุดเช่า</label>
+          <input type="text" class="form-control" id="lease_end" name="lease_end" required>
+        </div>
+      </div>
+
+      <!-- ตัวเลือกบริการ -->
+      <div class="option-box mb-4">
+        <label><i class="bi bi-gear"></i> ตัวเลือกบริการ</label>
+        <div class="row">
+          <div class="col-md-5">
+            <select multiple class="form-select" id="availableOptions" size="8">
+              {% for opt in options %}
+              <option value="{{ opt.id }}">
+                {{ opt.name }} - {{ opt.price }} บาท
+                {% if opt.option_type == 'per_unit' %}/{{ opt.unit_name }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 d-flex flex-column justify-content-center align-items-center">
+            <button type="button" class="btn btn-outline-primary mb-2" onclick="addOption()">→</button>
+            <button type="button" class="btn btn-outline-danger" onclick="removeOption()">←</button>
+          </div>
+          <div class="col-md-5">
+            <select multiple class="form-select" id="selectedOptions" name="options_selected" size="8"></select>
+          </div>
+        </div>
+        <div id="hiddenOptions"></div>
+      </div>
+
+      <!-- ราคาห้อง -->
+      <div class="mb-3">
+        <label for="room_price" class="form-label"><i class="bi bi-house-door"></i> ราคาห้อง (บาท/เดือน)</label>
+        <input type="text" class="form-control" name="room_price" id="room_price" value="{{ room_price }}" readonly>
+      </div>
+
+      <!-- ค่าประกัน -->
+      <div class="mb-3">
+        <label for="premium" class="form-label"><i class="bi bi-shield-check"></i> ค่าประกัน (บาท)</label>
+        <input type="number" class="form-control" name="premium" id="premium" min="0" step="0.01" required>
+      </div>
+
+      <!-- วันครบกำหนดชำระ -->
+      <div class="mb-3">
+        <label for="pay_date" class="form-label"><i class="bi bi-cash-coin"></i> ต้องชำระเงินก่อนวันไหน</label>
+        <input type="text" class="form-control" name="pay_date" id="pay_date" required>
+      </div>
+
+      <!-- จำนวนคนเข้าอยู่ -->
+      <div class="mb-3">
+        <label for="amount" class="form-label"><i class="bi bi-people"></i> จำนวนคนเข้าอาศัย</label>
+        <input type="number" class="form-control" name="amount" id="amount" min="1" step="1" required>
+        <small class="text-danger">*กรุณากรอกข้อมูลให้ครบถ้วน รวมผู้เช่าด้วย</small>
+      </div>
+
+      <input type="hidden" name="contract_type_id" value="1">
+
+      <div class="text-center mt-4">
+        <button type="button" class="btn btn-primary px-4 py-2" onclick="confirmLease()">
+          <i class="bi bi-save"></i> บันทึกสัญญาเช่า
+        </button>
+      </div>
+
+    </form>
+    {% else %}
+    <p>ยังไม่มีข้อมูลผู้เช่า กรุณาเพิ่มผู้เช่าก่อน</p>
+    <a href="{{ url_for('add_tenant', unit_id=room.unit_id) }}" class="btn btn-success">
+      <i class="bi bi-person-plus"></i> เพิ่มผู้เช่าใหม่
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  function addOption() {
+    let available = document.getElementById("availableOptions");
+    let selected = document.getElementById("selectedOptions");
+    Array.from(available.selectedOptions).forEach(option => {
+      selected.appendChild(option.cloneNode(true));
+      option.remove();
+    });
+    updateHiddenOptions();
+  }
+
+  function removeOption() {
+    let selected = document.getElementById("selectedOptions");
+    let available = document.getElementById("availableOptions");
+    Array.from(selected.selectedOptions).forEach(option => {
+      available.appendChild(option.cloneNode(true));
+      option.remove();
+    });
+    updateHiddenOptions();
+  }
+
+  function updateHiddenOptions() {
+    let selected = document.getElementById("selectedOptions");
+    let hiddenDiv = document.getElementById("hiddenOptions");
+    hiddenDiv.innerHTML = "";
+    Array.from(selected.options).forEach(option => {
+      let hidden = document.createElement("input");
+      hidden.type = "hidden";
+      hidden.name = "options";
+      hidden.value = option.value;
+      hiddenDiv.appendChild(hidden);
+    });
+  }
+
+  function confirmLease() {
+    // 1. กำหนดรายการฟิลด์ที่ต้องตรวจสอบ (ID ใน HTML และชื่อภาษาไทย)
+    const fields = [
+      { id: 'tenant_id', name: 'เลือกผู้เช่า' },
+      { id: 'lease_start', name: 'วันที่เริ่มเช่า' },
+      { id: 'lease_end', name: 'วันที่สิ้นสุดเช่า' },
+      { id: 'premium', name: 'ค่าประกัน' },
+      { id: 'pay_date', name: 'วันครบกำหนดชำระ' },
+      { id: 'amount', name: 'จำนวนคนเข้าอาศัย' }
+    ];
+
+    let missingFields = [];
+
+    // 2. วนลูปเช็คว่าช่องไหนว่าง หรือยังไม่ได้เลือก
+    fields.forEach(field => {
+      const element = document.getElementById(field.id);
+      if (!element || !element.value || element.value.trim() === "") {
+        missingFields.push(field.name);
+        // เพิ่มลูกเล่น: ใส่ขอบสีแดงให้ช่องที่ลืมกรอก (Optional)
+        if (element) element.classList.add('is-invalid');
+      } else {
+        // ถ้ากรอกแล้วให้เอาขอบสีแดงออก
+        if (element) element.classList.remove('is-invalid');
+      }
+    });
+
+    // 3. ถ้ามีช่องว่าง ให้แจ้งเตือนและหยุดการทำงานทันที
+    if (missingFields.length > 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'กรอกข้อมูลไม่ครบ',
+        html: `กรุณากรอกข้อมูลในช่องต่อไปนี้ให้ครบถ้วน:<br><br><span class="text-danger"><b>${missingFields.join(', ')}</b></span>`,
+        confirmButtonColor: '#2563eb'
+      });
+      return;
+    }
+
+    // 4. ตรวจสอบเงื่อนไขเฉพาะ (เช่น จำนวนคนต้องไม่ต่ำกว่า 1)
+    const amountVal = document.getElementById('amount').value;
+    if (parseInt(amountVal) <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'ข้อมูลไม่ถูกต้อง',
+        text: 'จำนวนคนเข้าอาศัยต้องมีอย่างน้อย 1 คน',
+        confirmButtonColor: '#2563eb'
+      });
+      return;
+    }
+
+    // 5. เมื่อข้อมูลครบถ้วน ให้แสดงกล่องยืนยันการบันทึก
+    Swal.fire({
+      title: "ยืนยันการสร้างสัญญาเช่า?",
+      text: "คุณต้องการบันทึกสัญญาเช่าห้อง {{ room.name }} ใช่หรือไม่?",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "ใช่, บันทึก!",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: '#2563eb',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // แสดงสถานะกำลังโหลด เพื่อป้องกันการกดซ้ำ
+        Swal.fire({
+          title: 'กำลังบันทึกข้อมูล...',
+          html: 'กรุณารอสักครู่ ระบบกำลังสร้างสัญญาเช่า',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+        // ส่งฟอร์มไปยัง Server
+        document.querySelector('form').submit();
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const minMonths = parseInt("{{ min_months | tojson }}") || 0;
+
+  const fpStart = flatpickr("#lease_start", {
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d-m-Y",
+    minDate: "today",
+    onChange: function (selectedDates) {
+      if (!selectedDates.length) return;
+      const startDate = selectedDates[0];
+      const minEndDate = new Date(startDate);
+      minEndDate.setMonth(minEndDate.getMonth() + minMonths);
+      fpEnd.set('minDate', minEndDate);
+      // ลบ submitBtn.disabled ออกถ้าไม่ได้ประกาศไว้
+    }
+  });
+
+  const fpEnd = flatpickr("#lease_end", {
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d-m-Y",
+  });
+
+  flatpickr("#pay_date", {
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d-m-Y",
+    minDate: "today",
+  });
+});
+
+</script>
+{% endblock %}

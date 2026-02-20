@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>เลือกผู้เช่าสำหรับ ห้อง {{ room.name }} (ตึก {{ room.building }}, ชั้น {{ room.floor }})</h2>
+
+<h3>ผู้เช่าที่มีในระบบ</h3>
+<ul>
+    {% for tenant in tenants %}
+    <li>
+        {{ tenant.fname }} {{ tenant.lname }} (ID: {{ tenant.tenant_id }}) -
+        <a href="{{ url_for('create_contract', unit_id=room.unit_id, tenant_id=tenant.tenant_id) }}">เลือกผู้เช่านี้</a>
+    </li>
+    {% else %}
+    <li>ไม่มีผู้เช่าในระบบ</li>
+    {% endfor %}
+</ul>
+
+<hr>
+<h3>เพิ่มผู้เช่าใหม่</h3>
+<form action="{{ url_for('create_contract', unit_id=room.unit_id) }}" method="post">
+    <label>ชื่อ: <input type="text" name="first_name" required></label><br>
+    <label>นามสกุล: <input type="text" name="last_name" required></label><br>
+    <label>เลขบัตรประชาชน: <input type="text" name="id_card" required></label><br>
+    <label>เพศ: <input type="text" name="gender"></label><br>
+    <label>อายุ: <input type="number" name="age"></label><br>
+    <label>วันเกิด: <input type="date" name="bd"></label><br>
+    <label>โทรศัพท์: <input type="text" name="phone"></label><br>
+    <label>อีเมล: <input type="email" name="email"></label><br>
+    <label>ที่อยู่: <textarea name="address"></textarea></label><br>
+    <button type="submit">เพิ่มและสร้างสัญญา</button>
+</form>
+{% endblock %}

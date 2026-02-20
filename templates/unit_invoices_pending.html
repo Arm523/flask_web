@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+  <title>Pending Invoices - สถานะใบแจ้งหนี้</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    body {
+      background: #c3c9eb;
+      font-family: "Sarabun", sans-serif;
+    }
+
+    /* ขยาย Container ให้กว้างขึ้นเพื่อลดการบีบตาราง */
+    .container {
+      max-width: 95% !important;
+    }
+
+    .page-box {
+      background: white;
+      border-radius: 18px;
+      padding: 15px;
+      /* ลด padding ลง */
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    /* ปรับตารางให้ Compact */
+    .table {
+      width: 100%;
+      vertical-align: middle;
+    }
+
+    table thead th {
+      background: #e7e7e7 !important;
+      padding: 12px 8px !important;
+      /* ลดความสูงหัวตาราง */
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    table tbody td {
+      padding: 8px !important;
+      font-size: 14px;
+      white-space: nowrap;
+      /* ป้องกันตัวหนังสือตัดบรรทัดใหม่ */
+    }
+
+    /* จัดการกลุ่มปุ่ม 2:2 แบบจิ๋ว (Compact Grid) */
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      /* แถวแรกมี 3 ปุ่ม */
+      gap: 4px;
+      width: 190px;
+      /* ขยายความกว้างนิดหน่อยเพื่อให้ปุ่มไม่อัดกันเกินไป */
+    }
+
+    .action-grid .btn {
+      padding: 2px 2px;
+      font-size: 10.5px;
+      /* ขนาดตัวอักษรจิ๋วแต่พอดี */
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .btn-full-width {
+      grid-column: span 2;
+      margin-top: 2px;
+    }
+
+    /* ปุ่ม Back แบบเดิมของคุณ */
+    .btn-back-modern {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 15px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border: none;
+      border-radius: 8px;
+      text-decoration: none;
+    }
+
+    .btn-row-2 {
+      grid-column: span 1.5;
+      /* แชร์กันคนละครึ่งในแถวที่ 2 */
+    }
+  </style>
+</head>
+
+<body>
+  {% with messages = get_flashed_messages(with_categories=true) %} {% if
+  messages %} {% for category, message in messages %}
+  <script>
+    Swal.fire({
+      icon: "{{ category }}",
+      title: "แจ้งเตือน",
+      text: "{{ message }}",
+      confirmButtonText: "ตกลง",
+    });
+  </script>
+  {% endfor %} {% endif %} {% endwith %}
+
+  <!-- HEADER -->
+  <div class="container py-4">
+    <div class="card shadow-sm mb-4 border-0">
+      <div class="card-body">
+        <!-- หัวข้อ -->
+        <h4 class="fw-bold mb-3">
+          💰 บิลสัญญา {{ invoices[0].contract_id if invoices else '' }} – ห้อง
+          {{ invoices[0].unit_name if invoices else '' }}
+        </h4>
+
+        <!-- กลุ่มตัวกรอง -->
+        <div class="p-3 bg-light border rounded-3">
+          <h6 class="fw-bold mb-3">เลือกประเภทบิลที่ต้องการดู</h6>
+
+          <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="statusFilter" id="filter-all" value="all" checked />
+            <label class="btn btn-outline-secondary" for="filter-all">ทั้งหมด</label>
+
+            <input type="radio" class="btn-check" name="statusFilter" id="filter-draft" value="draft" />
+            <label class="btn btn-outline-danger" for="filter-draft">ยังไม่จ่าย</label>
+
+            <input type="radio" class="btn-check" name="statusFilter" id="filter-overdue" value="overdue" />
+            <label class="btn btn-outline-info" for="filter-overdue">เกินกำหนด</label>
+
+            <input type="radio" class="btn-check" name="statusFilter" id="filter-paid" value="paid" />
+            <label class="btn btn-outline-success" for="filter-paid">ชำระแล้ว</label>
+
+            <input type="radio" class="btn-check" name="statusFilter" id="filter-cancelled" value="cancelled" />
+            <label class="btn btn-outline-warning" for="filter-cancelled">ยกเลิกบิล</label>
+          </div>
+        </div>
+
+        <div class="text-end layout-top-back mt-2">
+          <a href="/create_invoice_extra_bill/{{ invoices[0].contract_id }}"
+            class="btn btn-success fw-bold px-4 shadow-sm" style="border-radius: 10px">
+            สร้างบิลเพิ่มเติม (Extra Bill)
+          </a>
+        </div>
+
+        <div class="text-end layout-top-back mt-2">
+          <a href="/manual_create_bill/{{ invoices[0].contract_id }}" class="btn btn-warning fw-bold px-4 shadow-sm"
+            style="border-radius: 10px">
+            สร้างบิลเอง (Manual bill)
+          </a>
+        </div>
+
+        <div class="text-end layout-top-back mt-2">
+          <a href="/dashboard" class="btn-back-modern">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              width="18">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-scroll">
+    <div class="container page-box">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Invoice ID</th>
+            <th>ประเภทบิล</th>
+            <th>วันออกบิล</th>
+            <th>วันเริ่มรอบ</th>
+            <th>วันสิ้นสุดรอบ</th>
+            <th>วันกําหนดจ่าย</th>
+            <th>ยอดเงินรวม</th>
+            <th>สถานะบิล</th>
+            <th>วันที่ชําระ</th>
+            <th>การจัดการ</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for inv in invoices %}
+          <tr class="invoice-row" data-status="{{ inv.status }}">
+            <td>#{{ inv.invoice_id }}</td>
+
+            <td>
+              {% if inv.invoice_type == "first" %}
+              <span>บิลเดือนเเรก</span>
+
+              {% elif inv.invoice_type == "monthly" %}
+              <span>บิลรายเดือน</span>
+
+              {% elif inv.invoice_type == "final" %}
+              <span>บิลสุดท้าย</span>
+
+              {% elif inv.invoice_type == "extra_bill" %}
+              <span>บิลเพิ่มเติม</span>
+              {% endif %}
+            </td>
+
+            <td>{{ inv.issue_date}}</td>
+
+            <td>{{ inv.billing_period_start or '-' }}</td>
+
+            <td>{{ inv.billing_period_end or '-' }}</td>
+
+            <td>{{ inv.due_date or '-' }}</td>
+
+            <td>
+              {{ "%.2f"|format(inv.total_amount + (inv.penalty_amount or 0))
+              }} ฿
+            </td>
+
+            <td>
+              {% if inv.status == "draft" %}
+              <span class="badge bg-danger">ยังไม่จ่าย</span>
+
+              {% elif inv.status == "overdue" %}
+              <span class="badge bg-info text-dark">เกินกำหนด</span>
+
+              {% elif inv.status == "paid" %}
+              <span class="badge bg-success">ชำระแล้ว</span>
+
+              {% elif inv.status == "cancelled" %}
+              <span class="badge bg-warning text-dark">ยกเลิกบิล</span>
+              {% endif %}
+            </td>
+
+            <td>{{ inv.payment_date or '-' }}</td>
+
+            <td>
+              <div class="action-grid">
+                {% if inv.status in ["draft", "overdue"] %}
+                <a href="/add_invoice_item/{{ inv.invoice_id }}" class="btn btn-info btn-sm text-white">เพิ่มรายการ</a>
+
+                {% if inv.current_electricity_reading is not none and
+                inv.current_water_reading is not none %}
+                <button type="button" class="btn btn-primary btn-sm"
+                  onclick="handlePaymentClick('{{ inv.invoice_id }}')">
+                  ชำระเงิน
+                </button>
+
+                <a href="/print_invoice/{{ inv.invoice_id }}" class="btn btn-success btn-sm">พิมพ์บิล</a>
+                {% endif %}
+
+                <button type="button" class="btn btn-warning btn-sm"
+                  onclick="openEditModal('{{ inv.invoice_id }}', '{{ inv.billing_period_start }}', '{{ inv.billing_period_end }}', '{{ inv.due_date }}', '{{ inv.previous_electricity_reading }}', '{{ inv.previous_water_reading }}', '{{ inv.current_electricity_reading }}', '{{ inv.current_water_reading }}')">
+                  แก้ไข
+                </button>
+
+                <button type="button" class="btn btn-outline-danger btn-sm btn-full-width"
+                  onclick="confirmCancelInvoice('{{ inv.invoice_id }}')">
+                  ยกเลิกบิล
+                </button>
+
+                {% elif inv.status == "paid" %}
+                <a href="/print_receipt/{{ inv.invoice_id }}"
+                  class="btn btn-warning btn-sm btn-full-width">ดูใบเสร็จ</a>
+
+                {% if inv.slip_file %}
+                <a href="{{ url_for('view_slip', filename=inv.slip_file) }}" target="_blank"
+                  class="btn btn-sm btn-info btn-full-width">
+                  <i class="bi bi-eye-fill"></i> ดูสลิป
+                </a>
+                <a href="{{ url_for('view_slip', filename=inv.slip_file) }}" download class="btn btn-sm btn-secondary btn-full-width">
+                  <i class="bi bi-cloud-download"></i> โหลด
+                </a>
+                {% endif %}
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if invoices|length == 0 %}
+      <div class="alert alert-success">✅ ไม่มีบิล</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="modal fade" id="editInvoiceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form action="/update_invoice" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              แก้ไขรายละเอียดบิล #<span id="display_inv_id"></span>
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" name="invoice_id" id="edit_inv_id" />
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label small fw-bold">วันเริ่มรอบ</label>
+                <input type="text" id="edit_start_date" name="billing_period_start" class="form-control datepicker" />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label small fw-bold">วันสิ้นสุดรอบ</label>
+                <input type="text" id="edit_end_date" name="billing_period_end" class="form-control datepicker" />
+              </div>
+            </div>
+
+            <div class="p-2 mb-3 bg-light border rounded">
+              <h6 class="fw-bold text-primary small">⚡ มิเตอร์ไฟฟ้า</h6>
+              <div class="row">
+                <div class="col-6">
+                  <label class="form-label small">ครั้งก่อน</label>
+                  <input type="number" class="form-control form-control-sm" name="prev_elec" id="edit_prev_elec"
+                    step="0.01" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">ครั้งหลัง</label>
+                  <input type="number" class="form-control form-control-sm" name="curr_elec" id="edit_curr_elec"
+                    step="0.01" />
+                </div>
+              </div>
+            </div>
+
+            <div class="p-2 mb-3 bg-light border rounded">
+              <h6 class="fw-bold text-info small">💧 มิเตอร์น้ำ</h6>
+              <div class="row">
+                <div class="col-6">
+                  <label class="form-label small">ครั้งก่อน</label>
+                  <input type="number" class="form-control form-control-sm" name="prev_water" id="edit_prev_water"
+                    step="0.01" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">ครั้งหลัง</label>
+                  <input type="number" class="form-control form-control-sm" name="curr_water" id="edit_curr_water"
+                    step="0.01" />
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-bold">📅 วันกำหนดจ่าย</label>
+              <input type="text" id="edit_due_date" name="due_date" class="form-control datepicker" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+              ยกเลิก
+            </button>
+            <button type="submit" class="btn btn-primary">
+              บันทึกการแก้ไข
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTER SCRIPT -->
+  <script>
+    let fp_start, fp_end, fp_due;
+
+    document.addEventListener("DOMContentLoaded", function () {
+      // 1. ตัวกรอง Status (โค้ดเดิมของคุณ)
+      const radios = document.querySelectorAll('input[name="statusFilter"]');
+      const rows = document.querySelectorAll(".invoice-row");
+
+      radios.forEach((radio) => {
+        radio.addEventListener("change", () => {
+          let filter = document.querySelector(
+            'input[name="statusFilter"]:checked',
+          ).value;
+          rows.forEach((row) => {
+            let status = row.getAttribute("data-status");
+            row.style.display =
+              filter === "all" || status === filter ? "" : "none";
+          });
+        });
+      });
+
+      // 2. ตั้งค่า Flatpickr สำหรับทุกช่องวันที่ใน Modal
+      const fpConfig = {
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d-m-Y",
+        locale: "th",
+      };
+
+      fp_start = flatpickr("#edit_start_date", fpConfig);
+      fp_end = flatpickr("#edit_end_date", fpConfig);
+      fp_due = flatpickr("#edit_due_date", fpConfig);
+    });
+
+    // แก้ไขฟังก์ชันรับ Parameter ให้ตรงกับที่ปุ่มส่งมา
+    function openEditModal(
+      id,
+      start_date,
+      end_date,
+      due_date,
+      prev_elec,
+      prev_water,
+      curr_elec,
+      curr_water,
+    ) {
+      // ใส่ค่า ID
+      document.getElementById("edit_inv_id").value = id;
+      document.getElementById("display_inv_id").innerText = id;
+
+      // ใส่ค่าตัวเลขมิเตอร์
+      document.getElementById("edit_prev_elec").value = prev_elec;
+      document.getElementById("edit_curr_elec").value = curr_elec;
+      document.getElementById("edit_prev_water").value = prev_water;
+      document.getElementById("edit_curr_water").value = curr_water;
+
+      // ฟังก์ชันช่วยเช็คค่าว่างก่อนใส่ใน Flatpickr
+      const setDateValue = (fpInstance, dateVal) => {
+        if (fpInstance) {
+          if (dateVal && dateVal !== "None" && dateVal !== "") {
+            fpInstance.setDate(dateVal);
+          } else {
+            fpInstance.clear();
+          }
+        }
+      };
+
+      // ใส่ค่าวันที่ทั้ง 3 ช่อง
+      setDateValue(fp_start, start_date);
+      setDateValue(fp_end, end_date);
+      setDateValue(fp_due, due_date);
+
+      // แสดง Modal
+      var modalElement = document.getElementById("editInvoiceModal");
+      var myModal = new bootstrap.Modal(modalElement);
+      myModal.show();
+    }
+
+    function confirmCancelInvoice(invoiceId) {
+      Swal.fire({
+        title: "ยืนยันการยกเลิก?",
+        text: "คุณต้องการยกเลิกบิลใบนี้ใช่หรือไม่? (การกระทำนี้ย้อนกลับไม่ได้)",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "ใช่, ยกเลิกเลย",
+        cancelButtonText: "ปิด",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          fetch(`/cancel_invoice/${invoiceId}`, { method: "POST" })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.status === "success") {
+                Swal.fire("สำเร็จ!", data.message, "success").then(() =>
+                  location.reload(),
+                ); // รีโหลดหน้าเพื่อดูสถานะใหม่
+              } else {
+                Swal.fire("ล้มเหลว", data.message, "error");
+              }
+            });
+        }
+      });
+    }
+
+    function handlePaymentClick(invoiceId) {
+      // แสดง Loading ระหว่างรอ Backend ตอบกลับ
+      Swal.fire({
+        title: "กำลังตรวจสอบข้อมูล...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      fetch(`/confirm_payment/${invoiceId}`)
+        .then(async (response) => {
+          const isJson = response.headers
+            .get("content-type")
+            ?.includes("application/json");
+          const data = isJson ? await response.json() : null;
+
+          // ถ้า Backend ส่ง Status Error (เช่น 400, 404, 500)
+          if (!response.ok) {
+            throw new Error(
+              data
+                ? data.message
+                : "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์ (Internal Server Error)",
+            );
+          }
+
+          // ถ้าไม่มี Error และ Backend ส่งเป็นหน้า HTML มาปกติ
+          // ให้ทำการเปลี่ยนหน้าไปยังหน้านั้นจริงๆ
+          window.location.href = `/confirm_payment/${invoiceId}`;
+        })
+        .catch((error) => {
+          Swal.close();
+          // แสดง Error ที่จับได้จาก Backend หรือ Network
+          Swal.fire({
+            icon: "error",
+            title: "ไม่สามารถชำระเงินได้",
+            text: error.message,
+            confirmButtonColor: "#3085d6",
+          });
+        });
+    }
+  </script>
+</body>
+
+</html>

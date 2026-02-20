@@ -1,0 +1,120 @@
+{
+    "DDS720": {
+        "type": "serial",
+        "baudrate": 1200,
+        "parameters": "8N1",
+        "config_register": {
+            "modbus_protocol_address": {
+                "address": 61504,
+                "count": 1,
+                "data_type": "int16",
+                "word_swap": false,
+                "gain": 1
+            },
+            "meter_no": {
+                "address": 61440,
+                "count": 3,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 1
+            }
+        },
+        "read_register": {
+            "total_kWh": {
+                "address": 4352,
+                "count": 2,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 0.01
+            },
+            "current": {
+                "address": 57872,
+                "count": 2,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 0.001
+            },
+            "voltage": {
+                "address": 57616,
+                "count": 2,
+                "data_type": "bcd",
+                "word_swap": false,
+                "gain": 0.01
+            }
+        }
+    },
+    "CHINT-DDSU666": {
+        "type": "serial",
+        "read_register": {
+            "current": {
+                "address": 57872,
+                "count": 2,
+                "data_type": "bcd",
+                "gain": 0.001,
+                "word_swap": false
+            },
+            "total_kWh": {
+                "address": 16384,
+                "count": 2,
+                "data_type": "float32",
+                "gain": 1,
+                "word_swap": false
+            },
+            "voltage": {
+                "address": 57616,
+                "count": 2,
+                "data_type": "bcd",
+                "gain": 0.01,
+                "word_swap": false
+            }
+        },
+        "config_register": {
+            "Voltage": {
+                "address": 8192,
+                "count": 2,
+                "data_type": "float32",
+                "gain": 1,
+                "word_swap": false
+            },
+            "baud": {
+                "address": 12,
+                "count": 1,
+                "data_type": "int16",
+                "gain": 1,
+                "word_swap": false
+            }
+        },
+        "baudrate": 9600,
+        "parameters": "8N1"
+    },
+    "modelC": {
+        "type": "api",
+        "read_register": {
+            "Total_kwh": {
+                "key_name": "kwh",
+                "gain": 1
+            },
+            "voltage": {
+                "key_name": "v",
+                "gain": 1
+            },
+            "current": {
+                "key_name": "i",
+                "gain": 1
+            }
+        },
+        "config_register": {},
+        "path": "/123/log"
+    },
+    "modelB": {
+        "type": "api",
+        "read_register": {
+            "total_kwh": {
+                "key_name": "kwh",
+                "gain": 1
+            }
+        },
+        "config_register": {},
+        "path": "/123/log"
+    }
+}

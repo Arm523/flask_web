@@ -1,0 +1,355 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>จัดการมิเตอร์น้ำ-ไฟ</title>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<div class="container mt-4">
+    <h3 class="mb-4">จัดการมิเตอร์น้ำและไฟ (Modal Mode)</h3>
+    <hr>
+
+    <div class="row">
+        {% for unit in units %}
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card shadow-sm border-0 bg-light p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">ห้อง {{ unit.name }}</h5>
+                        <small class="text-muted">ชั้น {{ unit.floor }} | ตึก {{ unit.building }}</small>
+                    </div>
+                    <button class="btn btn-primary btn-sm" data-unit='{{ unit | tojson }}'
+                        onclick="prepareAndOpenModal(this)">
+                        จัดการข้อมูล
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="modal fade" id="meterModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="modalTitle">ข้อมูลมิเตอร์</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="meterForm">
+                <div class="modal-body">
+                    <input type="hidden" name="unit_id" id="m_unit_id">
+
+                    <div class="row">
+                        <div class="col-md-6 border-end">
+                            <h6 class="text-primary fw-bold">มิเตอร์ไฟฟ้า</h6>
+                            <div class="mb-2">
+                                <label>โมดูล *</label>
+                                <select id="electricity_module" name="electricity_module" class="form-select"
+                                    onchange="loadParameters('elec')">
+                                    <option value="">-- เลือกยี่ห้อ --</option>
+                                    {% for m in elec_modules %}
+                                    <option value="{{ m }}">{{ m }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold text-success">ค่าที่อ่านหลัก (Key)</label>
+                                <select id="elec_unit_key" name="elec_unit_key" class="form-select"></select>
+                            </div>
+                            <div class="mb-2"><label>Serial *</label><input type="text" name="electricity_serial_meter"
+                                    class="form-control" required></div>
+                            <div class="mb-2"><label>Slave ID *</label><input type="number" name="electricity_slave_id"
+                                    class="form-control" required></div>
+                            <div class="mb-2"><label>Installdate *</label><input type="text" name="installdate_elec"
+                                    class="form-control datepicker"></div>
+
+                            <div class="mb-2">
+                                <label>COM Port</label>
+                                <select name="electricity_comport" class="form-select"
+                                    onchange="toggleIP(this, 'elec')">
+                                    {% for p in ports %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div id="elec_tcp" style="display:none;">
+                                <div class="mb-2"><label>IP Address</label><input type="text" name="electricity_ip"
+                                        class="form-control"></div>
+                                <div class="mb-2"><label>Port</label><input type="number" name="electricity_port"
+                                        class="form-control"></div>
+                            </div>
+
+                            <div id="elec_api_fields" style="display: none;" class="mt-2 p-2 border rounded bg-light">
+                                <div class="mb-2">
+                                    <label class="small fw-bold">Base URL *</label>
+                                    <input type="text" name="elec_base_url" class="form-control"
+                                        placeholder="https://api.example.com">
+                                </div>
+                                <div class="mb-0">
+                                    <label class="small fw-bold">API Auth Token</label>
+                                    <input type="text" name="elec_api_token" class="form-control"
+                                        placeholder="Bearer or X-API-KEY">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="d-block mb-2">สถานะมิเตอร์ไฟฟ้า</label>
+                                <div class="btn-group w-100">
+                                    <input type="radio" class="btn-check" name="electricity_status" id="elec_active"
+                                        value="active">
+                                    <label class="btn btn-outline-success" for="elec_active">เปิดใช้งาน</label>
+                                    <input type="radio" class="btn-check" name="electricity_status" id="elec_inactive"
+                                        value="inactive">
+                                    <label class="btn btn-outline-danger" for="elec_inactive">ปิดใช้งาน</label>
+                                </div>
+                            </div>
+
+                            <div class="form-check form-switch p-2 border rounded bg-warning-subtle mb-2">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" id="change_elec_flag"
+                                    name="change_elec_flag" onchange="toggleChangeMeter('elec')">
+                                <label class="form-check-label fw-bold" for="change_elec_flag">🔄
+                                    เปลี่ยนมิเตอร์ไฟฟ้าใหม่</label>
+                            </div>
+                            <div id="change_elec_details" style="display:none;"
+                                class="p-2 border rounded border-warning mb-3">
+                                <label class="text-danger fw-bold small">เลขมิเตอร์ไฟฟ้าตัวเก่า *</label>
+                                <div class="input-group mb-2">
+                                    <input type="number" step="0.01" name="old_elec_last_reading"
+                                        id="old_elec_last_reading" class="form-control">
+                                    <button class="btn btn-outline-warning btn-sm" type="button"
+                                        onclick="fetchAdjustment('elec')">🔍 ดึงค่า</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <h6 class="text-info fw-bold">มิเตอร์น้ำ</h6>
+                            <div class="mb-2">
+                                <label>ยี่ห้อ *</label>
+                                <select id="water_module" name="water_module" class="form-select"
+                                    onchange="loadParameters('water')">
+                                    <option value="">-- เลือกยี่ห้อ --</option>
+                                    {% for m in water_modules %}
+                                    <option value="{{ m }}">{{ m }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold text-info">ค่าที่อ่านหลัก (Key)</label>
+                                <select id="water_unit_key" name="water_unit_key" class="form-select"></select>
+                            </div>
+                            <div class="mb-2"><label>Serial *</label><input type="text" name="water_serial"
+                                    class="form-control" required></div>
+                            <div class="mb-2"><label>Slave ID *</label><input type="number" name="water_slave_id"
+                                    class="form-control" required></div>
+                            <div class="mb-2"><label>Installdate *</label><input type="text" name="installdate_water"
+                                    class="form-control datepicker"></div>
+
+                            <div class="mb-2">
+                                <label>COM Port</label>
+                                <select name="water_comport" class="form-select" onchange="toggleIP(this, 'water')">
+                                    {% for p in ports %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div id="water_tcp" style="display:none;">
+                                <div class="mb-2"><label>IP Address</label><input type="text" name="water_ip"
+                                        class="form-control"></div>
+                                <div class="mb-2"><label>Port</label><input type="number" name="water_port"
+                                        class="form-control"></div>
+                            </div>
+
+                            <div id="water_api_fields" style="display: none;" class="mt-2 p-2 border rounded bg-light">
+                                <div class="mb-2">
+                                    <label class="small fw-bold">Base URL * (Water)</label>
+                                    <input type="text" name="water_base_url" class="form-control"
+                                        placeholder="https://api.water.com">
+                                </div>
+                                <div class="mb-0">
+                                    <label class="small fw-bold">API Auth Token (Water)</label>
+                                    <input type="text" name="water_api_token" class="form-control"
+                                        placeholder="Bearer or X-API-KEY">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="d-block mb-2">สถานะมิเตอร์น้ำ</label>
+                                <div class="btn-group w-100">
+                                    <input type="radio" class="btn-check" name="water_status" id="water_active"
+                                        value="active">
+                                    <label class="btn btn-outline-success" for="water_active">เปิดใช้งาน</label>
+                                    <input type="radio" class="btn-check" name="water_status" id="water_inactive"
+                                        value="inactive">
+                                    <label class="btn btn-outline-danger" for="water_inactive">ปิดใช้งาน</label>
+                                </div>
+                            </div>
+
+                            <div class="form-check form-switch p-2 border rounded bg-info-subtle mb-2">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" id="change_water_flag"
+                                    name="change_water_flag" onchange="toggleChangeMeter('water')">
+                                <label class="form-check-label fw-bold" for="change_water_flag">🔄
+                                    เปลี่ยนมิเตอร์น้ำใหม่</label>
+                            </div>
+                            <div id="change_water_details" style="display:none;"
+                                class="p-2 border rounded border-info mb-3">
+                                <label class="text-danger fw-bold small">เลขมิเตอร์น้ำตัวเก่า *</label>
+                                <div class="input-group mb-2">
+                                    <input type="number" step="0.01" name="old_water_last_reading"
+                                        id="old_water_last_reading" class="form-control">
+                                    <button class="btn btn-outline-info btn-sm" type="button"
+                                        onclick="fetchAdjustment('water')">🔍 ดึงค่า</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                    <button type="button" class="btn btn-success" onclick="checkAndSave()">บันทึกข้อมูล</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const mModal = new bootstrap.Modal(document.getElementById('meterModal'));
+    const fpConfig = { dateFormat: "d/m/Y", allowInput: true, altInput: true, altFormat: "Y-m-d" };
+    const fpElec = flatpickr("input[name='installdate_elec']", fpConfig);
+    const fpWater = flatpickr("input[name='installdate_water']", fpConfig);
+
+    const configs = {
+        elec: JSON.parse('{{ elec_models_json | tojson | safe }}' || '{}'),
+        water: JSON.parse('{{ water_models_json | tojson | safe }}' || '{}')
+    };
+
+    function prepareAndOpenModal(btn) {
+        try {
+            const unitData = JSON.parse(btn.getAttribute('data-unit'));
+            openMeterModal(unitData);
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+            Swal.fire('Error', 'ไม่สามารถโหลดข้อมูลห้องได้ กรุณาเช็คข้อมูลเบื้องต้น', 'error');
+        }
+    }
+
+    function openMeterModal(unit) {
+        const form = document.getElementById('meterForm');
+        form.reset();
+        document.getElementById('modalTitle').innerText = 'จัดการห้อง ' + unit.name;
+        document.getElementById('m_unit_id').value = unit.unit_id;
+
+        // ไฟฟ้า
+        form.elements['electricity_module'].value = unit.electricity_module || '';
+        loadParameters('elec', unit.elec_unit_key);
+        form.elements['electricity_serial_meter'].value = unit.electricity_serial_meter || '';
+        form.elements['electricity_slave_id'].value = unit.electricity_slave_id || '';
+        form.elements['electricity_comport'].value = unit.electricity_comport || 'COM1';
+        form.elements['electricity_ip'].value = unit.electricity_ip || '';
+        form.elements['electricity_port'].value = unit.electricity_port || '';
+        form.elements['elec_base_url'].value = unit.elec_base_url || '';
+        form.elements['elec_api_token'].value = unit.elec_api_token || '';
+        if (unit.electricity_installdate) fpElec.setDate(unit.electricity_installdate);
+
+        // น้ำ
+        form.elements['water_module'].value = unit.water_module || '';
+        loadParameters('water', unit.water_unit_key);
+        form.elements['water_serial'].value = unit.water_serial || '';
+        form.elements['water_slave_id'].value = unit.water_slave_id || '';
+        form.elements['water_comport'].value = unit.water_comport || 'COM1';
+        form.elements['water_ip'].value = unit.water_ip || '';
+        form.elements['water_port'].value = unit.water_port || '';
+        form.elements['water_base_url'].value = unit.water_base_url || '';
+        form.elements['water_api_token'].value = unit.water_api_token || '';
+        if (unit.water_installdate) fpWater.setDate(unit.water_installdate);
+
+        // Status
+        document.getElementById('elec_active').checked = (unit.electricity_status !== 'inactive');
+        document.getElementById('elec_inactive').checked = (unit.electricity_status === 'inactive');
+        document.getElementById('water_active').checked = (unit.water_status !== 'inactive');
+        document.getElementById('water_inactive').checked = (unit.water_status === 'inactive');
+
+        toggleChangeMeter('elec');
+        toggleChangeMeter('water');
+        toggleIP(form.elements['electricity_comport'], 'elec');
+        toggleIP(form.elements['water_comport'], 'water');
+
+        mModal.show();
+    }
+
+    function loadParameters(type, selectedValue = null) {
+        const modelName = document.getElementById(type === 'elec' ? 'electricity_module' : 'water_module').value;
+        const targetSelect = document.getElementById(type === 'elec' ? 'elec_unit_key' : 'water_unit_key');
+        targetSelect.innerHTML = '<option value="">-- เลือกค่าหลัก --</option>';
+
+        if (configs[type][modelName]?.read_register) {
+            Object.keys(configs[type][modelName].read_register).forEach(key => {
+                const opt = new Option(key, key);
+                if (key === selectedValue) opt.selected = true;
+                targetSelect.add(opt);
+            });
+        }
+    }
+
+    function toggleIP(sel, type) {
+        document.getElementById(type + '_tcp').style.display = (sel.value === 'TCP/IP') ? 'block' : 'none';
+
+        const apiFields = document.getElementById(type + '_api_fields');
+        if (apiFields) {
+            apiFields.style.display = (sel.value === 'API') ? 'block' : 'none';
+        }
+    }
+
+    function toggleChangeMeter(type) {
+        const isChecked = document.getElementById(`change_${type}_flag`).checked;
+        document.getElementById(`change_${type}_details`).style.display = isChecked ? 'block' : 'none';
+    }
+
+    function checkAndSave() {
+        const form = document.getElementById('meterForm');
+        const fd = new FormData(form);
+
+        Swal.fire({
+            title: 'ยืนยันการบันทึก?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'ตกลง'
+        }).then(res => {
+            if (res.isConfirmed) {
+                Swal.showLoading();
+                fetch('/manage_meter', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            Swal.fire('สำเร็จ', data.massage, 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('Error', data.massage, 'error');
+                        }
+                    });
+            }
+        });
+    }
+
+    function fetchAdjustment(type) {
+        const unitId = document.getElementById('m_unit_id').value;
+        const btn = event.currentTarget;
+        const inputField = document.getElementById(`old_${type}_last_reading`);
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        fetch(`/get_latest_iot_reading/${unitId}/${type}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    inputField.value = data.reading; // เอาค่า IoT ไปหยอดในช่องมิเตอร์เก่า
+                } else {
+                    Swal.fire('ไม่พบข้อมูล', 'ไม่มีประวัติการอ่านค่าในระบบ IoT', 'warning');
+                }
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '🔍 ดึงค่า';
+            });
+    }
+</script>
+{% endblock %}

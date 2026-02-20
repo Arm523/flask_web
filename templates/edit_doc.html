@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <title>📝 แก้ไขเอกสาร: {{ filename }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .a4-page {
+            width: 794px;
+            height: 1123px;
+            /* 🔄 เปลี่ยนจาก min-height เป็น height */
+            background: white;
+            padding: 40px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+            border: 1px solid #ddd;
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        textarea {
+            flex: 1;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: "TH Sarabun New", sans-serif;
+            font-size: 18px;
+            background: transparent;
+        }
+    </style>
+</head>
+
+<body class="bg-light py-4">
+    <div class="container bg-white p-4 rounded shadow">
+        <h3 class="mb-4">📝 แก้ไขเอกสาร: {{ filename }}</h3>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% if content is not none %}
+        <form method="POST">
+            <div class="a4-page">
+                <textarea id="editor" name="content">{{ content }}</textarea>
+            </div>
+
+
+            <div class="mb-3">
+                <label for="tagSelect" class="form-label">🏷️ แทรก Tag:</label>
+                <div class="input-group">
+                    <select id="tagSelect" class="form-select">
+                        <option value="">-- เลือก Tag --</option>
+                        <option value="#renter#">#renter#</option>
+                        <option value="#owner#">#owner#</option>
+                        <option value="#renter_age#">#renter_age#</option>
+                        <option value="#renter_address#">#renter_address#</option>
+                        <option value="#contract_start#">#contract_start#</option>
+                        <option value="#contract_end#">#contract_end#</option>
+                        <option value="#now#">#now#</option>
+                        <option value="#rent_floor#">#rent_floor#</option>
+                    </select>
+                    <button type="button" class="btn btn-outline-secondary" onclick="insertTag()">ใส่ Tag</button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-success">💾 บันทึก</button>
+            <a href="{{ url_for('manage_doc') }}" class="btn btn-secondary">ย้อนกลับ</a>
+        </form>
+        {% else %}
+        <p class="text-danger">ไม่สามารถโหลดเนื้อหาได้</p>
+        {% endif %}
+    </div>
+
+    <script>
+        function insertTag() {
+            const textarea = document.getElementById("editor");
+            const tag = document.getElementById("tagSelect").value;
+            if (!tag) return;
+
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            textarea.value = text.slice(0, start) + tag + text.slice(end);
+            textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+            textarea.focus();
+        }
+    </script>
+</body>
+
+</html>

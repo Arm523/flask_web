@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+
+<title>ต่อสัญญาเช่า</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/material_blue.css">
+{% block content %}
+
+<div class="container-fluid px-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-6 col-lg-7 col-md-9">
+            <div class="card shadow-sm border-0 rounded-4 mt-4">
+                <div class="card-header bg-gradient-primary text-white rounded-top-4">
+                    <h5 class="mb-0 fw-semibold">
+                        <i class="bi bi-arrow-repeat me-2"></i>
+                        ต่อสัญญาเช่า
+                    </h5>
+                </div>
+
+                <div class="card-body p-4">
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">รหัสสัญญา</span>
+                            <span class="fw-semibold">#{{ contract.contract_id }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">วันเริ่มสัญญาเดิม</span>
+                            <span class="fw-semibold">{{ contract.contract_start.strftime('%d/%m/%Y') if
+                                contract.contract_start else '-' }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">วันสิ้นสุดสัญญาเดิม</span>
+                            <span class="fw-bold text-danger">{{ contract.contract_end.strftime('%d/%m/%Y') if
+                                contract.contract_end else '-' }}</span>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">วันสิ้นสุดสัญญาใหม่</label>
+                            <input type="text" id="contract_end_picker" name="contract_end"
+                                class="form-control form-control-lg bg-white" placeholder="เลือกวันที่ (วว/ดด/ปปปป)"
+                                required>
+                            <div class="form-text text-muted small">* ต้องเป็นวันที่หลังจากวันสิ้นสุดสัญญาเดิม</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-file-earmark-arrow-up me-1"></i>
+                                อัปโหลดเอกสารสัญญาฉบับใหม่ (Version {{ (contract.renew_count or 0) + 1 }})
+                            </label>
+                            <input type="file" name="files[]" accept=".pdf,.doc,.docx,.jpg,.png"
+                                class="form-control mb-2" multiple required onchange="previewFiles(this)">
+
+                            <div id="filePreview" class="border rounded p-2 bg-light small d-none">
+                                <strong>📂 ไฟล์ที่เลือกเตรียมอัปโหลด:</strong>
+                                <ul class="mb-0 mt-1 ps-3" id="previewList"></ul>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('dashboard') }}"
+                                class="btn btn-outline-secondary btn-lg rounded-pill flex-fill">
+                                <i class="bi bi-arrow-left me-1"></i>
+                                ยกเลิก
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-lg rounded-pill flex-fill">
+                                <i class="bi bi-check-circle me-1"></i>
+                                ยืนยันต่อสัญญา
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #4f46e5, #3b82f6);
+    }
+</style>
+
+<script>
+    flatpickr("#contract_end_picker", {
+        altInput: true,
+        altFormat: "d/m/Y",
+        minDate: "{{ contract.contract_end }}",
+        locale: "th",
+        disableMobile: "true"
+    });
+    function previewFiles(input) {
+        const previewDiv = document.getElementById('filePreview');
+        const previewList = document.getElementById('previewList');
+        previewList.innerHTML = '';
+
+        if (input.files && input.files.length > 0) {
+            previewDiv.classList.remove('d-none');
+            Array.from(input.files).forEach(file => {
+                const li = document.createElement('li');
+                li.className = "text-primary";
+                li.textContent = file.name + " (" + (file.size / 1024).toFixed(1) + " KB)";
+                previewList.appendChild(li);
+            });
+        } else {
+            previewDiv.classList.add('d-none');
+        }
+    }
+</script>
+
+{% endblock %}
