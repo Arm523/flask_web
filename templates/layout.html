@@ -350,20 +350,20 @@
       </li>
 
       <li class="nav-item mb-1">
-        <a class="nav-link parent-link d-flex align-items-center {% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}active-parent{% endif %}"
+        <a class="nav-link parent-link d-flex align-items-center {% if request.path in ['/manage_units', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}active-parent{% endif %}"
           data-bs-toggle="collapse" href="#manageMenu" role="button"
-          aria-expanded="{% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}true{% else %}false{% endif %}"
+          aria-expanded="{% if request.path in ['/manage_units', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}true{% else %}false{% endif %}"
           aria-controls="manageMenu">
           <i class="bi bi-gear-fill"></i>
           <span class="nav-text ms-2">Manage</span>
 
           <i id="gearIcon"
-            class="bi bi-chevron-right ms-auto rotate-icon {% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}open{% endif %}">
+            class="bi bi-chevron-right ms-auto rotate-icon {% if request.path in ['/manage_units', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}open{% endif %}">
           </i>
         </a>
 
         <div
-          class="collapse {% if request.path in ['/manage_units', '/manage_roles', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}show{% endif %}"
+          class="collapse {% if request.path in ['/manage_units', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}show{% endif %}"
           id="manageMenu">
           <ul class="nav flex-column ms-3 ps-2 border-start border-white border-opacity-25">
             <li class="nav-item">
@@ -371,13 +371,6 @@
                 class="nav-link sub-link {% if request.path == '/manage_units' %}active{% endif %}">
                 <i class="bi bi-house-door"></i>
                 <span class="nav-text">Manage Units</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a href="{{ url_for('manage_roles') }}"
-                class="nav-link sub-link {% if request.path == '/manage_roles' %}active{% endif %}">
-                <i class="bi bi-person-badge"></i>
-                <span class="nav-text">Manage Roles</span>
               </a>
             </li>
             <li class="nav-item">
