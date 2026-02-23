@@ -6,7 +6,7 @@
 
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4><i class="bi bi-people-fill"></i> Manage Tenants</h4>
+        <h4><i class="bi bi-people-fill"></i> จัดการผู้เช่า</h4>
         <button class="btn btn-primary" onclick="openTenantModal('add')">+ เพิ่มผู้เช่าใหม่</button>
     </div>
 
@@ -37,18 +37,34 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            <button type="button" class="btn btn-sm btn-warning edit-tenant-btn"
-                                data-tenant='{{ t | tojson | safe }}'>
-                                <i class="bi bi-pencil"></i>
-                            </button>
-
-                            <form action="{{ url_for('manage_tenants') }}" method="POST" class="d-inline delete-form">
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="tenant_id" value="{{ t.tenant_id }}">
-                                <button type="button" class="btn btn-sm btn-danger delete-btn">
-                                    <i class="bi bi-trash"></i>
+                            <div class="d-flex justify-content-center gap-1">
+                                {% if t.id_card_img %}
+                                <a href="{{ url_for('download_id_card', filename=t.id_card_img) }}"
+                                    download="บัตรประชาชน_{{ t.fname }}_{{ t.lname }}"
+                                    class="btn btn-sm btn-info text-white">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                                {% else %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                                    title="ไม่มีไฟล์">
+                                    <i class="bi bi-image"></i>
                                 </button>
-                            </form>
+                                {% endif %}
+
+                                <button type="button" class="btn btn-sm btn-warning edit-tenant-btn text-dark"
+                                    data-tenant='{{ t | tojson | safe }}' title="แก้ไขข้อมูล">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+
+                                <form action="{{ url_for('manage_tenants') }}" method="POST"
+                                    class="d-inline delete-form">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="tenant_id" value="{{ t.tenant_id }}">
+                                    <button type="button" class="btn btn-sm btn-danger delete-btn" title="ลบข้อมูล">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -60,7 +76,7 @@
 
 <div class="modal fade" id="tenantModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <form id="tenantForm" method="POST" class="modal-content">
+        <form id="tenantForm" method="POST" enctype="multipart/form-data" class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="modalTitle">ข้อมูลผู้เช่า</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -90,7 +106,7 @@
                     </div>
                     <div class="col-md-2">
                         <label>อายุ</label>
-                        <input type="number" name="age" id="age" class="form-control" required> 
+                        <input type="number" name="age" id="age" class="form-control" required>
                     </div>
                     <div class="col-md-4">
                         <label>วันเกิด</label>
@@ -102,11 +118,22 @@
                     </div>
                     <div class="col-md-12">
                         <label>ที่อยู่ปัจจุบันที่สามารถติดต่อได้</label>
-                        <textarea name="address" id="address" class="form-control" rows="2" placeholder="บ้านเลขที่ ถนน เขต จังหวัด"></textarea>
+                        <textarea name="address" id="address" class="form-control" rows="2"
+                            placeholder="บ้านเลขที่ ถนน เขต จังหวัด"></textarea>
                     </div>
                     <div class="col-md-12">
                         <label>Email</label>
                         <input type="email" name="email" id="email" class="form-control" placeholder="xxx@gmail.com">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-bold">อัปโหลดสำเนาบัตรประชาชน</label>
+                        <input type="file" name="id_card_file" id="id_card_file" class="form-control"
+                            accept="image/*,.pdf">
+
+                        <div id="fileInfoArea" class="mt-2" style="display: none;">
+                            <small class="text-muted">ไฟล์ปัจจุบัน: </small>
+                            <span id="currentFileName" class="badge bg-light text-dark border"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -116,6 +143,7 @@
         </form>
     </div>
 </div>
+
 
 <script>
     // 1. ฟังก์ชันเปิด Modal (ต้องอยู่นอก DOMContentLoaded เพื่อให้ปุ่ม HTML เรียกใช้ได้)
@@ -133,20 +161,31 @@
             document.getElementById('lname').value = data.lname || '';
             document.getElementById('gender').value = data.gender || 'ชาย';
             document.getElementById('age').value = data.age || '';
+
             if (data.bd) {
-                // แปลงวันที่ให้เป็น YYYY-MM-DD เพื่อให้ input[type="date"] แสดงผลได้
                 const date = new Date(data.bd);
                 const formattedDate = date.toISOString().split('T')[0];
                 document.getElementById('bd').value = formattedDate;
             } else {
                 document.getElementById('bd').value = '';
             }
+
             document.getElementById('tel').value = data.tel || '';
             document.getElementById('address').value = data.address || '';
             document.getElementById('email').value = data.email || '';
+
+            // เช็คว่ามีรูปภาพเดิมไหม (id_card_img คือชื่อคอลัมน์ใน DB)
+            if (data.id_card_img) {
+                fileInfoArea.style.display = 'block';
+                currentFileName.innerText = data.id_card_img;
+            } else {
+                fileInfoArea.style.display = 'none';
+            }
+
         } else {
             document.getElementById('tenantForm').reset();
             document.getElementById('tenant_id').value = '';
+            fileInfoArea.style.display = 'none';
         }
         modal.show();
     }
@@ -171,7 +210,7 @@
             btn.addEventListener('click', function () {
                 try {
                     const data = JSON.parse(this.getAttribute('data-tenant'));
-                    console.log("Editing Data:", data); 
+                    console.log("Editing Data:", data);
                     openTenantModal('edit', data);
                 } catch (e) {
                     console.error("JSON Parse Error:", e);

@@ -245,8 +245,9 @@
                 {% if inv.status in ["draft", "overdue"] %}
                 <a href="/add_invoice_item/{{ inv.invoice_id }}" class="btn btn-info btn-sm text-white">เพิ่มรายการ</a>
 
-                {% if inv.current_electricity_reading is not none and
-                inv.current_water_reading is not none %}
+                {% if (inv.current_electricity_reading is not none and
+                inv.current_water_reading is not none) or inv.invoice_type ==
+                "extra_bill" %}
                 <button type="button" class="btn btn-primary btn-sm"
                   onclick="handlePaymentClick('{{ inv.invoice_id }}')">
                   ชำระเงิน
@@ -256,7 +257,7 @@
                 {% endif %}
 
                 <button type="button" class="btn btn-warning btn-sm"
-                  onclick="openEditModal('{{ inv.invoice_id }}', '{{ inv.billing_period_start }}', '{{ inv.billing_period_end }}', '{{ inv.due_date }}', '{{ inv.previous_electricity_reading }}', '{{ inv.previous_water_reading }}', '{{ inv.current_electricity_reading }}', '{{ inv.current_water_reading }}')">
+                  onclick="openEditModal('{{ inv.invoice_id }}', '{{ inv.billing_period_start }}', '{{ inv.billing_period_end }}', '{{ inv.due_date }}', '{{ inv.previous_electricity_reading }}', '{{ inv.previous_water_reading }}', '{{ inv.current_electricity_reading }}', '{{ inv.current_water_reading }}', '{{ inv.invoice_type }}')">
                   แก้ไข
                 </button>
 
@@ -274,11 +275,11 @@
                   class="btn btn-sm btn-info btn-full-width">
                   <i class="bi bi-eye-fill"></i> ดูสลิป
                 </a>
-                <a href="{{ url_for('view_slip', filename=inv.slip_file) }}" download class="btn btn-sm btn-secondary btn-full-width">
+                <a href="{{ url_for('view_slip', filename=inv.slip_file) }}" download
+                  class="btn btn-sm btn-secondary btn-full-width">
                   <i class="bi bi-cloud-download"></i> โหลด
                 </a>
-                {% endif %}
-                {% endif %}
+                {% endif %} {% endif %}
               </div>
             </td>
           </tr>
@@ -305,45 +306,47 @@
           <div class="modal-body">
             <input type="hidden" name="invoice_id" id="edit_inv_id" />
 
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label class="form-label small fw-bold">วันเริ่มรอบ</label>
-                <input type="text" id="edit_start_date" name="billing_period_start" class="form-control datepicker" />
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label small fw-bold">วันสิ้นสุดรอบ</label>
-                <input type="text" id="edit_end_date" name="billing_period_end" class="form-control datepicker" />
-              </div>
-            </div>
-
-            <div class="p-2 mb-3 bg-light border rounded">
-              <h6 class="fw-bold text-primary small">⚡ มิเตอร์ไฟฟ้า</h6>
+            <div id="extra_fields_group">
               <div class="row">
-                <div class="col-6">
-                  <label class="form-label small">ครั้งก่อน</label>
-                  <input type="number" class="form-control form-control-sm" name="prev_elec" id="edit_prev_elec"
-                    step="0.01" />
+                <div class="col-md-6 mb-3">
+                  <label class="form-label small fw-bold">วันเริ่มรอบ</label>
+                  <input type="text" id="edit_start_date" name="billing_period_start" class="form-control datepicker" />
                 </div>
-                <div class="col-6">
-                  <label class="form-label small">ครั้งหลัง</label>
-                  <input type="number" class="form-control form-control-sm" name="curr_elec" id="edit_curr_elec"
-                    step="0.01" />
+                <div class="col-md-6 mb-3">
+                  <label class="form-label small fw-bold">วันสิ้นสุดรอบ</label>
+                  <input type="text" id="edit_end_date" name="billing_period_end" class="form-control datepicker" />
                 </div>
               </div>
-            </div>
 
-            <div class="p-2 mb-3 bg-light border rounded">
-              <h6 class="fw-bold text-info small">💧 มิเตอร์น้ำ</h6>
-              <div class="row">
-                <div class="col-6">
-                  <label class="form-label small">ครั้งก่อน</label>
-                  <input type="number" class="form-control form-control-sm" name="prev_water" id="edit_prev_water"
-                    step="0.01" />
+              <div class="p-2 mb-3 bg-light border rounded">
+                <h6 class="fw-bold text-primary small">⚡ มิเตอร์ไฟฟ้า</h6>
+                <div class="row">
+                  <div class="col-6">
+                    <label class="form-label small">ครั้งก่อน</label>
+                    <input type="number" class="form-control form-control-sm" name="prev_elec" id="edit_prev_elec"
+                      step="0.01" />
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small">ครั้งหลัง</label>
+                    <input type="number" class="form-control form-control-sm" name="curr_elec" id="edit_curr_elec"
+                      step="0.01" />
+                  </div>
                 </div>
-                <div class="col-6">
-                  <label class="form-label small">ครั้งหลัง</label>
-                  <input type="number" class="form-control form-control-sm" name="curr_water" id="edit_curr_water"
-                    step="0.01" />
+              </div>
+
+              <div class="p-2 mb-3 bg-light border rounded">
+                <h6 class="fw-bold text-info small">💧 มิเตอร์น้ำ</h6>
+                <div class="row">
+                  <div class="col-6">
+                    <label class="form-label small">ครั้งก่อน</label>
+                    <input type="number" class="form-control form-control-sm" name="prev_water" id="edit_prev_water"
+                      step="0.01" />
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small">ครั้งหลัง</label>
+                    <input type="number" class="form-control form-control-sm" name="curr_water" id="edit_curr_water"
+                      step="0.01" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -411,10 +414,18 @@
       prev_water,
       curr_elec,
       curr_water,
+      type
     ) {
       // ใส่ค่า ID
       document.getElementById("edit_inv_id").value = id;
       document.getElementById("display_inv_id").innerText = id;
+
+      const extraFields = document.getElementById("extra_fields_group");
+      if (type === "extra_bill") {
+        extraFields.style.display = "none"; // ถ้าเป็นบิลพิเศษ ให้ซ่อนมิเตอร์และรอบบิล
+      } else {
+        extraFields.style.display = "block"; // ถ้าบิลปกติ ให้แสดงทั้งหมด
+      }
 
       // ใส่ค่าตัวเลขมิเตอร์
       document.getElementById("edit_prev_elec").value = prev_elec;
@@ -496,8 +507,6 @@
             );
           }
 
-          // ถ้าไม่มี Error และ Backend ส่งเป็นหน้า HTML มาปกติ
-          // ให้ทำการเปลี่ยนหน้าไปยังหน้านั้นจริงๆ
           window.location.href = `/confirm_payment/${invoiceId}`;
         })
         .catch((error) => {

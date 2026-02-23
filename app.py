@@ -27,13 +27,15 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_FOLDER = 'uploaded_docs'
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'jpg', 'png'}
 
+
 BASE_UPLOAD_PATH = os.path.join(BASE_DIR, 'uploads')
 EXPENSE_UPLOAD_PATH = os.path.join(BASE_UPLOAD_PATH, 'expense_slips')
 INCOME_UPLOAD_PATH = os.path.join(BASE_UPLOAD_PATH, 'income_slips')
 UPLOAD_ID_CARD = os.path.join(BASE_DIR, 'uploads', 'id_card')    
 UPLOAD_PROFILE = os.path.join(BASE_DIR, 'static', 'profile_user')
+UPLOAD_ID_CARD_TENANTS = os.path.join(BASE_DIR, 'uploads', 'id_card_tenants')
 
-PATHS = [UPLOAD_ID_CARD, EXPENSE_UPLOAD_PATH, INCOME_UPLOAD_PATH, UPLOAD_PROFILE]
+PATHS = [UPLOAD_ID_CARD, EXPENSE_UPLOAD_PATH, INCOME_UPLOAD_PATH, UPLOAD_PROFILE, UPLOAD_ID_CARD_TENANTS]
 for path in PATHS:
     os.makedirs(path, exist_ok=True)
     
@@ -213,7 +215,7 @@ def dashboard():
     cursor = conn.cursor(dictionary=True)
 
     # ------------------ fetch rooms based on filters ------------------
-    base_query = "SELECT * FROM unit WHERE 1=1"
+    base_query = "SELECT * FROM unit WHERE 1=1 and is_deleted=0"
     params = []
 
     if number:
@@ -256,7 +258,7 @@ def dashboard():
             SELECT MAX(contract_id)
             FROM contracts
             WHERE room_id IN ({','.join(['%s']*len(unit_ids))})
-              AND status IN (1,2,3,4)
+              AND status IN (1,2,3,4) and is_deleted=0
             GROUP BY room_id
         )
     """, tuple(unit_ids))
@@ -536,7 +538,7 @@ def contract_options(contract_id):
             return redirect(url_for('contract_options', contract_id=contract_id))
 
         # --- ส่วนของ GET Request ---
-        cursor.execute("SELECT * FROM `option`")
+        cursor.execute("SELECT * FROM `option` WHERE is_deleted = 0")
         all_options = cursor.fetchall()
 
         cursor.execute("SELECT option_id FROM contract_option WHERE contract_id = %s", (contract_id,))
@@ -1888,15 +1890,16 @@ def manage_units():
     cursor.execute("""
         SELECT u.*, s.name_status AS status_name, t.n_type AS type_name,
                t.price_monthly, t.price_daily
-        FROM unit u
+        FROM unit u 
         LEFT JOIN s_unit s ON u.status_id = s.status_id
         LEFT JOIN type t ON u.type_unit_id = t.type_id
+        WHERE u.is_deleted = 0
         ORDER BY u.building, u.floor, u.name
     """)
     units = cursor.fetchall()
 
     # ดึงประเภทห้อง
-    cursor.execute("SELECT * FROM type")
+    cursor.execute("SELECT * FROM type t WHERE t.is_deleted = 0")
     types = cursor.fetchall()
 
     cursor.close()
@@ -1940,28 +1943,32 @@ def delete_unit(unit_id):
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # หา meter_id ของ unit ก่อน
-        cursor.execute(
-            "SELECT meter_id, meter_water_id FROM unit WHERE unit_id=%s", (unit_id,))
-        meters = cursor.fetchone()
+        cursor.execute("SELECT status_id FROM unit WHERE unit_id = %s", (unit_id,))
+        room = cursor.fetchone()
 
-        # ลบ meter_reading ที่เกี่ยวข้องกับ meter ของ unit
-        if meters:
-            if meters['meter_id']:
-                cursor.execute(
-                    "DELETE FROM meter_reading WHERE meter_id=%s", (meters['meter_id'],))
-            if meters['meter_water_id']:
-                cursor.execute(
-                    "DELETE FROM meter_reading WHERE meter_id=%s", (meters['meter_water_id'],))
+        if not room:
+            flash("ไม่พบข้อมูลห้องนี้", "danger")
+            return redirect(url_for('manage_units'))
 
-        # ลบข้อมูลสัญญาที่เกี่ยวข้อง
-        cursor.execute("DELETE FROM contracts WHERE room_id=%s", (unit_id,))
+        cursor.execute("""
+            SELECT contract_id FROM contracts 
+            WHERE room_id = %s 
+            AND status IN (1, 2, 3, 4)
+        """, (unit_id,))
+        active_contract = cursor.fetchone()
 
-        # ลบห้อง
-        cursor.execute("DELETE FROM unit WHERE unit_id=%s", (unit_id,))
-
+        restricted_room_statuses = [2, 3, 4, 5, 6, 7]
+        
+        if room['status_id'] in restricted_room_statuses or active_contract:
+            if active_contract:
+                flash("ไม่สามารถลบได้: มีสัญญาที่อยู่ในสถานะ ร่าง/รอชำระ/ใช้งาน หรือ ใกล้หมดอายุ", "warning")
+            else:
+                flash("ไม่สามารถลบได้: สถานะห้องยังไม่ว่าง (ต้องเป็นสถานะ 'ว่าง' เท่านั้น)", "warning")
+            return redirect(url_for('manage_units'))
+        
+        cursor.execute("UPDATE unit SET is_deleted = 1 WHERE unit_id=%s", (unit_id,))
         conn.commit()
-        flash("ลบห้องและข้อมูลที่เกี่ยวข้องเรียบร้อยแล้ว", "success")
+        flash("ย้ายห้องไปที่ถังขยะเรียบร้อยแล้ว (Soft Delete)", "success")
         
     except Exception as e:
         conn.rollback()
@@ -1980,58 +1987,80 @@ def edit_unit(unit_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    # 1. ดึงข้อมูลห้องปัจจุบันขึ้นมาก่อน เพื่อเช็คสถานะเดิม
+    cursor.execute("SELECT * FROM unit WHERE unit_id = %s", (unit_id,))
+    room = cursor.fetchone()
+
+    if not room:
+        flash('ไม่พบข้อมูลห้องพัก', 'danger')
+        return redirect(url_for('manage_units'))
+
     if request.method == 'POST':
         name = request.form.get('name')
         building = request.form.get('building')
         floor = request.form.get('floor')
         zone = request.form.get('zone')
         type_unit_id = request.form.get('type_unit_id')
-        status_id = request.form.get('status_id')
+        
+        # รับค่าจากฟอร์ม (hidden หรือ button)
+        status_id_from_form = request.form.get('status_id')
+        # รับค่าจาก switch (ถ้าติ๊กจะได้ 'on')
+        mark_as_broken = request.form.get('mark_as_broken')
+
+        # --- Logic จัดการสถานะ ---
+        final_status_id = room['status_id']  # เริ่มต้นด้วยสถานะเดิมจาก DB
+
+        if int(room['status_id']) == 1:  # ถ้าเดิมคือ 'ว่าง'
+            if mark_as_broken == 'on':
+                final_status_id = 4     # เปลี่ยนเป็น 'ปิดปรับปรุง'
+            else:
+                final_status_id = 1     # ยังคง 'ว่าง' เหมือนเดิม
+        
+        elif int(room['status_id']) == 4: # ถ้าเดิมคือ 'ปิดปรับปรุง'
+            if status_id_from_form == '1':
+                final_status_id = 1     # เปลี่ยนกลับเป็น 'ว่าง'
+            else:
+                final_status_id = 4     # ยังคง 'ปิดปรับปรุง'
+
+        # สำหรับสถานะ 2, 3, 5, 6, 7 ระบบจะไม่แก้สถานะในหน้านี้ (ใช้ค่าเดิมใน DB)
 
         try:
             cursor.execute("""
                 UPDATE unit SET 
                     name=%s, building=%s, floor=%s, zone=%s, type_unit_id=%s, status_id=%s
                 WHERE unit_id=%s
-            """, (name, building, floor, zone, type_unit_id, status_id, unit_id))
+            """, (name, building, floor, zone, type_unit_id, final_status_id, unit_id))
             conn.commit()
-            flash('แก้ไขข้อมูลห้องเรียบร้อยแล้ว', 'success')
+            flash(f'แก้ไขข้อมูลห้อง {name} สำเร็จ', 'success')
             return redirect(url_for('manage_units'))
         except Exception as e:
             conn.rollback()
-            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+            flash(f'เกิดข้อผิดพลาดในการบันทึก: {e}', 'danger')
+        finally:
+            cursor.close()
+            conn.close()
 
-    # GET: ดึงข้อมูลห้อง
-    cursor.execute("SELECT * FROM unit WHERE unit_id = %s", (unit_id,))
-    room = cursor.fetchone()
-
-    # ดึงสถานะทั้งหมด
-    cursor.execute(
-        "SELECT status_id, name_status FROM s_unit ORDER BY status_id")
-    status_list = cursor.fetchall()
-
-    # ดึงประเภทห้องทั้งหมด
-    cursor.execute(
-        "SELECT type_id, n_type, price_monthly, price_daily FROM type ORDER BY n_type")
+    # GET: ดึงข้อมูลเพื่อแสดงผล
+    cursor.execute("SELECT type_id, n_type, price_monthly FROM type ORDER BY n_type")
     types = cursor.fetchall()
-
+    
     cursor.close()
     conn.close()
 
-    return render_template('edit_unit.html', room=room, types=types, statuses=status_list)
+    return render_template('edit_unit.html', room=room, types=types)
 
 @app.route('/delete_type/<int:type_id>', methods=['POST'])
 def delete_type(type_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-
     try:
-        cursor.execute("DELETE FROM type WHERE type_id=%s", (type_id,))
+        cursor.execute("UPDATE type SET is_deleted = 1 WHERE type_id=%s", (type_id,))
         conn.commit()
-        flash("ลบประเภทห้องเรียบร้อยแล้ว", "success")
+        
+        flash("ลบประเภทห้องเรียบร้อย! อย่าลืมไปเปลี่ยน 'ประเภทห้อง' ในหน้าจัดการห้องพักให้เป็นประเภทอื่นด้วยนะครับ", "success")
     except Exception as e:
         conn.rollback()
-        flash(f"เกิดข้อผิดพลาดในการลบประเภทห้อง: {e}", "danger")
+        flash(f"เกิดข้อผิดพลาด: {e}", "danger")
     finally:
         cursor.close()
         conn.close()
@@ -2078,7 +2107,7 @@ def edit_type(type_id):
 def manage_option():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM `option`")
+    cursor.execute("SELECT * FROM `option` WHERE is_deleted = 0 ORDER BY name")
     options = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -2137,15 +2166,37 @@ def add_option():
 
     return render_template('add_option.html')
 
-@app.route('/delete_option/<int:option_id>')
+@app.route('/delete_option/<int:option_id>', methods=['POST'])
 def delete_option(option_id):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM `option` WHERE id = %s", (option_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    flash('ลบ Option สำเร็จแล้ว', 'success')
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        query_check = """
+            SELECT co.id 
+            FROM contract_option co
+            JOIN contracts c ON co.contract_id = c.contract_id
+            WHERE co.option_id = %s 
+            AND c.status IN (1, 2, 3, 4)
+        """
+        cursor.execute(query_check, (option_id,))
+        active_usage = cursor.fetchone()
+
+        if active_usage:
+            flash('ไม่สามารถลบได้: มีสัญญาที่สถานะ (ร่าง/รอชำระ/ใช้งาน/ใกล้หมดอายุ) กำลังใช้งาน Option นี้อยู่', 'warning')
+            return redirect(url_for('manage_option'))
+
+        cursor.execute("UPDATE `option` SET is_deleted = 1 WHERE id = %s", (option_id,))
+        conn.commit()
+        flash('ลบ Option เรียบร้อยแล้ว', 'success')
+
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+        
     return redirect(url_for('manage_option'))
 
 
@@ -2360,9 +2411,7 @@ def manage_meter():
             cursor.close()
             conn.close()
 
-    # ---------------------------------------------------------
-    # PART B: แสดงหน้าจอปกติ (GET) - **ต้องอยู่นอก block POST**
-    # ---------------------------------------------------------
+    # แสดงหน้าจอปกติ (GET) - **ต้องอยู่นอก block POST**
     try:
         cursor.execute("""
             SELECT u.*, 
@@ -2377,6 +2426,7 @@ def manage_meter():
             FROM unit u
             LEFT JOIN meter m ON u.meter_id = m.id
             LEFT JOIN meter_water mw ON u.meter_water_id = mw.id
+            WHERE is_deleted=0
         """)
         units = cursor.fetchall()
         
@@ -2514,6 +2564,15 @@ def manage_tenants():
     if request.method == 'POST':
         action = request.form.get('action')
         tenant_id = request.form.get('tenant_id')
+        id_card_val = request.form.get('id_card')
+
+        file = request.files.get('id_card_file')
+        filename = None
+        if file and file.filename != '' and allowed_file(file.filename):
+            ext = file.filename.rsplit('.', 1)[1].lower()
+ 
+            filename = secure_filename(f"id_card_tenant_{id_card_val}.{ext}")
+            file.save(os.path.join(UPLOAD_ID_CARD_TENANTS, filename))
 
         # 1. ADD or EDIT
         if action in ['add', 'edit']:
@@ -2526,28 +2585,59 @@ def manage_tenants():
             )
 
             if action == 'add':
-                query = """INSERT INTO tenants (id_card, fname, lname, gender, age, bd, tel, address, email) 
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-                cursor.execute(query, data)
+                query = """INSERT INTO tenants (id_card, fname, lname, gender, age, bd, tel, address, email, id_card_img) 
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                cursor.execute(query, data + (filename,))
                 flash("เพิ่มผู้เช่าใหม่เรียบร้อย", "success")
             else:
                 query = """UPDATE tenants SET id_card=%s, fname=%s, lname=%s, gender=%s, 
-                           age=%s, bd=%s, tel=%s, address=%s, email=%s WHERE tenant_id=%s"""
-                cursor.execute(query, data + (tenant_id,))
+                           age=%s, bd=%s, tel=%s, address=%s, email=%s, id_card_img=%s WHERE tenant_id=%s"""
+                cursor.execute(query, data + (filename, tenant_id))
                 flash("แก้ไขข้อมูลเรียบร้อย", "info")
 
         # 2. DELETE (ตรวจสอบสัญญาก่อนลบ)
         elif action == 'delete':
-            cursor.execute("SELECT COUNT(*) as count FROM contracts WHERE tenant_id = %s AND status IN (1, 2, 3, 4)", (tenant_id,))
-            if cursor.fetchone()['count'] > 0:
-                flash("❌ ไม่สามารถลบได้: ผู้เช่ายังมีสัญญาที่ใช้งานอยู่ในระบบ", "danger")
+            # 1. เช็คสัญญาก่อน และดึงชื่อไฟล์รูปภาพมาด้วยในคราวเดียว (ประหยัด Query)
+            cursor.execute("""
+                SELECT 
+                    (SELECT COUNT(*) FROM contracts WHERE tenant_id = %s AND status IN (1, 2, 3, 4) AND is_deleted = 0) as active_contracts,
+                    id_card_img 
+                FROM tenants WHERE tenant_id = %s
+            """, (tenant_id, tenant_id))
+            
+            result = cursor.fetchone()
+            
+            # เช็คว่าเจอข้อมูลไหม
+            if not result:
+                flash("ไม่พบข้อมูลผู้เช่า", "danger")
             else:
-                try:
-                    cursor.execute("DELETE FROM tenants WHERE tenant_id = %s", (tenant_id,))
-                    flash("ลบข้อมูลผู้เช่าเรียบร้อย", "success")
-                except Exception as e:
-                    flash(f"ลบไม่ได้เนื่องจากมีข้อมูลประวัติในระบบ (FK Error): {str(e)}", "danger")
+                # ดึงค่าแบบรองรับทั้ง Tuple และ Dict
+                active_count = result['active_contracts'] if isinstance(result, dict) else result[0]
+                id_card_img = result['id_card_img'] if isinstance(result, dict) else result[1]
 
+                if active_count > 0:
+                    flash("❌ ไม่สามารถลบได้: ผู้เช่ายังมีสัญญาที่ใช้งานอยู่ในระบบ", "danger")
+                else:
+                    try:
+                        # --- ลบไฟล์จริงออกจากเครื่อง ---
+                        if id_card_img:
+                            file_path = os.path.join(UPLOAD_ID_CARD, id_card_img)
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+
+                        # --- ทำ Soft Delete ใน DB ---
+                        cursor.execute("""
+                            UPDATE tenants 
+                            SET is_deleted = 1, id_card = NULL, id_card_img = NULL,
+                                address = '-', email = NULL, age = NULL, bd = NULL,tel = NULL, gender = '-',created_at = NOW()
+                            WHERE tenant_id = %s
+                        """, (tenant_id,))
+                        
+                        conn.commit()
+                        flash("ลบข้อมูลและไฟล์เอกสารเรียบร้อยแล้ว", "success")
+                    except Exception as e:
+                        conn.rollback()
+                        flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
         conn.commit()
         return redirect(url_for('manage_tenants'))
 
@@ -2558,7 +2648,7 @@ def manage_tenants():
             JOIN unit u ON c.room_id = u.unit_id 
             WHERE c.tenant_id = t.tenant_id AND c.status = 3 LIMIT 1) as current_room
         FROM tenants t
-        WHERE t.fname LIKE %s OR t.lname LIKE %s OR t.tel LIKE %s
+        WHERE (t.fname LIKE %s OR t.lname LIKE %s OR t.tel LIKE %s) AND t.is_deleted = 0
         ORDER BY t.tenant_id DESC
     """, (f"%{search}%", f"%{search}%", f"%{search}%"))
     tenants = cursor.fetchall()
@@ -2566,6 +2656,14 @@ def manage_tenants():
     cursor.close()
     conn.close()
     return render_template('manage_tenants.html', tenants=tenants, search=search)
+
+@app.route('/download_id_card/<filename>')
+def download_id_card(filename):
+    upload_path = os.path.join(app.root_path, 'uploads', 'id_card_tenants')
+    try:
+        return send_from_directory(upload_path, filename, as_attachment=True)
+    except FileNotFoundError:
+        abort(404)
 
 @app.route('/download_doc/<path:filename>')
 def download_doc(filename):
@@ -3020,9 +3118,10 @@ def confirm_payment(invoice_id):
         return redirect(url_for('dashboard'))
     
     meter_save = invoice['meter_saved']
-    if meter_save == 0 or (invoice['current_electricity_reading'] is None and invoice['current_water_reading'] is None):
-        flash("ยังไม่กรอกค่ามิเตอร์ ให้ครบ", "warning")
-        return redirect(request.referrer)
+    if invoice['invoice_type'] != 'extra_bill':
+        if meter_save == 0 or (invoice['current_electricity_reading'] is None and invoice['current_water_reading'] is None):
+            flash("ยังไม่กรอกค่ามิเตอร์ ให้ครบ", "warning")
+            return redirect(request.referrer)
 
      # กำหนดวันที่สำหรับแสดงบน invoice
     display_start =  invoice['billing_period_start']

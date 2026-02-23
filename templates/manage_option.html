@@ -1,8 +1,19 @@
 {% extends "layout.html" %}
 {% block content %}
 <title>จัดการ - Options</title>
+
+<div id="flash-messages">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <span class="flash-data" data-category="{{ category }}" data-message="{{ message }}"></span>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+</div>
+
 <div class="container mt-4">
-    <h2>⌨︎ จัดการ Options</h2>
+    <h2>จัดการ Options</h2>
     <a href="{{ url_for('add_option') }}" class="btn btn-success mb-3">+ เพิ่ม Option</a>
     <table class="table table-bordered">
         <thead>
@@ -23,12 +34,108 @@
                 <td>{{ opt.unit_name }}</td>
                 <td>
                     <a href="{{ url_for('edit_option', option_id=opt.id) }}" class="btn btn-warning btn-sm">แก้ไข</a>
-                    <a href="{{ url_for('delete_option', option_id=opt.id) }}" class="btn btn-danger btn-sm"
-                        onclick="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบ?');">ลบ</a>
+
+                    <form id="delete-option-{{ opt.id }}" action="{{ url_for('delete_option', option_id=opt.id) }}"
+                        method="POST" style="display:inline">
+                        <button type="button" class="btn btn-danger btn-sm"
+                            onclick="confirmDeleteOption('{{ opt.id }}', '{{ opt.name }}')">ลบ</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // --- 1. จัดการแสดง Flash Messages อัตโนมัติ (Success / Error / Warning) ---
+        const flashData = document.querySelectorAll('.flash-data');
+        flashData.forEach(function (el) {
+            const category = el.getAttribute('data-category');
+            const message = el.getAttribute('data-message');
+
+            let swalIcon = "info";
+            let swalTitle = "แจ้งเตือน";
+
+            if (category === 'success') {
+                swalIcon = "success";
+                swalTitle = "สำเร็จ!";
+            } else if (category === 'danger' || category === 'error') {
+                swalIcon = "error";
+                swalTitle = "เกิดข้อผิดพลาด";
+            } else if (category === 'warning') {
+                swalIcon = "warning";
+                swalTitle = "ไม่สามารถดำเนินการได้";
+            }
+
+            Swal.fire({
+                icon: swalIcon,
+                title: swalTitle,
+                text: message,
+                confirmButtonColor: "#6366f1",
+                confirmButtonText: "ตกลง",
+                showClass: { popup: 'animate__animated animate__fadeInDown' },
+                hideClass: { popup: 'animate__animated animate__fadeOutUp' }
+            });
+        });
+    });
+
+    // --- 2. ฟังก์ชันยืนยันการลบแบบสวยงาม ---
+    function confirmDeleteOption(id, name) {
+        Swal.fire({
+            title: 'ยืนยันการลบ?',
+            html: `คุณกำลังจะลบรายการ: <b class="text-danger">"${name}"</b><br><br>` +
+                `<div class="text-start bg-light p-3 rounded-3 border">` +
+                `<small class="fw-bold text-secondary">หมายเหตุ:</small><br>` +
+                `<small class="text-muted">• การลบจะทำให้รายการนี้ไม่ปรากฏในการเลือกใหม่<br>` +
+                `• ระบบจะตรวจสอบก่อนว่ามีสัญญาที่ยังใช้งานอยู่หรือไม่<br>` +
+                `• ข้อมูลในสัญญาเก่าที่จบไปแล้วจะยังคงอยู่ปกติ</small></div>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'ยืนยันการลบ',
+            cancelButtonText: 'ยกเลิก',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // แสดง Loading ระหว่างรอส่งฟอร์ม
+                Swal.fire({
+                    title: 'กำลังดำเนินการ...',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+                document.getElementById('delete-option-' + id).submit();
+            }
+        });
+    }
+</script>
+
+<style>
+    /* ปรับแต่งตารางเพิ่มเติม */
+    .table th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+
+    .table td {
+        transition: all 0.2s ease;
+    }
+
+    tr:hover td {
+        background-color: #f8fafc;
+    }
+
+    .btn-group .btn {
+        border-radius: 8px !important;
+        margin: 0 2px;
+    }
+
+    .card {
+        border: none !important;
+    }
+</style>
 {% endblock %}

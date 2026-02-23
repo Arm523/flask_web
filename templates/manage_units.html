@@ -2,16 +2,15 @@
 {% block content %}
 <title>Settings - จัดการห้องพัก</title>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-{% if messages %}
-{% for category, message in messages %}
-<div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-    {{ message }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+<div id="flash-messages">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <span class="flash-data" data-category="{{ category }}" data-message="{{ message }}"></span>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
 </div>
-{% endfor %}
-{% endif %}
-{% endwith %}
 
 <div class="container mt-4">
     <h2 class="m2-4">จัดการห้องพัก</h2>
@@ -115,9 +114,11 @@
                         <td>
                             <a href="{{ url_for('edit_unit', unit_id=room.unit_id) }}"
                                 class="btn btn-sm btn-warning">แก้ไข</a>
-                            <form action="{{ url_for('delete_unit', unit_id=room.unit_id) }}" method="POST"
-                                style="display:inline" onsubmit="return confirm('ยืนยันการลบห้องนี้?');">
-                                <button type="submit" class="btn btn-sm btn-danger">ลบ</button>
+                            <form id="delete-form-{{ room.unit_id }}"
+                                action="{{ url_for('delete_unit', unit_id=room.unit_id) }}" method="POST"
+                                style="display:inline">
+                                <button type="button" class="btn btn-sm btn-danger"
+                                    onclick="confirmDelete('{{ room.unit_id }}', 'ห้อง {{ room.name }}')">ลบ</button>
                             </form>
                         </td>
                     </tr>
@@ -147,9 +148,12 @@
                         <td>
                             <a href="{{ url_for('edit_type', type_id=t.type_id) }}"
                                 class="btn btn-sm btn-warning">แก้ไข</a>
-                            <form action="{{ url_for('delete_type', type_id=t.type_id) }}" method="POST"
-                                style="display:inline" onsubmit="return confirm('ยืนยันการลบประเภทห้อง?');">
-                                <button type="submit" class="btn btn-sm btn-danger">ลบ</button>
+
+                            <form id="delete-type-{{ t.type_id }}"
+                                action="{{ url_for('delete_type', type_id=t.type_id) }}" method="POST"
+                                style="display:inline">
+                                <button type="button" class="btn btn-sm btn-danger"
+                                    onclick="confirmDeleteType('{{ t.type_id }}', '{{ t.n_type }}')">ลบ</button>
                             </form>
                         </td>
                     </tr>
@@ -159,5 +163,77 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // 1. จัดการแสดง Flash Messages (Success / Danger / Warning)
+        const flashData = document.querySelectorAll('.flash-data');
+        flashData.forEach(function (el) {
+            const category = el.getAttribute('data-category');
+            const message = el.getAttribute('data-message');
+
+            let swalIcon = "info";
+            let swalTitle = "แจ้งเตือน";
+
+            if (category === 'success') {
+                swalIcon = "success";
+                swalTitle = "สำเร็จ!";
+            } else if (category === 'danger' || category === 'error') {
+                swalIcon = "error";
+                swalTitle = "เกิดข้อผิดพลาด";
+            } else if (category === 'warning') {
+                swalIcon = "warning";
+                swalTitle = "คำเตือน";
+            }
+
+            Swal.fire({
+                icon: swalIcon,
+                title: swalTitle,
+                text: message,
+                confirmButtonColor: "#6366f1",
+                confirmButtonText: "ตกลง"
+            });
+        });
+    });
+
+    function confirmDelete(id, name) {
+        Swal.fire({
+            title: 'ยืนยันการลบ?',
+            text: "คุณแน่ใจหรือไม่ที่จะลบ " + name,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ใช่, ลบเลย!',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('delete-form-' + id).submit();
+            }
+        });
+    }
+
+    // --- 3. ฟังก์ชันยืนยันการลบประเภทห้อง ---
+    function confirmDeleteType(id, name) {
+        Swal.fire({
+            title: 'ยืนยันการลบประเภทห้อง?',
+            html: `คุณกำลังจะลบประเภทห้อง: <b>${name}</b> นี้ <br><br>` +
+                `<p style="text-align: center; font-size: 0.9em; color: #555;">` +
+                `<b>หมายเหตุ:</b> การลบประเภทห้องจะไม่สามารถกู้คืนได้ และอาจส่งผลกระทบต่อห้องที่ใช้ประเภทนี้ ` +
+                `ห้องที่ใช้ประเภทนี้จะยังคงอยู่แต่จะ<b>ไม่มีประเภทห้อง</b>` +
+                `</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'ลบออก',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('delete-type-' + id).submit();
+            }
+        });
+    }
+</script>
+
 
 {% endblock %}

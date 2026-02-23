@@ -3,56 +3,118 @@
 {% block title %}แก้ไขข้อมูลห้องพัก - {{ room.name }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>แก้ไขข้อมูลห้องพัก: {{ room.name }}</h2>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow border-0">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center p-3">
+                    <h5 class="mb-0"><i class="fas fa-door-open me-2"></i>แก้ไขข้อมูลห้อง: {{ room.name }}</h5>
+                    <span class="badge bg-info text-dark">ID: {{ room.unit_id }}</span>
+                </div>
 
-    <form method="POST" action="{{ url_for('edit_unit', unit_id=room.unit_id) }}"
-        class="row g-3 border rounded p-4 shadow">
-        <div class="col-md-3">
-            <label for="name" class="form-label">ชื่อห้อง</label>
-            <input type="text" class="form-control" id="name" name="name" value="{{ room.name }}" required>
+                <div class="card-body p-4">
+                    <form method="POST" action="{{ url_for('edit_unit', unit_id=room.unit_id) }}">
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">ชื่อห้อง / เลขที่ห้อง</label>
+                                <input type="text" class="form-control shadow-sm" name="name" value="{{ room.name }}"
+                                    required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">ตึก</label>
+                                <input type="number" class="form-control shadow-sm" name="building"
+                                    value="{{ room.building }}" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">ชั้น</label>
+                                <input type="number" class="form-control shadow-sm" name="floor"
+                                    value="{{ room.floor }}" required>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">โซน</label>
+                                <input type="text" class="form-control shadow-sm" name="zone" value="{{ room.zone }}">
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">ประเภทห้องพัก</label>
+                                <select class="form-select shadow-sm" name="type_unit_id" required>
+                                    {% for t in types %}
+                                    <option value="{{ t.type_id }}" {% if t.type_id==room.type_unit_id %}selected{%
+                                        endif %}>
+                                        {{ t.n_type }} - ({{ t.price_monthly }} บาท/เดือน)
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <div class="col-12">
+                                <label class="form-label fw-bold mb-3"><i
+                                        class="fas fa-info-circle me-1"></i>สถานะและการจัดการ</label>
+
+                                {% if room.status_id == 1 %}
+                                <div
+                                    class="alert alert-success border-0 shadow-sm d-flex justify-content-between align-items-center py-3">
+                                    <div>
+                                        <h6 class="mb-1 fw-bold text-success">สถานะปัจจุบัน: ว่าง (Available)</h6>
+                                        <small class="text-muted">หากต้องการปิดซ่อมแซม ให้สับสวิตช์ด้านขวา</small>
+                                    </div>
+                                    <div class="form-check form-switch fs-3">
+                                        <input class="form-check-input" type="checkbox" name="mark_as_broken"
+                                            id="flexSwitchCheckDefault">
+                                        <label class="form-check-label fs-6 fw-bold"
+                                            for="flexSwitchCheckDefault">ปิดปรับปรุง</label>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="status_id" value="1">
+
+                                {% elif room.status_id == 4 %}
+                                <div
+                                    class="alert alert-warning border-0 shadow-sm d-flex justify-content-between align-items-center py-3">
+                                    <div>
+                                        <h6 class="mb-1 fw-bold text-warning">สถานะปัจจุบัน: ปิดปรับปรุง (Under
+                                            Maintenance)</h6>
+                                        <small
+                                            class="text-muted">คลิกปุ่มเพื่อเปิดให้ห้องกลับมาว่างพร้อมเช่าอีกครั้ง</small>
+                                    </div>
+                                    <button type="submit" name="status_id" value="1"
+                                        class="btn btn-success fw-bold px-4">
+                                        <i class="fas fa-check-circle me-1"></i>เปิดใช้งานปกติ
+                                    </button>
+                                </div>
+                                <input type="hidden" name="status_id" value="4">
+
+                                {% else %}
+                                <div class="alert alert-secondary border-0 shadow-sm py-3">
+                                    <h6 class="mb-1 fw-bold text-dark">
+                                        สถานะปัจจุบัน:
+                                        {% if room.status_id == 2 %}มีผู้เช่า
+                                        {% elif room.status_id == 3 %}ทำสัญญาเช่า
+                                        {% elif room.status_id == 5 %}รอการชำระ
+                                        {% elif room.status_id == 6 %}ตรวจสอบห้อง / เคลียร์บิล
+                                        {% elif room.status_id == 7 %}แจ้งย้ายออก
+                                        {% endif %}
+                                    </h6>
+                                    <p class="mb-0 small text-danger"><i
+                                            class="fas fa-exclamation-triangle me-1"></i>ไม่สามารถแก้ไขสถานะได้จากหน้านี้
+                                        กรุณาจัดการผ่านระบบเช่า/ย้ายออก</p>
+                                </div>
+                                <input type="hidden" name="status_id" value="{{ room.status_id }}">
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mt-5 pt-3 border-top text-end">
+                            <a href="{{ url_for('manage_units') }}"
+                                class="btn btn-outline-secondary px-4 me-2">ยกเลิก</a>
+                            <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">บันทึกการแก้ไข</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-
-        <div class="col-md-2">
-            <label for="building" class="form-label">ตึก</label>
-            <input type="number" class="form-control" id="building" name="building" value="{{ room.building }}" required>
-        </div>
-
-        <div class="col-md-2">
-            <label for="floor" class="form-label">ชั้น</label>
-            <input type="number" class="form-control" id="floor" name="floor" value="{{ room.floor }}" required>
-        </div>
-
-        <div class="col-md-3">
-            <label for="zone" class="form-label">โซน</label>
-            <input type="text" class="form-control" id="zone" name="zone" value="{{ room.zone }}">
-        </div>
-
-        <div class="col-md-4">
-            <label for="type_unit_id" class="form-label">ประเภทห้อง</label>
-            <select class="form-select" id="type_unit_id" name="type_unit_id" required>
-                {% for t in types %}
-                <option value="{{ t.type_id }}" {% if t.type_id==room.type_unit_id %}selected{% endif %}>
-                    {{ t.n_type }} ({{ t.price }} บาท)
-                </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <label for="status_id" class="form-label">สถานะ</label>
-        <select class="form-select" id="status_id" name="status_id" required>
-            {% for s in statuses %}
-            <option value="{{ s.status_id }}" {% if room.status_id==s.status_id %}selected{% endif %}>
-                {{ s.name_status }}
-            </option>
-            {% endfor %}
-        </select>
-
-
-        <div class="col-md-12 text-end">
-            <a href="{{ url_for('manage_units') }}" class="btn btn-secondary">ยกเลิก</a>
-            <button type="submit" class="btn btn-primary">บันทึกการแก้ไข</button>
-        </div>
-    </form>
+    </div>
 </div>
 {% endblock %}

@@ -685,7 +685,7 @@ def create_monthly_invoice(unit_id, billing_month, created_by):
             SELECT o.*
             FROM `option` o
             JOIN contract_option co ON o.id = co.option_id
-            WHERE co.contract_id=%s
+            WHERE co.contract_id=%s AND o.is_deleted = 0
         """, (contract_id,))
         options = cursor.fetchall()
 
