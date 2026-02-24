@@ -3,35 +3,77 @@
 {% block title %}แก้ไข Option{% endblock %}
 
 {% block content %}
+<style>
+    /* ปรับแต่ง Input เมื่อ Focus ให้ดูนุ่มนวลขึ้น */
+    .form-control:focus,
+    .input-group-text:focus {
+        border-color: #1c5fa7;
+        box-shadow: 0 0 0 0.25 dark;
+    }
+
+    .card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .btn {
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(28, 95, 167, 0.3);
+    }
+</style>
+
 <div class="container mt-5">
-    <h2 class="mb-4">แก้ไขข้อมูล Option</h2>
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white py-3">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-pencil-square me-2"></i>แก้ไขข้อมูล Option
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST">
+                        <div class="mb-4">
+                            <label for="name" class="form-label fw-bold text-secondary">ชื่อ Option</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="bi bi-tag"></i></span>
+                                <input type="text" class="form-control" id="name" name="name"
+                                    placeholder="เช่น ค่าส่วนกลาง, ส่วนลดพิเศษ" required value="{{ option.name }}">
+                            </div>
+                        </div>
 
-    <form method="POST">
-        <div class="mb-3">
-            <label for="name" class="form-label">ชื่อ Option</label>
-            <input type="text" class="form-control" id="name" name="name" required value="{{ option.name }}">
+                        <div class="mb-4">
+                            <label for="price" class="form-label fw-bold text-secondary">ราคา (บาท)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="bi bi-currency-dollar"></i></span>
+                                <input type="number" class="form-control" id="price" name="price" step="0.01"
+                                    placeholder="0.00" required value="{{ option.price }}">
+                            </div>
+                            <div class="form-text">ระบุเป็นตัวเลขเท่านั้น (รองรับทศนิยม 2 ตำแหน่ง)</div>
+                        </div>
+
+                        <hr class="my-4 text-muted opacity-25">
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('manage_option') }}" class="btn btn-light px-4">
+                                <i class="bi bi-x-circle me-1"></i>ยกเลิก
+                            </a>
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="bi bi-check-circle me-1"></i>บันทึกการเปลี่ยนแปลง
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <p class="text-center mt-3 text-muted small">ID อ้างอิงระบบ: #{{ option.id if option.id else 'N/A' }}</p>
         </div>
-
-        <div class="mb-3">
-            <label for="price" class="form-label">ราคา</label>
-            <input type="number" class="form-control" id="price" name="price" step="0.01" required value="{{ option.price }}">
-        </div>
-
-        <div class="mb-3">
-            <label for="option_type" class="form-label">ประเภท Option</label>
-            <select class="form-select" id="option_type" name="option_type" required>
-                <option value="fixed" {% if option.option_type == 'fixed' %}selected{% endif %}>Fixed</option>
-                <option value="discount" {% if option.option_type == 'discount' %}selected{% endif %}>Discount</option>
-            </select>
-        </div>
-
-        <div class="mb-3">
-            <label for="unit_name" class="form-label">หน่วย (unit)</label>
-            <input type="text" class="form-control" id="unit_name" name="unit_name" value="{{ option.unit_name }}">
-        </div>
-
-        <button type="submit" class="btn btn-primary">บันทึกการเปลี่ยนแปลง</button>
-        <a href="{{ url_for('manage_option') }}" class="btn btn-secondary">ยกเลิก</a>
-    </form>
+    </div>
 </div>
+
 {% endblock %}

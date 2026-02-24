@@ -1,30 +1,78 @@
 {% extends "layout.html" %}
-{% block title %}เพิ่ม Option{% endblock %}
+{% block title %}เพิ่ม Option ใหม่{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <h2>เพิ่ม Option ใหม่</h2>
-    <form method="POST">
-        <div class="mb-3">
-            <label for="name" class="form-label">ชื่อ Option</label>
-            <input type="text" class="form-control" id="name" name="name" required>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-lg border-0 rounded-4">
+                <div class="card-header bg-success text-white py-3">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-plus-circle-fill me-2"></i>สร้างรายการ Option ใหม่
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST">
+                        <div class="mb-4">
+                            <label for="name" class="form-label fw-bold text-secondary">ชื่อรายการ</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-tag text-success"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" id="name" name="name" 
+                                       placeholder="เช่น ค่าทำความสะอาด, ค่าที่จอดรถ" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="price" class="form-label fw-bold text-secondary">ราคาที่ต้องการจัดเก็บ (บาท)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-currency-bitcoin text-success"></i></span>
+                                <input type="number" step="0.01" class="form-control border-start-0 ps-0" 
+                                       id="price" name="price" placeholder="0.00" required>
+                            </div>
+                            <div class="form-text">กรุณากรอกเฉพาะตัวเลขทศนิยม (เช่น 500.00)</div>
+                        </div>
+
+                        <hr class="my-4 opacity-25">
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('manage_option') }}" class="btn btn-light px-4 border">
+                                <i class="bi bi-arrow-left me-1"></i>กลับหน้าหลัก
+                            </a>
+                            <button type="submit" class="btn btn-success px-5 shadow-sm">
+                                <i class="bi bi-save me-1"></i>บันทึกข้อมูล
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4 text-muted">
+                <small><i class="bi bi-info-circle me-1"></i>รายการที่เพิ่มจะไปปรากฏในหน้าจัดการสัญญาทันที</small>
+            </div>
         </div>
-        <div class="mb-3">
-            <label for="price" class="form-label">ราคา</label>
-            <input type="number" step="0.01" class="form-control" id="price" name="price" required>
-        </div>
-        <div class="mb-3">
-            <label for="option_type" class="form-label">ประเภท</label>
-            <select class="form-select" id="option_type" name="option_type" required>
-                <option value="fixed">Fixed</option>
-                <option value="discount">Discount</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="unit_name" class="form-label">หน่วย</label>
-            <input type="text" class="form-control" id="unit_name" name="unit_name" required>
-        </div>
-        <button type="submit" class="btn btn-primary">บันทึก</button>
-        <a href="{{ url_for('manage_option') }}" class="btn btn-secondary">ยกเลิก</a>
-    </form>
+    </div>
 </div>
+
+<style>
+    /* ปรับแต่งสไตล์ให้ดูพรีเมียม */
+    .card {
+        transition: transform 0.3s ease;
+    }
+    .input-group-text {
+        border-radius: 8px 0 0 8px !important;
+    }
+    .form-control {
+        border-radius: 0 8px 8px 0 !important;
+        padding: 10px 15px;
+    }
+    .form-control:focus {
+        box-shadow: none;
+        border-color: #dee2e6;
+    }
+    .btn {
+        border-radius: 10px;
+        font-weight: 500;
+        padding: 10px 20px;
+    }
+</style>
 {% endblock %}

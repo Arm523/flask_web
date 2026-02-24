@@ -12,95 +12,116 @@
     {% endwith %}
 </div>
 
-<div class="container mt-4">
-    <h2>จัดการ Options</h2>
-    <a href="{{ url_for('add_option') }}" class="btn btn-success mb-3">+ เพิ่ม Option</a>
-    <table class="table table-bordered">
-        <thead>
-            <tr>
-                <th>ชื่อ Option</th>
-                <th>ราคา</th>
-                <th>ประเภท</th>
-                <th>หน่วย</th>
-                <th>จัดการ</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for opt in options %}
-            <tr>
-                <td>{{ opt.name }}</td>
-                <td>{{ opt.price }}</td>
-                <td>{{ opt.option_type }}</td>
-                <td>{{ opt.unit_name }}</td>
-                <td>
-                    <a href="{{ url_for('edit_option', option_id=opt.id) }}" class="btn btn-warning btn-sm">แก้ไข</a>
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark mb-1">จัดการ Options</h2>
+            <p class="text-muted small mb-0">จัดการรายการค่าใช้จ่ายเพิ่มเติมและส่วนลดต่างๆ ในระบบ</p>
+        </div>
+        <a href="{{ url_for('add_option') }}" class="btn btn-primary px-4 shadow-sm border-0 rounded-3">
+            <i class="bi bi-plus-lg me-2"></i>เพิ่ม Option ใหม่
+        </a>
+    </div>
 
-                    <form id="delete-option-{{ opt.id }}" action="{{ url_for('delete_option', option_id=opt.id) }}"
-                        method="POST" style="display:inline">
-                        <button type="button" class="btn btn-danger btn-sm"
-                            onclick="confirmDeleteOption('{{ opt.id }}', '{{ opt.name }}')">ลบ</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4 py-3 text-secondary">ชื่อรายการ (Option Name)</th>
+                        <th class="py-3 text-secondary text-center">ราคา (Price)</th>
+                        <th class="pe-4 py-3 text-secondary text-end">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for opt in options %}
+                    <tr>
+                        <td class="ps-4 py-3">
+                            <div class="d-flex align-items-center">
+                                <div class="icon-box me-3 bg-primary-subtle text-primary rounded-3 d-flex align-items-center justify-content-center"
+                                    style="width: 40px; height: 40px;">
+                                    <i class="bi bi-tag-fill"></i>
+                                </div>
+                                <span class="fw-bold text-dark">{{ opt.name }}</span>
+                            </div>
+                        </td>
+                        <td class="py-3 text-center">
+                            <span class="badge bg-success-subtle text-success fs-6 fw-medium px-3 py-2 rounded-pill">
+                                {{ "{:,.2f}".format(opt.price) }} บาท
+                            </span>
+                        </td>
+                        <td class="pe-4 py-3 text-end">
+                            <div class="btn-group">
+                                <a href="{{ url_for('edit_option', option_id=opt.id) }}"
+                                    class="btn btn-outline-warning border-0 rounded-3 me-1 px-3"
+                                    data-bs-toggle="tooltip" title="แก้ไข">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+
+                                <form id="delete-option-{{ opt.id }}"
+                                    action="{{ url_for('delete_option', option_id=opt.id) }}" method="POST"
+                                    style="display:inline">
+                                    <button type="button" class="btn btn-outline-danger border-0 rounded-3 px-3"
+                                        onclick="confirmDeleteOption('{{ opt.id }}', '{{ opt.name }}')"
+                                        data-bs-toggle="tooltip" title="ลบ">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-3 opacity-25"></i>
+                            ไม่พบข้อมูล Option ในขณะนี้
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // --- 1. จัดการแสดง Flash Messages อัตโนมัติ (Success / Error / Warning) ---
+        // Init Tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+
+        // --- 1. Flash Messages ---
         const flashData = document.querySelectorAll('.flash-data');
         flashData.forEach(function (el) {
             const category = el.getAttribute('data-category');
             const message = el.getAttribute('data-message');
-
-            let swalIcon = "info";
-            let swalTitle = "แจ้งเตือน";
-
-            if (category === 'success') {
-                swalIcon = "success";
-                swalTitle = "สำเร็จ!";
-            } else if (category === 'danger' || category === 'error') {
-                swalIcon = "error";
-                swalTitle = "เกิดข้อผิดพลาด";
-            } else if (category === 'warning') {
-                swalIcon = "warning";
-                swalTitle = "ไม่สามารถดำเนินการได้";
-            }
+            let swalIcon = category === 'success' ? 'success' : (category === 'danger' || category === 'error' ? 'error' : 'info');
 
             Swal.fire({
                 icon: swalIcon,
-                title: swalTitle,
+                title: category === 'success' ? 'สำเร็จ!' : 'แจ้งเตือน',
                 text: message,
-                confirmButtonColor: "#6366f1",
-                confirmButtonText: "ตกลง",
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' }
+                confirmButtonColor: "#1c5fa7"
             });
         });
     });
 
-    // --- 2. ฟังก์ชันยืนยันการลบแบบสวยงาม ---
+    // --- 2. Confirm Delete ---
     function confirmDeleteOption(id, name) {
         Swal.fire({
             title: 'ยืนยันการลบ?',
-            html: `คุณกำลังจะลบรายการ: <b class="text-danger">"${name}"</b><br><br>` +
-                `<div class="text-start bg-light p-3 rounded-3 border">` +
-                `<small class="fw-bold text-secondary">หมายเหตุ:</small><br>` +
-                `<small class="text-muted">• การลบจะทำให้รายการนี้ไม่ปรากฏในการเลือกใหม่<br>` +
-                `• ระบบจะตรวจสอบก่อนว่ามีสัญญาที่ยังใช้งานอยู่หรือไม่<br>` +
-                `• ข้อมูลในสัญญาเก่าที่จบไปแล้วจะยังคงอยู่ปกติ</small></div>`,
+            html: `คุณกำลังจะลบรายการ: <b class="text-danger">"${name}"</b>`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#ef4444',
             cancelButtonColor: '#64748b',
-            confirmButtonText: 'ยืนยันการลบ',
+            confirmButtonText: 'ใช่, ลบทันที',
             cancelButtonText: 'ยกเลิก',
             reverseButtons: true
         }).then((result) => {
             if (result.isConfirmed) {
-                // แสดง Loading ระหว่างรอส่งฟอร์ม
                 Swal.fire({
                     title: 'กำลังดำเนินการ...',
                     allowOutsideClick: false,
@@ -113,29 +134,50 @@
 </script>
 
 <style>
-    /* ปรับแต่งตารางเพิ่มเติม */
-    .table th {
-        font-weight: 600;
-        text-transform: uppercase;
-        font-size: 0.85rem;
-        letter-spacing: 0.5px;
-    }
-
-    .table td {
-        transition: all 0.2s ease;
-    }
-
-    tr:hover td {
+    /* ปรับแต่ง UI ให้ดูพรีเมียม */
+    body {
         background-color: #f8fafc;
     }
 
-    .btn-group .btn {
-        border-radius: 8px !important;
-        margin: 0 2px;
+    .card {
+        border-radius: 1rem !important;
     }
 
-    .card {
-        border: none !important;
+    .table thead th {
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        border-bottom: 1px solid #edf2f7;
+    }
+
+    .table tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f1f5f9 !important;
+        transform: scale(1.002);
+    }
+
+    .icon-box {
+        background-color: #e0e7ff !important;
+        color: #4338ca !important;
+    }
+
+    .badge {
+        font-size: 0.9rem !important;
+    }
+
+    .btn-outline-warning:hover {
+        background-color: #fffbeb;
+        color: #d97706;
+        border-color: #fbbf24;
+    }
+
+    .btn-outline-danger:hover {
+        background-color: #fef2f2;
+        color: #dc2626;
+        border-color: #fecaca;
     }
 </style>
 {% endblock %}

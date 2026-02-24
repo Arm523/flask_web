@@ -130,7 +130,7 @@
         </p>
 
         <!-- ตารางค่าเช่า + ค่าน้ำ ค่าไฟ -->
-        {% if invoice.rent_amount is none or invoice.premiums is none or invoice.electricity_total is none or invoice.water_total is none %}
+        {% if  invoice.invoice_type != 'extra_bill' %}
         <h4 style="margin-bottom: 3px;">ค่าเช่าห้อง / ค่าน้ำ-ไฟ:</h4>
         <table>
             <tr>

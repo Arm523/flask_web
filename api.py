@@ -21,7 +21,7 @@ def status_pie():
             s.name_status,
             COUNT(u.unit_id) AS count
         FROM s_unit s
-        LEFT JOIN unit u ON u.status_id = s.status_id
+        LEFT JOIN unit u ON u.status_id = s.status_id AND u.is_deleted = 0
         GROUP BY s.status_id, s.name_status
         ORDER BY s.status_id
     """)
@@ -139,6 +139,7 @@ def payment_summary():
         WHERE i.status NOT IN ('paid', 'cancelled') 
           AND YEAR(i.billing_period_start) = %s 
           AND MONTH(i.billing_period_start) = %s
+          AND u.is_deleted = 0
         ORDER BY u.name ASC
     """
     cursor.execute(query_unpaid, (year, month))
@@ -190,39 +191,40 @@ def get_recent_transactions():
 
 @api.route('/api/finance_data')
 def get_finance_data():
-    year = request.args.get('year')
-    month = request.args.get('month')
-    
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    try:
+        year = request.args.get('year', datetime.now().year)
+        month = request.args.get('month', 'all')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    # กรองตามปีเสมอ
-    query = "SELECT type, SUM(amount) as total FROM transactions WHERE YEAR(transaction_date) = %s"
-    params = [year]
+        query = "SELECT type, SUM(amount) as total FROM transactions WHERE YEAR(transaction_date) = %s"
+        params = [year]
 
-    # ถ้าไม่ได้เลือก "ทุกเดือน" ให้กรองเดือนเพิ่ม
-    if month != 'all':
-        query += " AND MONTH(transaction_date) = %s"
-        params.append(month)
+        if month != 'all' and month != 'undefined':
+            query += " AND MONTH(transaction_date) = %s"
+            params.append(month)
 
-    query += " GROUP BY type"
-    
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    
-    # ดึงค่าออกมา (เช็คตัวสะกด 'income' และ 'expense' ให้ตรงกับใน DB)
-    income = next((float(r['total']) for r in rows if r['type'] == 'income'), 0.0)
-    expense = next((float(r['total']) for r in rows if r['type'] == 'expense'), 0.0)
-    profit = income - expense
-    if income > 0:
-        margin = ((income - expense) / income) * 100
-    else:
-        margin = 0.0
+        query += " GROUP BY type"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        # ดึงค่าแบบรวดเร็ว
+        totals = {r['type']: float(r['total']) for r in rows}
+        income = totals.get('income', 0.0)
+        expense = totals.get('expense', 0.0)
+        profit = income - expense
+        margin = (profit / income * 100) if income > 0 else 0.0
 
-    return jsonify({
-        "total_income": income,
-        "total_expense": expense,
-        "profit": profit,
-        "margin": round(margin, 2)
-    })
+        return jsonify({
+            "total_income": income,
+            "total_expense": expense,
+            "profit": profit,
+            "margin": round(margin, 2)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 

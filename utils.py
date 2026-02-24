@@ -40,7 +40,7 @@ def save_config(path, data):
 def get_now(mocked=False):
     if mocked:
         # return datetime.now()
-        return datetime(2026, 6,2, 9, 0, 0)
+        return datetime(2026, 7,2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -568,6 +568,7 @@ def create_monthly_invoice(unit_id, billing_month, created_by):
             JOIN unit u ON c.room_id = u.unit_id  
             WHERE c.room_id=%s AND c.status IN (2,3)
             AND u.status_id != 7
+            AND u.is_deleted = 0
             ORDER BY c.contract_start DESC
             LIMIT 1
         """, (unit_id,))
@@ -1033,8 +1034,12 @@ def auto_read_all_systems():
             reg_key = 'total_kWh' if m_type == 'electricity' else 'total_m3'
             is_water = (m_type == 'water')
 
-            # 1. ดึงมิเตอร์ที่ active ทั้งหมด
-            cursor.execute(f"SELECT * FROM {table} WHERE status = 'active'")
+            query = f"""
+                SELECT m.* FROM {table} m
+                JOIN unit u ON m.unit_id = u.unit_id
+                WHERE m.status = 'active' AND u.is_deleted = 0
+            """
+            cursor.execute(query)
             meters = cursor.fetchall()
 
             for m in meters:

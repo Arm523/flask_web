@@ -145,15 +145,19 @@
                   background-color: #fff5f5;
                   color: #e53e3e;
                   border: 1px solid #feb2b2;
-                ">Admin</span>
+                ">ผู้ดูแลระบบ</span>
               {% elif user.role_id == 2 %}
               <span class="badge bg-label-success badge-role" style="
                   background-color: #f0fff4;
                   color: #38a169;
                   border: 1px solid #9ae6b4;
-                ">Staff</span>
+                ">ผู้จัดการ</span>
               {% else %}
-              <span class="badge bg-light text-dark badge-role">ทั่วไป</span>
+              <span class="badge bg-label-success badge-role" style="
+                  background-color: #f0fff4;
+                  color: #ff770f;
+                  border: 1px solid #ffab5d;
+                ">พนักงาน</span>
               {% endif %}
             </td>
             <td class="text-end">

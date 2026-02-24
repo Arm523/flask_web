@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, send_file, abort, jsonify, current_app
+from functools import wraps
 from datetime import datetime, date, timedelta
 import os
 from werkzeug.utils import secure_filename
@@ -61,6 +62,24 @@ def job_invoices_task():
     print(f"Generating Invoices for: {now()}")
     auto_generate_all_invoices(mocked_date=today)
 
+def role_required(allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # 1. เช็คว่าล็อกอินหรือยัง
+            if 'user' not in session:
+                return redirect(url_for('login'))
+            
+            # 2. ดึง Role จาก session มาเช็ค (ต้องตรงกับชื่อใน List ที่ส่งมา)
+            user_role = session.get('role') 
+            if user_role not in allowed_roles:
+                flash("คุณไม่มีสิทธิ์เข้าถึงหน้านี้", "danger")
+                return redirect(url_for('dashboard')) # หรือหน้าอื่นที่เข้าได้
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(job_read_meters_task, 'cron', hour=0, minute=0, id='read_meter_hourly')
 scheduler.add_job(job_invoices_task, 'cron', hour=0, minute=0, id='create_invoices')
@@ -84,13 +103,10 @@ def inject_user():
 
 @app.before_request
 def check_session_timeout():
-    # รายชื่อ function (endpoint) ที่ไม่ต้องเช็ค session (เช่นหน้า login หรือไฟล์ css/js)
     allowed_endpoints = ['login', 'static'] 
     
     if request.endpoint not in allowed_endpoints:
-        # ถ้าไม่มี 'user' ใน session แปลว่าหลุดหรือยังไม่ได้ login
         if 'user' not in session:
-            # ไม่ต้องทำ flash ตรงนี้ก็ได้ครับ เดี๋ยววน loop
             return redirect(url_for('login'))
 
 # ---------------------- AUTH ----------------------
@@ -107,7 +123,12 @@ def login():
 
         cursor = conn.cursor(dictionary=True)
         # ค้นหาด้วย username เพียงอย่างเดียว
-        query = "SELECT * FROM user WHERE username = %s"
+        query = """
+            SELECT u.*, r.r_name 
+            FROM user u 
+            JOIN role r ON u.role_id = r.role_id 
+            WHERE u.username = %s
+        """
         cursor.execute(query, (username,))
         user = cursor.fetchone()
         cursor.close()
@@ -121,8 +142,10 @@ def login():
                 'username': user['username'],
                 'gender': user['gender'],
                 'role_id': user['role_id'],
+                'role_name': user['r_name'],
                 'profile_img': user.get('profile_img')
             }
+            session['role'] = user['r_name']
             flash('เข้าสู่ระบบสำเร็จ', 'success')
             return redirect(url_for('dashboard'))
         else:
@@ -147,8 +170,6 @@ def add_user():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # 2. ดึงข้อมูล Role มาเตรียมไว้ก่อนเสมอ (ไม่ว่าจะ GET หรือ POST)
-    # วิธีนี้จะทำให้ Cursor ไม่หลุด และหน้าเว็บมีข้อมูล Role ตลอดเวลา
     cursor.execute("SELECT * FROM role")
     roles = cursor.fetchall()
 
@@ -165,17 +186,33 @@ def add_user():
         role_id = request.form['role_id']
         start_card = request.form['start_card']
         end_card = request.form['end_card']
-
         hashed_password = generate_password_hash(password)
 
         try:
             query = """INSERT INTO user 
-                       (username, password, fname, lname, id_card, gender, email, tel, role_id, start_card, end_card) 
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                       (username, password, fname, lname, id_card, gender, email, tel, role_id, start_card, end_card,created_at) 
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())"""
             cursor.execute(query, (username, hashed_password, fname, lname, id_card, gender, email, tel, role_id, start_card, end_card))
+            new_user_id = cursor.lastrowid
+
+            print(f"New user created with ID: {new_user_id}")
+
+            file_profile = request.files.get('profile_img')
+            if file_profile and file_profile.filename != '':
+                ext = file_profile.filename.rsplit('.', 1)[1].lower()
+                filename = f"profile_{new_user_id}.{ext}" 
+                file_profile.save(os.path.join(UPLOAD_PROFILE, filename))
+                cursor.execute("UPDATE user SET profile_img=%s WHERE user_id=%s", (filename, new_user_id))
+
+            file_id_card = request.files.get('id_card_file')
+            if file_id_card and file_id_card.filename != '':
+                ext = file_id_card.filename.rsplit('.', 1)[1].lower()
+                filename = f"idcard_{new_user_id}.{ext}" 
+                file_id_card.save(os.path.join(UPLOAD_ID_CARD, filename))
+                cursor.execute("UPDATE user SET id_card_file=%s WHERE user_id=%s", (filename, new_user_id))
+
             conn.commit()
             
-            # ปิดการเชื่อมต่อก่อน Redirect (ป้องกันไฟล์ค้าง)
             cursor.close()
             conn.close()
             
@@ -441,25 +478,22 @@ def view_slip(filename):
 
 @app.route('/update_invoice', methods=['POST'])
 def update_invoice():
-    invoice_id = request.form.get('invoice_id')
-    billing_period_start = request.form.get('billing_period_start')
-    billing_period_end = request.form.get('billing_period_end')
-    due_date = request.form.get('due_date')
+    # รับค่าและจัดการประเภทข้อมูลให้เรียบร้อยก่อนเข้า DB
+    d = request.form
+    invoice_id = d.get('invoice_id')
+    prev_elec = float(d.get('prev_elec') or 0)
+    curr_elec = float(d.get('curr_elec') or 0)
+    prev_water = float(d.get('prev_water') or 0)
+    curr_water = float(d.get('curr_water') or 0)
     
-    # รับค่ามิเตอร์จากฟอร์ม
-    prev_elec = float(request.form.get('prev_elec') or 0)
-    curr_elec = float(request.form.get('curr_elec') or 0)
-    prev_water = float(request.form.get('prev_water') or 0)
-    curr_water = float(request.form.get('curr_water') or 0)
+    elec_usage = curr_elec - prev_elec
+    water_usage = curr_water - prev_water
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # --- STEP 1: อัปเดตข้อมูลมิเตอร์และวันที่ลง DB ---
-        elec_usage = curr_elec - prev_elec
-        water_usage = curr_water - prev_water
-
+        # 1. อัปเดตข้อมูลมิเตอร์และใช้งานเบื้องต้น
         sql_update = """
             UPDATE invoices 
             SET billing_period_start = %s, billing_period_end = %s, due_date = %s,
@@ -469,27 +503,38 @@ def update_invoice():
             WHERE invoice_id = %s
         """
         cursor.execute(sql_update, (
-            billing_period_start, billing_period_end, due_date,
+            d.get('billing_period_start'), d.get('billing_period_end'), d.get('due_date'),
             prev_elec, curr_elec, prev_water, curr_water, 
             elec_usage, water_usage, invoice_id
         ))
 
+        # 2. ยุบรวมฟังก์ชันคำนวณ (ถ้าเป็นไปได้ให้ทำใน SQL เลย)
+        # ตัวอย่างการคำนวณยอดรวมใหม่ใน Query เดียว (ลดการเรียก refresh_invoice_total)
+        # หมายเหตุ: คุณต้องปรับสูตรตามราคาต่อหน่วยของคุณ
+        sql_refresh = """
+            UPDATE invoices i
+            JOIN (
+                SELECT invoice_id, 
+                (electricity_usage * electricity_rate) + (water_usage * water_rate) + room_price as new_total
+                FROM invoices WHERE invoice_id = %s
+            ) as calc ON i.invoice_id = calc.invoice_id
+            SET i.total_amount = calc.new_total
+        """
+        # cursor.execute(sql_refresh, (invoice_id,)) # เปิดใช้งานหากสูตรคำนวณไม่ซับซ้อนเกินไป
+
+        # หากยังจำเป็นต้องใช้ฟังก์ชันเดิม ให้ตรวจสอบว่าข้างในไม่มีการเปิด/ปิด connection ใหม่
         update_late_penalty(cursor, invoice_id)
-
         refresh_invoice_total(cursor, invoice_id)
-
         check_meter_save(cursor, invoice_id)
 
         conn.commit()
         
-        cursor.execute("SELECT total_amount FROM invoices WHERE invoice_id = %s", (invoice_id,))
-        final_total = cursor.fetchone()['total_amount']
-        
-        flash(f"อัปเดตและคำนวณยอดบิล #{invoice_id} ใหม่สำเร็จ ยอดรวมสุทธิ: {final_total:,.2f}", "success")
+        # ใช้ยอดที่อัปเดตไปแล้วมาโชว์ (ไม่ต้อง SELECT ใหม่ถ้า refresh ทำงานถูกต้อง)
+        flash(f"อัปเดตบิล #{invoice_id} สำเร็จ", "success")
 
     except Exception as e:
         if conn: conn.rollback()
-        flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+        flash(f"Error: {str(e)}", "danger")
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
@@ -2115,26 +2160,27 @@ def manage_option():
 
 @app.route('/edit_option/<int:option_id>', methods=['GET', 'POST'])
 def edit_option(option_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+        
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
-        name = request.form['name']
-        price = request.form['price']
-        option_type = request.form['option_type']
-        unit_name = request.form['unit_name']
+        name = request.form.get('name')
+        price = request.form.get('price')
 
         cursor.execute("""
             UPDATE `option`
-            SET name = %s, price = %s, option_type = %s, unit_name = %s
+            SET name = %s, price = %s
             WHERE id = %s
-        """, (name, price, option_type, unit_name, option_id))
+        """, (name, price, option_id))
         
         conn.commit()
         cursor.close()
         conn.close()
 
-        flash('อัปเดต Option สำเร็จแล้ว', 'success')
+        flash('อัปเดตข้อมูลสำเร็จแล้ว', 'success')
         return redirect(url_for('manage_option'))
 
     cursor.execute("SELECT * FROM `option` WHERE id = %s", (option_id,))
@@ -2142,60 +2188,80 @@ def edit_option(option_id):
     cursor.close()
     conn.close()
 
+    if not option:
+        flash('ไม่พบข้อมูล Option นี้', 'danger')
+        return redirect(url_for('manage_option'))
+
     return render_template('edit_option.html', option=option)
 
 @app.route('/add_option', methods=['GET', 'POST'])
 def add_option():
     if request.method == 'POST':
-        name = request.form['name']
-        price = request.form['price']
-        option_type = request.form['option_type']
-        unit_name = request.form['unit_name']
-
+        name = request.form.get('name')
+        price = request.form.get('price')
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO `option` (name, price, option_type, unit_name)
-            VALUES (%s, %s, %s, %s)
-        """, (name, price, option_type, unit_name))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('เพิ่ม Option เรียบร้อยแล้ว', 'success')
-        return redirect(url_for('manage_option'))
+        
+        try:
+            cursor.execute("""
+                INSERT INTO `option` (name, price)
+                VALUES (%s, %s)
+            """, (name, price))
+            
+            conn.commit()
+            flash('เพิ่ม Option เรียบร้อยแล้ว', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'เกิดข้อผิดพลาด: {str(e)}', 'danger')
+        finally:
+            cursor.close()
+            conn.close()
 
+        return redirect(url_for('manage_option'))
     return render_template('add_option.html')
 
 @app.route('/delete_option/<int:option_id>', methods=['POST'])
 def delete_option(option_id):
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(dictionary=True, buffered=True) 
     
     try:
-        query_check = """
-            SELECT co.id 
-            FROM contract_option co
-            JOIN contracts c ON co.contract_id = c.contract_id
-            WHERE co.option_id = %s 
-            AND c.status IN (1, 2, 3, 4)
-        """
-        cursor.execute(query_check, (option_id,))
-        active_usage = cursor.fetchone()
+        # 1. เช็คว่า "เคยมีการนำไปผูกกับสัญญาไหนบ้างไหม" (ไม่สน status)
+        cursor.execute("SELECT id FROM contract_option WHERE option_id = %s LIMIT 1", (option_id,))
+        has_history = cursor.fetchone()
 
-        if active_usage:
-            flash('ไม่สามารถลบได้: มีสัญญาที่สถานะ (ร่าง/รอชำระ/ใช้งาน/ใกล้หมดอายุ) กำลังใช้งาน Option นี้อยู่', 'warning')
+        if not has_history:
+            # --- กรณีที่ 1: ไม่เคยถูกนำไปใช้เลย -> ลบทิ้งจริงๆ (Hard Delete) ---
+            cursor.execute("DELETE FROM `option` WHERE id = %s", (option_id,))
+            conn.commit()
+            flash('ลบข้อมูล Option ออกจากระบบเรียบร้อยแล้ว (Hard Delete)', 'success')
             return redirect(url_for('manage_option'))
 
-        cursor.execute("UPDATE `option` SET is_deleted = 1 WHERE id = %s", (option_id,))
-        conn.commit()
-        flash('ลบ Option เรียบร้อยแล้ว', 'success')
+        # 2. ถ้าเคยถูกใช้ (มีประวัติ) -> ต้องเช็คต่อว่า "ตอนนี้ยังติดสัญญาที่ใช้งานอยู่ไหม"
+        query_active = """
+            SELECT co.id FROM contract_option co
+            INNER JOIN contracts c ON co.contract_id = c.contract_id
+            WHERE co.option_id = %s AND c.status IN (1, 2, 3, 4)
+            LIMIT 1
+        """
+        cursor.execute(query_active, (option_id,))
+        is_still_using = cursor.fetchone()
+
+        if is_still_using:
+            # --- กรณีที่ 2: ยังติดสัญญาที่ใช้งานอยู่ (1-4) -> ห้ามลบ ---
+            flash('ไม่สามารถลบได้: Option นี้กำลังถูกใช้งานในสัญญาปัจจุบัน', 'warning')
+        else:
+            # --- กรณีที่ 3: เคยใช้ แต่สัญญาเหล่านั้นจบหมดแล้ว (5-7) -> ซ่อนไว้ (Soft Delete) ---
+            cursor.execute("UPDATE `option` SET is_deleted = 1 WHERE id = %s", (option_id,))
+            conn.commit()
+            flash('ซ่อน Option เรียบร้อยแล้ว (ข้อมูลในสัญญาเก่าจะยังคงอยู่)', 'success')
 
     except Exception as e:
-        conn.rollback()
-        flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
+        if conn: conn.rollback()
+        flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
     finally:
-        cursor.close()
-        conn.close()
+        if cursor: cursor.close()
+        if conn: conn.close()
         
     return redirect(url_for('manage_option'))
 
@@ -2827,37 +2893,24 @@ def leases_uploaded():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Mapping สถานะ
-    status_map = {
-        1: "Draft สัญญาที่ร่างอยู่",
-        2: "Pending Payment สัญญาที่รอการชำระเงิน",
-        3: "Active สัญญาที่กำลังใช้งาน",
-        4: "Expiring Soon สัญญาที่ใกล้หมดอายุ",
-        5: "Expired สัญญาที่หมดอายุ",
-        6: "Moved Out สัญญาที่ย้ายออก",
-        7: "Cancelled สัญญาที่ยกเลิก"
-    }
+    # --- 1. ดึงรายชื่อห้องทั้งหมดเพื่อไปทำ Dropdown ---
+    cursor.execute("SELECT unit_id, name FROM unit WHERE is_deleted = 0 ORDER BY name")
+    all_units = cursor.fetchall()
 
-    status_icons = {
-        1: "draft.png",
-        2: "pending.png",
-        3: "planning-activities.png",
-        4: "time.png",
-        5: "expired.png",
-        6: "moving.png",
-        7: "cancel-order.png"
-    }
+    # Mapping สถานะ (เหมือนเดิม)
+    status_map = { 1: "Draft...", 2: "Pending...", 3: "Active...", 4: "Expiring...", 5: "Expired", 6: "Moved Out", 7: "Cancelled" }
+    status_icons = { 1: "draft.png", 2: "pending.png", 3: "planning-activities.png", 4: "time.png", 5: "expired.png", 6: "moving.png", 7: "cancel-order.png" }
 
-    # รับค่าจาก query string
     selected_status = request.args.get('status')
     try:
         selected_status = int(selected_status) if selected_status else None
     except ValueError:
         selected_status = None
 
-    room_filter = request.args.get('room', '').strip()
+    # เปลี่ยนจาก room_filter เป็น selected_room (รับเป็น unit_id)
+    selected_room = request.args.get('room') 
 
-    # เริ่มต้น query และ parameters
+    # 2. ปรับ SQL หลัก
     sql = """
         SELECT c.contract_id, c.contract_start, c.contract_end, c.status, c.contracts_file,
                CONCAT(t.fname, ' ', t.lname) AS tenant_name,
@@ -2865,24 +2918,24 @@ def leases_uploaded():
         FROM contracts c
         JOIN tenants t ON c.tenant_id = t.tenant_id
         JOIN unit u ON c.room_id = u.unit_id
+        WHERE 1=1
     """
     params = []
 
-    # เพิ่มเงื่อนไขถ้ามีการกรอง
     if selected_status is not None:
         sql += " AND c.status = %s"
         params.append(selected_status)
 
-    if room_filter:
-        sql += " AND u.name LIKE %s"
-        params.append(f"%{room_filter}%")
+    if selected_room:
+        # กรองด้วย unit_id แทนการ LIKE ชื่อห้องเพื่อความแม่นยำ
+        sql += " AND u.unit_id = %s"
+        params.append(selected_room)
 
     sql += " ORDER BY c.contract_start DESC"
-
     cursor.execute(sql, params)
     contracts = cursor.fetchall()
 
-    # สร้าง leases
+    # (การจัดการวนลูปสร้าง list leases เหมือนเดิม...)
     leases = []
     for c in contracts:
         leases.append({
@@ -2902,7 +2955,8 @@ def leases_uploaded():
         status_map=status_map,
         status_icons=status_icons,
         selected_status=selected_status,
-        room_filter=room_filter
+        selected_room=selected_room, # ส่งค่าที่เลือกกลับไป
+        all_units=all_units           # ส่งรายชื่อห้องทั้งหมดไป
     )
 
 @app.route('/delete_contract/<int:contract_id>', methods=['POST'])
@@ -2953,7 +3007,7 @@ def user_settings():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT user_id, username, fname, lname, email, gender, profile_img, role_id, tel FROM user ORDER BY user_id")
+            "SELECT user_id, username, fname, lname, email, gender, profile_img, role_id, tel FROM user WHERE is_deleted = 0 ORDER BY user_id")
         users = cursor.fetchall()
     except Exception as e:
         flash(f"เกิดข้อผิดพลาด: {e}", 'danger')
@@ -3039,46 +3093,107 @@ def edit_user(user_id):
 
 @app.route('/remove_user_file/<file_type>/<int:user_id>', methods=['POST'])
 def remove_user_file(file_type, user_id):
-    # (โค้ดข้างในเหมือนเดิม แต่เปลี่ยนชื่อฟังก์ชันให้สื่อความหมาย)
-    # file_type จะรับค่าเป็น 'profile' หรือ 'idcard' ตามที่เราส่งมาจาก JS
-    
     if 'user' not in session:
-        return jsonify({"status": "error", "message": "เซสชั่นหมดอายุ"}), 401
+        return jsonify({'status': 'error', 'message': 'กรุณาเข้าสู่ระบบ'}), 401
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        # กำหนดชื่อ Column ให้ตรงกับประเภทไฟล์
-        column = 'profile_img' if file_type == 'profile' else 'id_card_file'
-        
-        # ดึงชื่อไฟล์เพื่อลบใน Server
-        cursor.execute(f"SELECT {column} FROM user WHERE user_id = %s", (user_id,))
-        row = cursor.fetchone()
-        
-        if row and row[column]:
-            old_file = row[column]
-            # ลบไฟล์ในเครื่อง (เช็ค Path ให้ดีนะครับ)
-            file_path = os.path.join(app.root_path, 'static', 'profile_user', old_file)
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            
-            # ลบค่าใน Database
-            cursor.execute(f"UPDATE user SET {column} = NULL WHERE user_id = %s", (user_id,))
-            conn.commit()
-            
-            return jsonify({"status": "success", "message": "ลบไฟล์ออกจากระบบแล้ว"}), 200
-            
-        return jsonify({"status": "error", "message": "ไม่พบไฟล์ที่ต้องการลบ"}), 404
+        # 1. ดึงชื่อไฟล์เดิมจาก DB มาดูก่อนว่าไฟล์ชื่ออะไร
+        cursor.execute("SELECT profile_img, id_card_file FROM user WHERE user_id = %s", (user_id,))
+        user_data = cursor.fetchone()
+
+        if not user_data:
+            return jsonify({'status': 'error', 'message': 'ไม่พบข้อมูลผู้ใช้'}), 404
+
+        filename_to_delete = None
+        folder_path = ""
+        column_name = ""
+
+        # 2. ตรวจสอบประเภทที่จะลบ และตั้งค่า Path
+        if file_type == 'profile':
+            filename_to_delete = user_data['profile_img']
+            folder_path = UPLOAD_PROFILE  # ตรวจสอบว่าตัวแปรนี้เก็บ path เช่น 'static/profile_user'
+            column_name = "profile_img"
+        elif file_type == 'idcard':
+            filename_to_delete = user_data['id_card_file']
+            folder_path = UPLOAD_ID_CARD
+            column_name = "id_card_file"
+        else:
+            return jsonify({'status': 'error', 'message': 'ประเภทไฟล์ไม่ถูกต้อง'}), 400
+
+        # 3. ลบไฟล์จริงออกจาก Server (ถ้ามีไฟล์อยู่จริง)
+        if filename_to_delete:
+            full_path = os.path.join(folder_path, filename_to_delete)
+            if os.path.exists(full_path):
+                os.remove(full_path) # ลบไฟล์ออกจากโฟลเดอร์
+
+        # 4. อัปเดต Database ให้ค่านั้นเป็น NULL
+        query = f"UPDATE user SET {column_name} = NULL WHERE user_id = %s"
+        cursor.execute(query, (user_id,))
+        conn.commit()
+
+        return jsonify({'status': 'success', 'message': 'ลบไฟล์ออกจากระบบเรียบร้อยแล้ว'})
+
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': f'เกิดข้อผิดพลาด: {str(e)}'}), 500
     finally:
         cursor.close()
         conn.close()
 
 @app.route("/delete_user/<int:user_id>")
 def delete_user(user_id):
-    flash(f'ลบ user_id: {user_id} (ยังไม่ทำ)', 'warning')
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT profile_img, id_card_file FROM user WHERE user_id = %s", (user_id,))
+        user_files = cursor.fetchone()
+
+        if not user_files:
+            flash('ไม่พบผู้ใช้งานนี้ในระบบ', 'danger')
+            return redirect(url_for('user_settings'))
+
+        # 2. ลองสั่ง DELETE เลย
+        try:
+            cursor.execute("DELETE FROM user WHERE user_id = %s", (user_id,))
+            conn.commit()
+            
+            # --- ถ้าทำงานมาถึงตรงนี้ แปลว่าลบจาก DB สำเร็จ (ไม่มีคนดึง FK ไว้) ---
+            # ตามไปลบไฟล์ใน Server
+            for key in ['profile_img', 'id_card_file']:
+                if user_files[key]:
+                    folder = UPLOAD_PROFILE if key == 'profile_img' else UPLOAD_ID_CARD
+                    path = os.path.join(folder, user_files[key])
+                    if os.path.exists(path):
+                        os.remove(path)
+            
+            flash(f'ลบผู้ใช้งาน ID: {user_id} และไฟล์ทั้งหมดเรียบร้อยแล้ว', 'success')
+
+        except Exception as db_err:
+            # 3. ถ้าลบไม่ได้เพราะติด Foreign Key (Error 1451)
+            conn.rollback() 
+            # ตรวจสอบว่าเป็น Error เกี่ยวกับ Foreign Key หรือไม่ (MySQL Code 1451)
+            if "1451" in str(db_err):
+                cursor.execute("UPDATE user SET is_deleted = 1 WHERE user_id = %s", (user_id,))
+                conn.commit()
+                flash(f'User นี้มีข้อมูลผูกไว้กับระบบอื่น จึงเปลี่ยนเป็น "ปิดการใช้งาน" แทนการลบถาวร', 'info')
+            else:
+                # Error อื่นๆ ที่ไม่ใช่ FK
+                flash(f'ไม่สามารถลบได้: {str(db_err)}', 'danger')
+
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาด: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
     return redirect(url_for('user_settings'))
 
 
