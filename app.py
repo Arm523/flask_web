@@ -62,6 +62,34 @@ def job_invoices_task():
     print(f"Generating Invoices for: {now()}")
     auto_generate_all_invoices(mocked_date=today)
 
+def log_activity(category, action, description):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            response = f(*args, **kwargs)
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                current_user_id = session.get('user', {}).get('user_id')
+                
+                add_audit_log(
+                    cursor, 
+                    category, 
+                    action, 
+                    description, 
+                    user_id=current_user_id
+                )
+                
+                conn.commit()
+                cursor.close()
+                conn.close()
+            except Exception as e:
+                print(f"Log Error: {e}")
+                
+            return response
+        return decorated_function
+    return decorator
+
 @app.before_request
 def check_session_timeout():
     allowed_endpoints = ['login', 'static'] 
@@ -119,10 +147,6 @@ def login():
         password = request.form['password'].strip()
 
         conn = get_db_connection()
-        if conn is None:
-            flash('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่ภายหลัง', 'danger')
-            return render_template('login.html')
-
         cursor = conn.cursor(dictionary=True)
         # ค้นหาด้วย username เพียงอย่างเดียว
         query = """
@@ -209,8 +233,14 @@ def add_user():
                 file_id_card.save(os.path.join(UPLOAD_ID_CARD, filename))
                 cursor.execute("UPDATE user SET id_card_file=%s WHERE user_id=%s", (filename, new_user_id))
 
+            add_audit_log(
+                cursor, 
+                'USER', 
+                'CREATE', 
+                f'เพิ่มผู้ใช้งานใหม่ ID: {new_user_id}', 
+                session.get('user', {}).get('user_id')
+            )
             conn.commit()
-            
             cursor.close()
             conn.close()
             
@@ -488,7 +518,6 @@ def update_invoice():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # 1. อัปเดตข้อมูลมิเตอร์และใช้งานเบื้องต้น
         sql_update = """
             UPDATE invoices 
             SET billing_period_start = %s, billing_period_end = %s, due_date = %s,
@@ -503,9 +532,6 @@ def update_invoice():
             elec_usage, water_usage, invoice_id
         ))
 
-        # 2. ยุบรวมฟังก์ชันคำนวณ (ถ้าเป็นไปได้ให้ทำใน SQL เลย)
-        # ตัวอย่างการคำนวณยอดรวมใหม่ใน Query เดียว (ลดการเรียก refresh_invoice_total)
-        # หมายเหตุ: คุณต้องปรับสูตรตามราคาต่อหน่วยของคุณ
         sql_refresh = """
             UPDATE invoices i
             JOIN (
@@ -515,7 +541,7 @@ def update_invoice():
             ) as calc ON i.invoice_id = calc.invoice_id
             SET i.total_amount = calc.new_total
         """
-        # cursor.execute(sql_refresh, (invoice_id,)) # เปิดใช้งานหากสูตรคำนวณไม่ซับซ้อนเกินไป
+        cursor.execute(sql_refresh, (invoice_id,)) # เปิดใช้งานหากสูตรคำนวณไม่ซับซ้อนเกินไป
 
         # หากยังจำเป็นต้องใช้ฟังก์ชันเดิม ให้ตรวจสอบว่าข้างในไม่มีการเปิด/ปิด connection ใหม่
         update_late_penalty(cursor, invoice_id)
@@ -557,9 +583,7 @@ def contract_options(contract_id):
 
         if request.method == 'POST':
             new_option_ids = request.form.getlist('options')
-            
-            # --- อัปเดตเฉพาะตารางความสัมพันธ์ของสัญญาเท่านั้น ---
-            # ลบ Option เดิมออก
+
             cursor.execute("DELETE FROM contract_option WHERE contract_id = %s", (contract_id,))
             
             # เพิ่ม Option ใหม่เข้าไปในสัญญา
@@ -569,7 +593,6 @@ def contract_options(contract_id):
 
             # หมายเหตุ: เราตัดส่วนวนลูป active_invoices และ refresh_invoice_total ออกทั้งหมด
             # เพื่อไม่ให้ไปกระทบกับบิลปัจจุบัน
-            
             conn.commit()
             flash("อัปเดต Option ในสัญญาเรียบร้อยแล้ว (จะมีผลในบิลรอบถัดไป)", "success")
             return redirect(url_for('contract_options', contract_id=contract_id))
@@ -602,6 +625,13 @@ def cancel_move_out(unit_id):
     cursor = conn.cursor(dictionary=True)
 
     try:
+        add_audit_log(
+            cursor, 
+            'UNIT', 
+            'Notice to Moveout', 
+            f'เเจ้งย้ายออกห้อง ID : {unit_id}', 
+            session.get('user', {}).get('user_id')
+        )
         # ล้างวันแจ้งย้ายออก และอัปเดตสถานะห้อง
         cursor.execute("""
             UPDATE unit u
@@ -654,8 +684,17 @@ def add_invoice_item(invoice_id):
         # 2. เรียกใช้ฟังก์ชันกลาง (คำนวณใหม่ยกชุด)
         refresh_invoice_total(cursor, invoice_id)
 
+        add_audit_log(
+            cursor, 
+            'INVOICE', 
+            'INSERT', 
+            f'เพิ่มรายการบิล ID: {invoice_id}', 
+            session.get('user', {}).get('user_id')
+        )
+
         conn.commit()
         conn.close()
+        
         flash('เพิ่มรายการและคำนวณยอดบิลใหม่แล้ว', 'success')
         return redirect(url_for('add_invoice_item', invoice_id=invoice_id))
 
@@ -677,6 +716,14 @@ def delete_invoice_item(item_id, invoice_id):
 
         # 2. เรียกฟังก์ชันกลาง (ยอดเงินจะหักออกหรือบวกกลับตามเงื่อนไขเป๊ะๆ)
         refresh_invoice_total(cursor, invoice_id)
+
+        add_audit_log(
+            cursor, 
+            'USER', 
+            'DELETE', 
+            f'ลบรายการบิล ID: {item_id}', 
+            session.get('user', {}).get('user_id')
+        )
 
         conn.commit()
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.method == 'POST':
@@ -1063,6 +1110,14 @@ def renew_contracts(contract_id):
                 created_by=session.get('user_id')
             )
 
+            add_audit_log(
+                cursor, 
+                'CONTRACT', 
+                'RENEW', 
+                f'ต่อสัญญาเวอร์ชัน {current_v} สำเร็จ', 
+                session.get('user', {}).get('user_id')
+            )
+
             flash(f"✅ ต่อสัญญาเวอร์ชัน {current_v} เรียบร้อย", "success")
         except Exception as e:
             conn.rollback()
@@ -1111,6 +1166,15 @@ def add_tenant(unit_id):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (fname, lname, id_card, gender, bd, age, phone, address, email))
             conn.commit()
+
+            add_audit_log(
+                cursor, 
+                'TENANTS', 
+                'INSERT', 
+                f'เพิ่มผู้เช่าใหม่', 
+                session.get('user', {}).get('user_id')
+            )
+
             flash('เพิ่มผู้เช่าสำเร็จ', 'success')
             return redirect(url_for('create_lease', unit_id=unit_id))
         except Exception as e:
@@ -1190,6 +1254,14 @@ def cancel_invoice(invoice_id):
             SET status = 'cancelled' 
             WHERE invoice_id = %s AND status IN ('draft', 'overdue')
         """, (invoice_id,))
+
+        add_audit_log(
+            cursor, 
+            'INVOICE', 
+            'CANCEL', 
+            f'ยกเลิกบิล ID: {invoice_id}', 
+            session.get('user', {}).get('user_id')
+        )
         
         conn.commit()
         return jsonify({"status": "success", "message": "ยกเลิกบิลเรียบร้อยแล้ว"})
@@ -1222,8 +1294,6 @@ def create_invoice_extra_bill(contract_id):
         try:
             due_date = request.form.get('due_date')
             total_amount = float(request.form.get('total_amount', 0))
-            remark = request.form.get('remark', '')
-            items_desc = request.form.getlist('items[][description]') # ถ้าใช้ name="items[]..."
             
             if conn.in_transaction:
                 conn.rollback()
@@ -1270,6 +1340,14 @@ def create_invoice_extra_bill(contract_id):
                 cursor.execute(insert_item_query, (new_invoice_id, desc, amount, 1, amount, item_type))
                 item_index += 1
 
+            add_audit_log(
+                cursor, 
+                'INVOICE', 
+                'INSERT', 
+                f'สร้างบิลใหม่พิเศษ ID: {new_invoice_id}', 
+                session.get('user', {}).get('user_id')
+            )
+
             conn.commit()
             return redirect(url_for('unit_pending', contract_id=contract_id))
 
@@ -1294,8 +1372,6 @@ def manual_create_bill(contract_id):
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # --- ส่วนที่ 1: ดึงข้อมูลเตรียมไว้ ---
-        # ดึงข้อมูลสัญญาและห้อง
         cursor.execute("""
             SELECT c.*, u.unit_id, u.name 
             FROM contracts c 
@@ -1306,8 +1382,7 @@ def manual_create_bill(contract_id):
 
         if not contract:
             return "ไม่พบสัญญา", 404
-
-        # ดึงอัตราค่าบริการจาก Settings
+        
         e_rate = float(get_setting('electricity_rate', 7))
         w_rate = float(get_setting('water_rate', 18))
 
@@ -1371,6 +1446,14 @@ def manual_create_bill(contract_id):
                 c_w,w_total,others,reimburse,total_amount                  
             ))
             invoice_id = cursor.lastrowid
+
+            add_audit_log(
+                cursor, 
+                'INVOICE', 
+                'CREATE', 
+                f'สร้างใบแจ้งหนี้ ID: {invoice_id}', 
+                session.get('user', {}).get('user_id')
+            )
 
             # 2.2 บันทึกลงตาราง invoice_items (วนลูปจากที่ส่งมาจากหน้าเว็บ)
             sql_item = """
@@ -1504,6 +1587,14 @@ def create_lease(unit_id):
             """, (tenant_id, unit_id, lease_start, lease_end,
                 room_price, premium, 1, amount, pay_date, electricity_start, water_start))
             contract_id = cursor.lastrowid
+
+            add_audit_log(
+                cursor, 
+                'CONTRACT', 
+                'CREATE', 
+                f'สร้างสัญญา ID: {contract_id}', 
+                session.get('user', {}).get('user_id')
+            )
 
             # ✅ บันทึก options ลง contract_option + รวมราคา
             if selected_options:
@@ -1669,6 +1760,15 @@ def daily_booking(unit_id):
             rent_total, rent_total,
             session['user']['user_id']
         ))
+        daily_booking_id = cursor.lastrowid
+
+        add_audit_log(
+            cursor, 
+            'DAILY_BOOKING', 
+            'INSERT', 
+            f'จองรายวันบิล ID: {daily_booking_id}', 
+            session.get('user', {}).get('user_id')
+        )
 
         # ✅ อัปเดตสถานะห้องเป็น “มีรอการชําระ” (status_id = 5)
         cursor.execute("""
@@ -1710,6 +1810,14 @@ def cancel_daily_booking(invoice_id):
     cursor.execute(
         "UPDATE unit SET status_id = 1 WHERE unit_id = %s", (unit_id,))
     conn.commit()
+
+    add_audit_log(
+        cursor, 
+        'DAILY_BOOKING', 
+        'DELETE', 
+        f'ยกเลิกการจองรายวัน ID: {invoice_id}', 
+        session.get('user', {}).get('user_id')
+    )
 
     cursor.close()
     conn.close()
@@ -1798,6 +1906,14 @@ def confirm_checkout(unit_id):
             WHERE unit_id = %s
         """, (unit_id,))
 
+        add_audit_log(
+            cursor, 
+            'UNIT', 
+            'CHECKOUT', 
+            f'ยืนยันคืนห้อง ID: {unit_id}', 
+            session.get('user', {}).get('user_id')
+        )
+
         # บันทึกข้อมูลทั้งหมดลง Database
         conn.commit()
         flash(f"✅ ดำเนินการคืนห้อง {unit_id} เรียบร้อยแล้ว สถานะห้องเป็น 'ว่าง'", "success")
@@ -1816,13 +1932,9 @@ def confirm_checkout(unit_id):
 
 # ---------------------- BUSINESS INFORMATION ----------------------
 @app.route('/business', methods=['GET', 'POST'])
+@role_required(['admin','manager'])
 def business():
-
     conn = get_db_connection()
-    if conn is None:
-        flash('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่ภายหลัง', 'danger')
-        return render_template('business.html', business_name='', tax_id='', address='', phone='', email='')
-
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
@@ -1835,7 +1947,6 @@ def business():
         bank_account_no = request.form.get('bank_account_no')
         account_name = request.form.get('account_name')
         promptpay_id = request.form.get('promptpay_id', '').replace('-', '').strip()
-
 
         update_query = """
             UPDATE business
@@ -1875,12 +1986,7 @@ def business():
 # ---------------------- MANAGEMENT UNITS ----------------------
 @app.route('/manage_units', methods=['GET', 'POST'])
 def manage_units():
-
     conn = get_db_connection()
-    if conn is None:
-        flash('ไม่สามารถเชื่อมต่อฐานข้อมูลได้', 'danger')
-        return render_template('manage_units.html', units=[], types=[])
-
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
@@ -1941,6 +2047,16 @@ def add_type():
             'INSERT INTO type (n_type, price_monthly, price_daily) VALUES (%s, %s, %s)',
             (n_type, price_monthly, price_daily)
         )
+        new_id = cursor.lastrowid
+
+        add_audit_log(
+            cursor, 
+            'TYPE', 
+            'INSERT', 
+            f'เพิ่มประเภทห้อง ID: {new_id}', 
+            session.get('user', {}).get('user_id')
+        )
+
         conn.commit()
         flash("เพิ่มประเภทห้องสำเร็จ", "success")
     except Exception as e:
@@ -1982,6 +2098,15 @@ def delete_unit(unit_id):
             return redirect(url_for('manage_units'))
         
         cursor.execute("UPDATE unit SET is_deleted = 1 WHERE unit_id=%s", (unit_id,))
+
+        add_audit_log(
+            cursor, 
+            'UNIT', 
+            'DELETE', 
+            f'ลบห้อง ID: {unit_id}', 
+            session.get('user', {}).get('user_id')
+        )
+        
         conn.commit()
         flash("ย้ายห้องไปที่ถังขยะเรียบร้อยแล้ว (Soft Delete)", "success")
         
@@ -2043,6 +2168,14 @@ def edit_unit(unit_id):
                     name=%s, building=%s, floor=%s, zone=%s, type_unit_id=%s, status_id=%s
                 WHERE unit_id=%s
             """, (name, building, floor, zone, type_unit_id, final_status_id, unit_id))
+
+            add_audit_log(
+                cursor, 
+                'UNIT', 
+                'UPDATE', 
+                f'แก้ไขห้อง ID: {unit_id}', 
+                session.get('user', {}).get('user_id')
+            )
             conn.commit()
             flash(f'แก้ไขข้อมูลห้อง {name} สำเร็จ', 'success')
             return redirect(url_for('manage_units'))
@@ -2068,6 +2201,13 @@ def delete_type(type_id):
     cursor = conn.cursor()
     try:
         cursor.execute("UPDATE type SET is_deleted = 1 WHERE type_id=%s", (type_id,))
+        add_audit_log(
+            cursor, 
+            'TYPE', 
+            'DELETE', 
+            f'ลบประเภทห้อง ID: {type_id}', 
+            session.get('user', {}).get('user_id')
+        )
         conn.commit()
         
         flash("ลบประเภทห้องเรียบร้อย! อย่าลืมไปเปลี่ยน 'ประเภทห้อง' ในหน้าจัดการห้องพักให้เป็นประเภทอื่นด้วยนะครับ", "success")
@@ -2097,6 +2237,14 @@ def edit_type(type_id):
                     n_type=%s, price_monthly=%s, price_daily=%s
                 WHERE type_id=%s
             """, (n_type, price_monthly, price_daily, type_id))
+
+            add_audit_log(
+                cursor, 
+                'TYPE', 
+                'UPDATE', 
+                f'แก้ไขประเภทห้อง ID: {type_id}', 
+                session.get('user', {}).get('user_id')
+            )
             conn.commit()
             flash('แก้ไขประเภทห้องเรียบร้อยแล้ว', 'success')
             return redirect(url_for('manage_units'))
@@ -2139,6 +2287,14 @@ def edit_option(option_id):
             SET name = %s, price = %s
             WHERE id = %s
         """, (name, price, option_id))
+
+        add_audit_log(
+            cursor, 
+            'OPTION', 
+            'UPDATE', 
+            f'แก้ไข Option ID: {option_id}', 
+            session.get('user', {}).get('user_id')
+        )
         
         conn.commit()
         cursor.close()
@@ -2171,6 +2327,14 @@ def add_option():
                 INSERT INTO `option` (name, price)
                 VALUES (%s, %s)
             """, (name, price))
+            option_id = cursor.lastrowid
+            add_audit_log(
+                cursor, 
+                'OPTION', 
+                'INSERT', 
+                f'เพิ่ม Option ID: {option_id}', 
+                session.get('user', {}).get('user_id')
+            )
             
             conn.commit()
             flash('เพิ่ม Option เรียบร้อยแล้ว', 'success')
@@ -2197,6 +2361,13 @@ def delete_option(option_id):
         if not has_history:
             # --- กรณีที่ 1: ไม่เคยถูกนำไปใช้เลย -> ลบทิ้งจริงๆ (Hard Delete) ---
             cursor.execute("DELETE FROM `option` WHERE id = %s", (option_id,))
+            add_audit_log(
+                cursor, 
+                'OPTION', 
+                'DELETE', 
+                f'ลบ Option ID: {option_id}', 
+                session.get('user', {}).get('user_id')
+            )
             conn.commit()
             flash('ลบข้อมูล Option ออกจากระบบเรียบร้อยแล้ว (Hard Delete)', 'success')
             return redirect(url_for('manage_option'))
@@ -2306,10 +2477,7 @@ def manage_meter():
                     last_bill = cursor.fetchone()
                     
                     last_bill_val = float(last_bill['current_electricity_reading'] or 0) if last_bill else 0
-                    print(last_bill_val)
                     pending_calc = float(old_elec_last or 0) - last_bill_val
-                    print(old_elec_last)
-                    print(pending_calc)
 
                     # 2. บันทึกประวัติไฟฟ้า
                     cursor.execute("""
@@ -2333,6 +2501,15 @@ def manage_meter():
                             electricity_start = 0
                         WHERE unit_id=%s
                     """, (unit_id,))
+
+                    add_audit_log(
+                        cursor, 
+                        'METER', 
+                        'UPDATE', 
+                        f'อัปเดตเปลี่ยนมิเตอร์ไฟฟ้าเลย ID: {m_exists["id"]}', 
+                        session.get('user', {}).get('user_id')
+                    )
+
                 else:
                     # 4. อัปเดตข้อมูลทั่วไป (ไม่รีเซ็ตเลขจด)
                     cursor.execute("""
@@ -2343,9 +2520,16 @@ def manage_meter():
                             updated_at=%s, updated_by=%s 
                         WHERE id=%s
                     """, elec_data + (m_exists['id'],))
+
+                    add_audit_log(
+                        cursor, 
+                        'METER', 
+                        'UPDATE', 
+                        f'อัปเดตมิเตอร์ไฟฟ้า ID: {m_exists["id"]}', 
+                        session.get('user', {}).get('user_id')
+                    )
                 
                 m_id = m_exists['id'] # เก็บ ID เดิมไว้ผูกกับ unit
-
             else:
                 # เคส B: เพิ่มมิเตอร์ครั้งแรก (Insert)
                 cursor.execute("""
@@ -2354,6 +2538,14 @@ def manage_meter():
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, elec_data + (unit_id,))
                 m_id = cursor.lastrowid # เก็บ ID ใหม่ไว้ผูกกับ unit
+
+                add_audit_log(
+                    cursor, 
+                    'METER', 
+                    'INSERT', 
+                    f'เพิ่มมิเตอร์ไฟฟ้า ID: {m_exists["id"]}', 
+                    session.get('user', {}).get('user_id')
+                )
 
             # --- จัดการน้ำ ---
             cursor.execute("SELECT id, serial_meter FROM meter_water WHERE unit_id=%s LIMIT 1", (unit_id,))
@@ -2410,6 +2602,14 @@ def manage_meter():
                             water_start = 0
                         WHERE unit_id=%s
                     """, (unit_id,))
+
+                    add_audit_log(
+                        cursor, 
+                        'METER', 
+                        'UPDATE', 
+                        f'อัปเดตเปลี่ยนมิเตอร์น้ำ ID: {mw_exists["id"]}', 
+                        session.get('user', {}).get('user_id')
+                    )
                 else:
                     # กรณีแก้ไขข้อมูลทั่วไป (ไม่รีเซ็ตเลขจด)
                     cursor.execute("""
@@ -2420,6 +2620,14 @@ def manage_meter():
                             updated_at=%s, updated_by=%s 
                         WHERE id=%s
                     """, water_data + (mw_exists['id'],))
+
+                    add_audit_log(
+                        cursor, 
+                        'METER', 
+                        'UPDATE', 
+                        f'อัปเดตมิเตอร์น้ำ ID: {mw_exists["id"]}', 
+                        session.get('user', {}).get('user_id')
+                    )
                 
                 mw_id = mw_exists['id']
             else:
@@ -2430,6 +2638,14 @@ def manage_meter():
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, water_data + (unit_id,))
                 mw_id = cursor.lastrowid
+
+                add_audit_log(
+                    cursor, 
+                    'METER', 
+                    'INSERT', 
+                    f'เพิ่มมิเตอร์น้ำ ID: {mw_id}', 
+                    session.get('user', {}).get('user_id')
+                )
             cursor.execute("UPDATE unit SET meter_id=%s, meter_water_id=%s WHERE unit_id=%s", (m_id, mw_id, unit_id))
             conn.commit()
             return jsonify({'status': 'success', 'massage': 'บันทึกข้อมูลเรียบร้อย'})
@@ -2612,11 +2828,25 @@ def manage_tenants():
                 query = """INSERT INTO tenants (id_card, fname, lname, gender, age, bd, tel, address, email, id_card_img) 
                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
                 cursor.execute(query, data + (filename,))
+                add_audit_log(
+                    cursor, 
+                    'TENANT', 
+                    'INSERT', 
+                    f'เพิ่มผู้เช่าใหม่ ID: {tenant_id}', 
+                    session.get('user', {}).get('user_id')
+                )
                 flash("เพิ่มผู้เช่าใหม่เรียบร้อย", "success")
             else:
                 query = """UPDATE tenants SET id_card=%s, fname=%s, lname=%s, gender=%s, 
                            age=%s, bd=%s, tel=%s, address=%s, email=%s, id_card_img=%s WHERE tenant_id=%s"""
                 cursor.execute(query, data + (filename, tenant_id))
+                add_audit_log(
+                    cursor, 
+                    'TENANT', 
+                    'UPDATE', 
+                    f'อัพเดทผู้เช่า ID: {tenant_id}', 
+                    session.get('user', {}).get('user_id')
+                )
                 flash("แก้ไขข้อมูลเรียบร้อย", "info")
 
         # 2. DELETE (ตรวจสอบสัญญาก่อนลบ)
@@ -2656,6 +2886,14 @@ def manage_tenants():
                                 address = '-', email = NULL, age = NULL, bd = NULL,tel = NULL, gender = '-',created_at = NOW()
                             WHERE tenant_id = %s
                         """, (tenant_id,))
+                        
+                        add_audit_log(
+                            cursor, 
+                            'TENANT', 
+                            'DELETE', 
+                            f'ลบผู้เช่า ID: {tenant_id}', 
+                            session.get('user', {}).get('user_id')
+                        )
                         
                         conn.commit()
                         flash("ลบข้อมูลและไฟล์เอกสารเรียบร้อยแล้ว", "success")
@@ -2700,6 +2938,7 @@ def download_doc(filename):
     )
 
 @app.route('/delete_doc/<path:filename>', methods=['POST'])
+@log_activity("DOC", "DELETE", "ลบไฟล์เอกสาร")
 def delete_doc(filename):
     filepath = os.path.join('uploaded_docs', filename)
     if os.path.exists(filepath):
@@ -2784,6 +3023,7 @@ def generate_docx(contract_id):
     return send_file(output_path, as_attachment=True, download_name=output_filename)
 
 @app.route('/uploaded_docs/<path:filename>')
+@log_activity("DOC", "INSERT", "")
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER_DOCS'], filename)
 
@@ -2960,12 +3200,7 @@ def delete_contract(contract_id):
 # ---------------------- USER SETTINGS ----------------------
 @app.route("/user_settings")
 def user_settings():
-
     conn = get_db_connection()
-    if conn is None:
-        flash('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่ภายหลัง', 'danger')
-        return render_template('user_settings.html', users=[])
-
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
@@ -3790,6 +4025,7 @@ def edit_signed_contract(contract_id):
 
 # ---------------------- SETTINGS ----------------------
 @app.route('/settings', methods=['GET', 'POST'])
+@role_required(['admin','manager'])
 def update_settings():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -4306,8 +4542,8 @@ def get_unit_meter_data(unit_id):
 
 # ----------------------TOOL METER -------------------
 @app.route('/tool_meter')
+@role_required(['admin','manager'])
 def tool_meter():
-    # กำหนด Path ของทั้งสองไฟล์
     json_path_electric = os.path.join(app.root_path, 'config_meter', 'model.json')
     json_path_water = os.path.join(app.root_path, 'config_meter', 'model_water.json')
     

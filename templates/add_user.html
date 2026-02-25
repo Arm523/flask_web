@@ -192,7 +192,7 @@
                             <div class="col-md-6">
                                 <label class="form-label">รหัสผ่าน *</label>
                                 <input type="password" name="password" id="password" class="form-control" required
-                                    placeholder="รหัสผ่านอย่างน้อย 8 ตัว" oninput="checkPasswordStrength()" />
+                                    placeholder="รหัสผ่านอย่างน้อย 6 ตัว" oninput="checkPasswordStrength()" />
                                 <div class="progress mt-2" style="height: 5px; border-radius: 10px;">
                                     <div id="strength-bar" class="progress-bar" role="progressbar" style="width: 0%">
                                     </div>
@@ -218,7 +218,7 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">เบอร์โทรศัพท์ *</label>
-                                <input type="text" name="tel" class="form-control" required placeholder="08XXXXXXXX" />
+                                <input type="text" name="tel" class="form-control" required placeholder="08XXXXXXXX" maxlength="10"/>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">เลขบัตรประชาชน *</label>
@@ -257,7 +257,7 @@
 
                         <div class="mt-5 d-flex justify-content-between">
                             <a href="{{ url_for('user_settings') }}" class="btn btn-link text-muted">ยกเลิก</a>
-                            <button type="button" onclick="confirmAddUser()"
+                            <button type="button" id="submit-btn" onclick="confirmAddUser()"
                                 class="btn btn-primary px-5 py-3 shadow-lg fw-bold" style="border-radius: 15px">
                                 <i class="bi bi-person-plus"></i> บันทึกข้อมูล
                             </button>
@@ -355,6 +355,60 @@
         });
 
     }
+
+    function checkPasswordStrength() {
+        const pass = document.getElementById("password").value;
+        const bar = document.getElementById("strength-bar");
+        const text = document.getElementById("strength-text");
+
+        let strength = 0;
+
+        if (pass.length >= 6) strength += 25; // ความยาว 8 ตัวขึ้นไป
+        if (pass.match(/[a-z]/) && pass.match(/[A-Z]/)) strength += 25; // มีทั้งพิมพ์เล็ก-ใหญ่
+        if (pass.match(/\d/)) strength += 25; // มีตัวเลข
+        if (pass.match(/[^a-zA-Z\d]/)) strength += 25; // มีสัญลักษณ์พิเศษ
+
+        // อัปเดต UI แถบสี
+        bar.style.width = strength + "%";
+        if (strength <= 25) {
+            bar.className = "progress-bar bg-danger";
+            text.innerHTML = "อ่อนแอเกินไป (ต้องมี 8+ ตัว, ตัวใหญ่, ตัวเลข)";
+        } else if (strength <= 50) {
+            bar.className = "progress-bar bg-warning";
+            text.innerHTML = "ปานกลาง (เพิ่มสัญลักษณ์พิเศษเพื่อความปลอดภัย)";
+        } else if (strength <= 75) {
+            bar.className = "progress-bar bg-info";
+            text.innerHTML = "แข็งแรง";
+        } else {
+            bar.className = "progress-bar bg-success";
+            text.innerHTML = "แข็งแรงมาก!";
+        }
+
+        if (strength >= 50 && pass === confirmPass && pass !== "") {
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = "1";
+        } else {
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = "0.5"; // ทำให้ดูจางๆ ว่ากดไม่ได้
+        }
+    }
+
+    function checkMatchPassword() {
+        const pass = document.getElementById("password").value;
+        const confirmPass = document.getElementById("confirm_password").value;
+        const text = document.getElementById("match-text");
+
+        if (confirmPass === "") {
+            text.innerHTML = "";
+        } else if (pass === confirmPass) {
+            text.innerHTML = "รหัสผ่านตรงกัน";
+            text.className = "text-success small";
+        } else {
+            text.innerHTML = "รหัสผ่านไม่ตรงกัน";
+            text.className = "text-danger small";
+        }
+    }
+
 </script>
 
 {% endblock %}

@@ -196,8 +196,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    // Logic SweetAlert ลบสัญญา และ แก้ไขสัญญา (ใช้โค้ดเดิมของคุณที่ทำงานได้ดีอยู่แล้ว)
-    // [ใส่ Script เดิมของคุณลงไปได้เลยครับ ผมไม่ได้เปลี่ยนโครงสร้างการส่งค่า]
     document.querySelectorAll('.delete-contract-form').forEach(form => {
         form.addEventListener('submit', function (e) {
             e.preventDefault();
@@ -229,24 +227,22 @@
                             Swal.fire({ title: 'กำลังดำเนินการ...', didOpen: () => Swal.showLoading() });
 
                             const formData = new FormData(form);
-                            formData.append('user_password', passResult.value); // ส่งรหัสผ่านไป
+                            formData.append('user_password', passResult.value); 
 
                             fetch(form.action, {
                                 method: 'POST',
                                 body: formData,
                                 headers: {
-                                    'X-Requested-With': 'XMLHttpRequest' // ✅ บรรทัดนี้ทำให้ Decorator ส่ง JSON กลับมา
+                                    'X-Requested-With': 'XMLHttpRequest' 
                                 }
                             })
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.status === 'success') {
                                         Swal.fire('สำเร็จ!', data.message, 'success').then(() => {
-                                            // ✅ กลับไปหน้า /leases_uploaded หลังกด ตกลง
                                             window.location.href = "/leases_uploaded";
                                         });
                                     } else {
-                                        // ❌ แจ้งเตือนกรณี รหัสผิด หรือ ไม่มีสิทธิ์ จะเด้งตรงนี้
                                         Swal.fire('ล้มเหลว', data.message, 'error');
                                     }
                                 })
