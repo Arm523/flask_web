@@ -5,7 +5,21 @@
 <div id="flash-data" data-messages='{{ get_flashed_messages(with_categories=true) | tojson | safe }}'></div>
 
 <style>
-  /* สไตล์เฉพาะหน้า Manage Users */
+  .current-user-row {
+    background-color: #f0f7ff !important;
+    border-left: 8px solid #3182ce;
+  }
+
+  .current-user-badge {
+    font-size: 0.7rem;
+    background: #ebf8ff;
+    color: #2b6cb0;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 5px;
+    border: 1px solid #bee3f8;
+  }
+
   .user-card {
     background: #ffffff;
     border-radius: 15px;
@@ -102,7 +116,8 @@
         </thead>
         <tbody>
           {% for user in users %}
-          <tr>
+          {% set is_me = (user.user_id == session['user']['user_id']) %}
+          <tr class="{{ 'current-user-row' if is_me else '' }}">
             <td>
               <div class="d-flex align-items-center">
                 <div class="avatar-circle">
@@ -124,6 +139,9 @@
                 <div>
                   <div class="fw-bold text-dark">
                     {{ user.fname }} {{ user.lname }}
+                    {% if is_me %}
+                    <span class="current-user-badge">คุณ</span>
+                    {% endif %}
                   </div>
                   <div class="text-muted small">
                     @{{ user.username }} (ID: {{ user.user_id }})
@@ -161,14 +179,23 @@
               {% endif %}
             </td>
             <td class="text-end">
+              {% set current_user_id = session['user']['user_id'] %}
+              {% set is_owner = (user.user_id == current_user_id) %}
+              {% set is_admin_manager = (session['role'] in ['admin', 'manager']) %}
+
+              {% if is_admin_manager or is_owner %}
               <a href="{{ url_for('edit_user', user_id=user.user_id) }}"
                 class="btn btn-outline-primary btn-action me-1">
-                แก้ไข
+                <i class="fas fa-edit me-1"></i> แก้ไข
               </a>
+              {% endif %}
+
+              {% if is_admin_manager %}
               <button class="btn btn-outline-danger btn-action"
                 onclick="confirmDelete('{{ user.user_id }}', '{{ user.username }}')">
-                ลบ
+                <i class="fas fa-trash-alt me-1"></i> ลบ
               </button>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -204,7 +231,7 @@
       const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
       messages.forEach(([category, message]) => {
         Swal.fire({
-          icon  : category === 'success' ? 'success' : (category === 'danger' ? 'error' : 'info'),
+          icon: category === 'success' ? 'success' : (category === 'danger' ? 'error' : 'info'),
           title: category === 'success' ? 'สำเร็จ' : 'แจ้งเตือน',
           text: message,
           timer: 3000,

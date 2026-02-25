@@ -62,19 +62,29 @@ def job_invoices_task():
     print(f"Generating Invoices for: {now()}")
     auto_generate_all_invoices(mocked_date=today)
 
+@app.before_request
+def check_session_timeout():
+    allowed_endpoints = ['login', 'static'] 
+    
+    if request.endpoint not in allowed_endpoints:
+        if 'user' not in session:
+            return redirect(url_for('login'))
+
 def role_required(allowed_roles):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # 1. เช็คว่าล็อกอินหรือยัง
             if 'user' not in session:
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'status': 'error', 'message': 'กรุณาเข้าสู่ระบบใหม่'}), 401
                 return redirect(url_for('login'))
             
-            # 2. ดึง Role จาก session มาเช็ค (ต้องตรงกับชื่อใน List ที่ส่งมา)
             user_role = session.get('role') 
             if user_role not in allowed_roles:
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'status': 'error', 'message': 'คุณไม่มีสิทธิ์ดำเนินการ (Admin/Manager Only)'}), 403
                 flash("คุณไม่มีสิทธิ์เข้าถึงหน้านี้", "danger")
-                return redirect(url_for('dashboard')) # หรือหน้าอื่นที่เข้าได้
+                return redirect(url_for('dashboard'))
             
             return f(*args, **kwargs)
         return decorated_function
@@ -100,14 +110,6 @@ def inject_user():
         current_user_img=user_data.get('profile_img'), 
         user=user_data 
     )
-
-@app.before_request
-def check_session_timeout():
-    allowed_endpoints = ['login', 'static'] 
-    
-    if request.endpoint not in allowed_endpoints:
-        if 'user' not in session:
-            return redirect(url_for('login'))
 
 # ---------------------- AUTH ----------------------
 @app.route('/', methods=['GET', 'POST'])
@@ -162,10 +164,6 @@ def logout():
 
 @app.route('/add_user', methods=['GET', 'POST'])
 def add_user():
-    # 1. เช็คสิทธิ์
-    if 'user' not in session:
-        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
-        return redirect(url_for('dashboard'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -233,9 +231,6 @@ def add_user():
 # ---------------------- DASHBOARD ----------------------
 @app.route('/dashboard')
 def dashboard():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
     STATUS_MAPPING = {
         1: 'ว่าง', 2: 'มีผู้เช่า', 3: 'ทำสัญญาเช่า',
         4: 'ปิดปรับปรุง', 5: 'รอการชำระ',
@@ -543,9 +538,6 @@ def update_invoice():
 
 @app.route('/contract/<int:contract_id>/options', methods=['GET', 'POST'])
 def contract_options(contract_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -606,9 +598,6 @@ def contract_options(contract_id):
 
 @app.route('/cancel_move_out/<int:unit_id>', methods=['POST'])
 def cancel_move_out(unit_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -722,9 +711,6 @@ def daily_pending(invoice_id):
 
 @app.route('/finance')
 def finance_page():
-    if 'user' not in session:
-        return jsonify({"status": "error", "message": "กรุณาเข้าสู่ระบบก่อน"}), 401
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
@@ -993,8 +979,6 @@ def meter_analysis():
 # ---------------------- RENEW -----------------------
 @app.route('/contracts_renew/<int:contract_id>', methods=['GET', 'POST'])
 def renew_contracts(contract_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     today = get_now().date() if 'get_now' in globals() else date.today()
     conn = get_db_connection()
@@ -1094,8 +1078,6 @@ def renew_contracts(contract_id):
 # ---------------------- TENANT ----------------------
 @app.route('/add_tenant/<int:unit_id>', methods=['GET', 'POST'])
 def add_tenant(unit_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     if request.method == 'POST':
         fname = request.form.get('fname')
@@ -1440,8 +1422,6 @@ def manual_create_bill(contract_id):
 # ---------------------- LEASE ----------------------
 @app.route('/create_lease/<int:unit_id>', methods=['GET', 'POST'])
 def create_lease(unit_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1629,8 +1609,6 @@ def create_lease(unit_id):
 # ---------------------- DAILY BOOKING ----------------------
 @app.route('/daily_booking/<int:unit_id>', methods=['GET', 'POST'])
 def daily_booking(unit_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1707,8 +1685,6 @@ def daily_booking(unit_id):
 
 @app.route('/cancel_daily_booking/<int:invoice_id>', methods=['POST'])
 def cancel_daily_booking(invoice_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1745,8 +1721,6 @@ def cancel_daily_booking(invoice_id):
 # --------------------- Checkout -----------------------------
 @app.route('/confirm_checkout/<int:unit_id>', methods=['POST'])
 def confirm_checkout(unit_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1843,8 +1817,6 @@ def confirm_checkout(unit_id):
 # ---------------------- BUSINESS INFORMATION ----------------------
 @app.route('/business', methods=['GET', 'POST'])
 def business():
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     if conn is None:
@@ -1903,8 +1875,6 @@ def business():
 # ---------------------- MANAGEMENT UNITS ----------------------
 @app.route('/manage_units', methods=['GET', 'POST'])
 def manage_units():
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     if conn is None:
@@ -2026,8 +1996,6 @@ def delete_unit(unit_id):
 
 @app.route('/edit_unit/<int:unit_id>', methods=['GET', 'POST'])
 def edit_unit(unit_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2114,8 +2082,6 @@ def delete_type(type_id):
 
 @app.route('/edit_type/<int:type_id>', methods=['GET', 'POST'])
 def edit_type(type_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2160,8 +2126,6 @@ def manage_option():
 
 @app.route('/edit_option/<int:option_id>', methods=['GET', 'POST'])
 def edit_option(option_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
         
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2269,8 +2233,6 @@ def delete_option(option_id):
 # ---------------------- MANAGE METER ----------------------
 @app.route('/manage_meter', methods=['GET', 'POST'])
 def manage_meter():
-    if 'user' not in session:
-        return redirect(url_for('login'))
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2294,6 +2256,8 @@ def manage_meter():
     # ---------------------------------------------------------
     if request.method == 'POST':
         try:
+            if session.get('role') not in  ['admin', 'manager']:
+                return jsonify({'status': 'error', 'massage': 'คุณไม่มีสิทธิ์แก้ไขข้อมูลมิเตอร์ (เฉพาะ Admin เเละ ผู้จัดการเท่านั้น เท่านั้น)'})
             unit_id = request.form.get('unit_id')       
             # รับค่า Flag การเปลี่ยนมิเตอร์และเลขมิเตอร์เก่า
             change_elec = request.form.get('change_elec_flag') == 'on'
@@ -2513,8 +2477,6 @@ def manage_meter():
 
 @app.route('/get_latest_iot_reading/<int:unit_id>/<string:meter_type>')
 def get_latest_iot_reading(unit_id, meter_type):
-    if 'user' not in session:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 401
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2528,6 +2490,7 @@ def get_latest_iot_reading(unit_id, meter_type):
         conn.close()
 
 @app.route('/clear_meter/<int:unit_id>', methods=['POST'])
+@role_required(['admin','manager'])
 def clear_meter(unit_id):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -2561,9 +2524,6 @@ def clear_meter(unit_id):
 # ---------------------- MANAGE DOCUMENTS ----------------------
 @app.route('/manage_doc', methods=['GET', 'POST'])
 def manage_doc():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-
     # กำหนด Path ตรงๆ
     base_path = 'uploaded_docs'
     temp_path = os.path.join(base_path, 'templates')
@@ -2621,8 +2581,6 @@ def manage_doc():
 # ---------------------- MANAGE TRANETS -----------------------
 @app.route('/tenants', methods=['GET', 'POST'])
 def manage_tenants():
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2753,8 +2711,6 @@ def delete_doc(filename):
 
 @app.route('/generate_docx/<int:contract_id>')
 def generate_docx(contract_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2887,8 +2843,6 @@ def edit_doc(filename):
 # ---------------------- AGREEMENT ---------------------
 @app.route('/leases_uploaded')
 def leases_uploaded():
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2960,44 +2914,52 @@ def leases_uploaded():
     )
 
 @app.route('/delete_contract/<int:contract_id>', methods=['POST'])
+@role_required(['admin', 'manager'])
 def delete_contract(contract_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
+    # ดึงค่าที่ส่งมาจาก Swal (JavaScript)
+    input_password = request.form.get('user_password')
+    
+    # ดึง ID จาก session['user'] ตามโครงสร้าง Login ของคุณ
+    user_data = session.get('user', {})
+    u_id = user_data.get('user_id')
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # 1️⃣ ดึงชื่อไฟล์จาก DB
-    cursor.execute("SELECT contracts_file FROM contracts WHERE contract_id = %s", (contract_id,))
-    row = cursor.fetchone()
+    try:
+        # 1️⃣ ตรวจสอบรหัสผ่านผู้ใช้งานปัจจุบัน
+        cursor.execute("SELECT password FROM user WHERE user_id = %s", (u_id,))
+        user_record = cursor.fetchone()
 
-    if row and row['contracts_file']:
-        file_name = row['contracts_file']
-        file_path = os.path.join('/home/precise/flask_web/contracts_file', file_name)
+        if not user_record or not check_password_hash(user_record['password'], input_password):
+            return jsonify({'status': 'error', 'message': 'รหัสผ่านยืนยันไม่ถูกต้อง!'})
 
-        # 2️⃣ ลบไฟล์ถ้ามี
-        if os.path.isfile(file_path):
-            try:
+        # 2️⃣ หาไฟล์สัญญาเพื่อลบออกจาก Disk
+        cursor.execute("SELECT contracts_file FROM contracts WHERE contract_id = %s", (contract_id,))
+        row = cursor.fetchone()
+
+        if row and row['contracts_file']:
+            file_name = row['contracts_file']
+            # ระบุ path ตามเครื่องคุณ
+            file_path = os.path.join('/home/precise/flask_web/contracts_file', file_name)
+            if os.path.isfile(file_path):
                 os.remove(file_path)
-            except Exception as e:
-                flash(f"ไม่สามารถลบไฟล์ {file_name}: {str(e)}", "danger")
-                conn.close()
-                return redirect(url_for('leases_uploaded'))
 
-    # 3️⃣ อัปเดต DB ให้ contracts_file = NULL
-    cursor.execute("UPDATE contracts SET contracts_file = NULL WHERE contract_id = %s", (contract_id,))
-    conn.commit()
-    conn.close()
+        # 3️⃣ อัปเดต Database ให้ค่าไฟล์เป็น NULL
+        cursor.execute("UPDATE contracts SET contracts_file = NULL WHERE contract_id = %s", (contract_id,))
+        conn.commit()
+        
+        return jsonify({'status': 'success', 'message': 'ลบเอกสารสัญญาเรียบร้อยแล้ว'})
 
-    flash("ลบสัญญาเรียบร้อยแล้ว", "success")
-    return redirect(url_for('leases_uploaded'))
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'เกิดข้อผิดพลาด: {str(e)}'})
+    finally:
+        conn.close()
 
 
 # ---------------------- USER SETTINGS ----------------------
 @app.route("/user_settings")
 def user_settings():
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     if conn is None:
@@ -3023,8 +2985,6 @@ def user_settings():
 
 @app.route("/edit_user/<int:user_id>", methods=["GET", "POST"])
 def edit_user(user_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -3093,8 +3053,6 @@ def edit_user(user_id):
 
 @app.route('/remove_user_file/<file_type>/<int:user_id>', methods=['POST'])
 def remove_user_file(file_type, user_id):
-    if 'user' not in session:
-        return jsonify({'status': 'error', 'message': 'กรุณาเข้าสู่ระบบ'}), 401
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -3145,8 +3103,6 @@ def remove_user_file(file_type, user_id):
 
 @app.route("/delete_user/<int:user_id>")
 def delete_user(user_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -3200,9 +3156,6 @@ def delete_user(user_id):
 # ---------------------- PAYMENT ----------------------
 @app.route('/confirm_payment/<int:invoice_id>', methods=['GET', 'POST'])
 def confirm_payment(invoice_id):
-    if 'user' not in session:
-        flash("กรุณาเข้าสู่ระบบก่อน", "danger")
-        return redirect(url_for('login'))
 
     current_user = session['user']
     payee_id = current_user['user_id']
@@ -3408,9 +3361,6 @@ def confirm_payment(invoice_id):
 
 @app.route('/confirm_daily_payment/<int:invoice_id>', methods=['GET', 'POST'])
 def confirm_daily_payment(invoice_id):
-    if 'user' not in session:
-        flash("กรุณาเข้าสู่ระบบก่อน", "danger")
-        return redirect(url_for('login'))
 
     current_user = session['user']
     payee_id = current_user['user_id']
@@ -3523,9 +3473,6 @@ def confirm_daily_payment(invoice_id):
 @app.route('/add_expense', methods=['POST'])
 def add_expense():
     try:
-        if 'user' not in session:
-            return jsonify({"status": "error", "message": "กรุณาเข้าสู่ระบบก่อน"}), 401
-        
         current_now = get_now().strftime('%Y-%m-%d %H:%M:%S')
         # 1. อัปโหลดไฟล์
         file = request.files.get('slip_file')
@@ -3579,9 +3526,6 @@ def add_expense():
 # ---------------------- print_receipt ----------------------
 @app.route('/print_receipt/<int:invoice_id>')
 def print_receipt(invoice_id):
-    if 'user' not in session:
-        flash("กรุณาเข้าสู่ระบบก่อน", "danger")
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -3798,56 +3742,50 @@ def contracts(filename):
 
 @app.route('/edit_signed_contract/<int:contract_id>', methods=['POST'])
 def edit_signed_contract(contract_id):
-
+    # 1. เช็คว่ามีไฟล์ส่งมาไหม
     if 'file' not in request.files:
-        flash('กรุณาเลือกไฟล์', 'danger')
-        return redirect(url_for('leases_uploaded'))
+        return jsonify({'status': 'error', 'message': 'กรุณาเลือกไฟล์'})
 
     file = request.files['file']
     if file.filename == '':
-        flash('กรุณาเลือกไฟล์', 'danger')
-        return redirect(url_for('leases_uploaded'))
+        return jsonify({'status': 'error', 'message': 'กรุณาเลือกไฟล์'})
 
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    # 1️⃣ ดึงไฟล์เดิม
-    cursor.execute(
-        "SELECT contracts_file FROM contracts WHERE contract_id=%s",
-        (contract_id,)
-    )
-    contract = cursor.fetchone()
+        # 2. ดึงไฟล์เดิมเพื่อลบออก (ป้องกันไฟล์ขยะเต็ม Server)
+        cursor.execute("SELECT contracts_file FROM contracts WHERE contract_id=%s", (contract_id,))
+        contract = cursor.fetchone()
+        old_file = contract['contracts_file'] if contract else None
+        folder = 'contracts_file'
 
-    old_file = contract['contracts_file'] if contract else None
-    folder = 'contracts_file'
+        if old_file:
+            old_path = os.path.join(folder, old_file)
+            if os.path.exists(old_path):
+                os.remove(old_path)
 
-    # 2️⃣ ลบไฟล์เก่า (ถ้ามี)
-    if old_file:
-        old_path = os.path.join(folder, old_file)
-        if os.path.exists(old_path):
-            os.remove(old_path)
+        # 3. เซฟไฟล์ใหม่ (ตั้งชื่อให้ไม่ซ้ำ)
+        now = datetime.now()
+        filename = f"contract_signed_{contract_id}_{now.strftime('%d-%m-%Y')}_{secure_filename(file.filename)}"
+        os.makedirs(folder, exist_ok=True)
+        file.save(os.path.join(folder, filename))
 
-    # 3️⃣ เซฟไฟล์ใหม่
-    now = datetime.now()
-    filename = f"contract_signed_{contract_id}_{now.strftime('%d-%m-%Y')}_{secure_filename(file.filename)}"
+        # 4. อัปเดตชื่อไฟล์ใน Database
+        cursor.execute("UPDATE contracts SET contracts_file = %s WHERE contract_id = %s", (filename, contract_id))
+        conn.commit()
+        
+        # ✅ ส่ง JSON กลับไปบอก JS ว่า "เสร็จแล้วนะ"
+        return jsonify({
+            'status': 'success', 
+            'message': 'อัปโหลดไฟล์สัญญาใหม่เรียบร้อยแล้ว'
+        })
 
-    os.makedirs(folder, exist_ok=True)
-    filepath = os.path.join(folder, filename)
-    file.save(filepath)
-
-    # 4️⃣ update db
-    cursor.execute("""
-        UPDATE contracts
-        SET contracts_file = %s
-        WHERE contract_id = %s
-    """, (filename, contract_id))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    flash('✅ อัปโหลดไฟล์สัญญาใหม่เรียบร้อยแล้ว', 'success')
-    return redirect(url_for('leases_uploaded'))
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 
 # ---------------------- SETTINGS ----------------------
@@ -3898,8 +3836,6 @@ def update_settings():
 
 @app.route('/print_invoice/<int:invoice_id>')
 def print_invoice(invoice_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -4040,178 +3976,176 @@ def notice_move_out(contract_id):
 
 @app.route('/create_invoice_move_out/<int:contract_id>', methods=['POST'])
 def create_invoice_move_out(contract_id):
-        if 'user' not in session:
-            return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)   
+    today = datetime.today().date()
 
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)   
-        today = datetime.today().date()
-
-        # 1. ยกเลิก draft invoice ถ้ามี
+    # 1. ยกเลิก draft invoice ถ้ามี
+    cursor.execute("""
+        SELECT invoice_id FROM invoices 
+        WHERE contract_id = %s AND status = 'draft'
+    """, (contract_id,))
+    draft = cursor.fetchone()
+    if draft:
         cursor.execute("""
-            SELECT invoice_id FROM invoices 
-            WHERE contract_id = %s AND status = 'draft'
-        """, (contract_id,))
-        draft = cursor.fetchone()
-        if draft:
-            cursor.execute("""
-                UPDATE invoices
-                SET status = 'cancelled'
-                WHERE invoice_id = %s
-            """, (draft['invoice_id'],))
+            UPDATE invoices
+            SET status = 'cancelled'
+            WHERE invoice_id = %s
+        """, (draft['invoice_id'],))
 
-        # 2. ดึงข้อมูลสัญญา + ห้อง + ผู้เช่า
-        cursor.execute("""
-            SELECT c.contract_id, c.price, c.premiums, c.room_id, c.electricity_start, c.water_start,
-                t.tenant_id, t.fname, t.lname, c.notice_move_out_date, c.contract_start, c.contract_end
-            FROM contracts c
-            JOIN tenants t ON c.tenant_id = t.tenant_id
-            WHERE c.contract_id = %s
-        """, (contract_id,))
-        contract = cursor.fetchone()
+    # 2. ดึงข้อมูลสัญญา + ห้อง + ผู้เช่า
+    cursor.execute("""
+        SELECT c.contract_id, c.price, c.premiums, c.room_id, c.electricity_start, c.water_start,
+            t.tenant_id, t.fname, t.lname, c.notice_move_out_date, c.contract_start, c.contract_end
+        FROM contracts c
+        JOIN tenants t ON c.tenant_id = t.tenant_id
+        WHERE c.contract_id = %s
+    """, (contract_id,))
+    contract = cursor.fetchone()
 
-        if not contract:
-            flash("ไม่พบสัญญา", "warning")
-            cursor.close()
-            conn.close()
-            return redirect(url_for('dashboard'))
-        
-
-        move_out_date = contract['notice_move_out_date']    
-
-        # 3. ดึง invoice ล่าสุดที่ชำระแล้ว
-        cursor.execute("""
-            SELECT billing_period_end
-            FROM invoices
-            WHERE contract_id=%s AND status='paid'
-            ORDER BY billing_period_end DESC
-            LIMIT 1
-        """, (contract_id,))
-        last_invoice = cursor.fetchone()
-
-        if last_invoice:
-            start_date = last_invoice['billing_period_end'] + timedelta(days=1)
-        else:
-            start_date = contract['contract_start']
-
-        # 4. ดึง electricity_rate, water_rate
-        cursor.execute("""
-            SELECT setting_key, setting_value
-            FROM settings
-            WHERE setting_key IN ('electricity_rate', 'water_rate')
-        """)
-        settings = cursor.fetchall()
-        settings_dict = {s['setting_key']: float(s['setting_value']) for s in settings}
-        electricity_rate = settings_dict.get('electricity_rate', 0)
-        water_rate = settings_dict.get('water_rate', 0)
-
-        # 5. ดึง previous electricity/water
-        cursor.execute("""
-            SELECT current_electricity_reading, current_water_reading
-            FROM invoices
-            WHERE unit_id=%s
-            AND contract_id=%s
-            AND invoice_type='monthly'
-            AND status NOT IN ('cancelled','void')
-            ORDER BY billing_period_start DESC
-            LIMIT 1
-        """, (contract['room_id'], contract_id))
-        last_invoice = cursor.fetchone()
-        if last_invoice:
-            prev_elec = last_invoice['current_electricity_reading'] or 0
-            prev_water = last_invoice['current_water_reading'] or 0
-        else:
-            prev_elec = contract['electricity_start'] or 0
-            prev_water = contract['water_start'] or 0
-
-        # 6. คำนวณค่าใช้จ่าย (เพิ่มการดึงหนี้เก่า)
-        cursor.execute("""
-            SELECT invoice_id, total_amount, billing_period_start, billing_period_end 
-            FROM invoices 
-            WHERE contract_id = %s AND status IN ('unpaid', 'overdue')
-        """, (contract_id,))
-        unpaid_invoices = cursor.fetchall()
-        unpaid_amount = sum(inv['total_amount'] for inv in unpaid_invoices)
-
-        rent = contract['price']
-        reimburse = contract['premiums'] or 0
-        penalty = 0 
-
-        # ยอดรวม = ค่าเช่าใหม่ + หนี้เก่า + ค่าปรับ - เงินมัดจำ(ถ้าจะหักเลย)
-        total_amount = rent + unpaid_amount + penalty - reimburse
-
-        # 7. สร้าง final invoice
-        cursor.execute("""
-            INSERT INTO invoices (
-                unit_id, tenant_id, contract_id,
-                invoice_type, billing_period_start, billing_period_end,
-                issue_date, due_date, rent_amount, previous_electricity_reading, electricity_rate,
-                previous_water_reading, water_rate, reimburse, total_amount, status, created_by, created_at,premiums
-            ) VALUES (%s, %s, %s, 'final', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s,0)
-        """, (
-            contract['room_id'], contract['tenant_id'], contract_id,
-            start_date, move_out_date,
-            today, move_out_date,
-            rent, prev_elec, electricity_rate, prev_water, water_rate,
-            reimburse, total_amount, session['user']['user_id'], datetime.today()
-        ))
-        invoice_id = cursor.lastrowid  
-
-        for inv in unpaid_invoices:
-            desc = f"ยอดค้างชำระจากบิล #{inv['invoice_id']} ({inv['billing_period_start']} ถึง {inv['billing_period_end']})"
-            cursor.execute("""
-                INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (invoice_id, desc, inv['total_amount'], 1, inv['total_amount']))
-
-        # 8. เพิ่ม option ลง invoice_items
-        cursor.execute("""
-            SELECT o.id, o.name, o.price, o.option_type, o.unit_name
-            FROM contract_option co
-            JOIN `option` o ON co.option_id = o.id
-            WHERE co.contract_id = %s
-        """, (contract_id,))
-        options = cursor.fetchall()
-
-        for opt in options:
-            option_id = opt['id']
-            opt_name = opt['name']
-            opt_price = opt['price']
-            opt_type = opt['option_type']
-            unit_name = opt['unit_name']
-
-            if opt_type == "fixed":
-                qty = 1
-                total = opt_price
-            else:
-                qty = 0
-                total = 0
-
-            cursor.execute("""
-                INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price, option_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (invoice_id, f"{opt_name}" + (f" ({unit_name})" if unit_name else ""), opt_price, qty, total, option_id))
-
-        # 9. อัปเดตสถานะห้องรอชําระบิลสุดท้าย
-        cursor.execute("""
-            UPDATE unit
-            SET status_id=6
-            WHERE unit_id=%s
-        """, (contract['room_id'],))
-
-        # 10. (เพิ่มเติม) ควรเปลี่ยนสถานะบิลเก่าเป็น 'cancelled' หรือ 'transferred'
-        # เพื่อไม่ให้ยอดมันซ้ำซ้อนในระบบบัญชี
-        cursor.execute("""
-            UPDATE invoices SET status = 'cancelled' 
-            WHERE contract_id = %s AND status IN ('unpaid', 'overdue') AND invoice_id != %s
-        """, (contract_id, invoice_id))
-
-        conn.commit()
+    if not contract:
+        flash("ไม่พบสัญญา", "warning")
         cursor.close()
         conn.close()
-
-        flash("บันทึกย้ายออกและสร้างบิลสุดท้ายเรียบร้อยแล้ว", "success")
         return redirect(url_for('dashboard'))
+    
+
+    move_out_date = contract['notice_move_out_date']    
+
+    # 3. ดึง invoice ล่าสุดที่ชำระแล้ว
+    cursor.execute("""
+        SELECT billing_period_end
+        FROM invoices
+        WHERE contract_id=%s AND status='paid'
+        ORDER BY billing_period_end DESC
+        LIMIT 1
+    """, (contract_id,))
+    last_invoice = cursor.fetchone()
+
+    if last_invoice:
+        start_date = last_invoice['billing_period_end'] + timedelta(days=1)
+    else:
+        start_date = contract['contract_start']
+
+    # 4. ดึง electricity_rate, water_rate
+    cursor.execute("""
+        SELECT setting_key, setting_value
+        FROM settings
+        WHERE setting_key IN ('electricity_rate', 'water_rate')
+    """)
+    settings = cursor.fetchall()
+    settings_dict = {s['setting_key']: float(s['setting_value']) for s in settings}
+    electricity_rate = settings_dict.get('electricity_rate', 0)
+    water_rate = settings_dict.get('water_rate', 0)
+
+    # 5. ดึง previous electricity/water
+    cursor.execute("""
+        SELECT current_electricity_reading, current_water_reading
+        FROM invoices
+        WHERE unit_id=%s
+        AND contract_id=%s
+        AND invoice_type='monthly'
+        AND status NOT IN ('cancelled','void')
+        ORDER BY billing_period_start DESC
+        LIMIT 1
+    """, (contract['room_id'], contract_id))
+    last_invoice = cursor.fetchone()
+    if last_invoice:
+        prev_elec = last_invoice['current_electricity_reading'] or 0
+        prev_water = last_invoice['current_water_reading'] or 0
+    else:
+        prev_elec = contract['electricity_start'] or 0
+        prev_water = contract['water_start'] or 0
+
+    # 6. คำนวณค่าใช้จ่าย (เพิ่มการดึงหนี้เก่า)
+    cursor.execute("""
+        SELECT invoice_id, total_amount, billing_period_start, billing_period_end 
+        FROM invoices 
+        WHERE contract_id = %s AND status IN ('unpaid', 'overdue')
+    """, (contract_id,))
+    unpaid_invoices = cursor.fetchall()
+    unpaid_amount = sum(inv['total_amount'] for inv in unpaid_invoices)
+
+    rent = contract['price']
+    reimburse = contract['premiums'] or 0
+    penalty = 0 
+
+    # ยอดรวม = ค่าเช่าใหม่ + หนี้เก่า + ค่าปรับ - เงินมัดจำ(ถ้าจะหักเลย)
+    total_amount = rent + unpaid_amount + penalty - reimburse
+
+    # 7. สร้าง final invoice
+    cursor.execute("""
+        INSERT INTO invoices (
+            unit_id, tenant_id, contract_id,
+            invoice_type, billing_period_start, billing_period_end,
+            issue_date, due_date, rent_amount, previous_electricity_reading, electricity_rate,
+            previous_water_reading, water_rate, reimburse, total_amount, status, created_by, created_at,premiums
+        ) VALUES (%s, %s, %s, 'final', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s,0)
+    """, (
+        contract['room_id'], contract['tenant_id'], contract_id,
+        start_date, move_out_date,
+        today, move_out_date,
+        rent, prev_elec, electricity_rate, prev_water, water_rate,
+        reimburse, total_amount, session['user']['user_id'], datetime.today()
+    ))
+    invoice_id = cursor.lastrowid  
+
+    for inv in unpaid_invoices:
+        desc = f"ยอดค้างชำระจากบิล #{inv['invoice_id']} ({inv['billing_period_start']} ถึง {inv['billing_period_end']})"
+        cursor.execute("""
+            INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (invoice_id, desc, inv['total_amount'], 1, inv['total_amount']))
+
+    # 8. เพิ่ม option ลง invoice_items
+    cursor.execute("""
+        SELECT o.id, o.name, o.price, o.option_type, o.unit_name
+        FROM contract_option co
+        JOIN `option` o ON co.option_id = o.id
+        WHERE co.contract_id = %s
+    """, (contract_id,))
+    options = cursor.fetchall()
+
+    for opt in options:
+        option_id = opt['id']
+        opt_name = opt['name']
+        opt_price = opt['price']
+        opt_type = opt['option_type']
+        unit_name = opt['unit_name']
+
+        if opt_type == "fixed":
+            qty = 1
+            total = opt_price
+        else:
+            qty = 0
+            total = 0
+
+        cursor.execute("""
+            INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price, option_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (invoice_id, f"{opt_name}" + (f" ({unit_name})" if unit_name else ""), opt_price, qty, total, option_id))
+
+    # 9. อัปเดตสถานะห้องรอชําระบิลสุดท้าย
+    cursor.execute("""
+        UPDATE unit
+        SET status_id=6
+        WHERE unit_id=%s
+    """, (contract['room_id'],))
+
+    # 10. (เพิ่มเติม) ควรเปลี่ยนสถานะบิลเก่าเป็น 'cancelled' หรือ 'transferred'
+    # เพื่อไม่ให้ยอดมันซ้ำซ้อนในระบบบัญชี
+    cursor.execute("""
+        UPDATE invoices SET status = 'cancelled' 
+        WHERE contract_id = %s AND status IN ('unpaid', 'overdue') AND invoice_id != %s
+    """, (contract_id, invoice_id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash("บันทึกย้ายออกและสร้างบิลสุดท้ายเรียบร้อยแล้ว", "success")
+    return redirect(url_for('dashboard'))
 
 
 # --------------------- UPDATE METER ---------------------

@@ -5,53 +5,80 @@
 <div id="flash-data" data-messages='{{ get_flashed_messages(with_categories=true) | tojson | safe }}'></div>
 
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4><i class="bi bi-people-fill"></i> จัดการผู้เช่า</h4>
-        <button class="btn btn-primary" onclick="openTenantModal('add')">+ เพิ่มผู้เช่าใหม่</button>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1"><i class="bi bi-people-fill text-primary"></i> จัดการผู้เช่า</h4>
+            <p class="text-muted small mb-0">ค้นหาและจัดการข้อมูลผู้พักอาศัยในระบบ</p>
+        </div>
+        <button class="btn btn-primary shadow-sm rounded-3 px-4" onclick="openTenantModal('add')">
+            <i class="bi bi-plus-lg me-1"></i> เพิ่มผู้เช่าใหม่
+        </button>
     </div>
 
-    <div class="card shadow-sm border-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="bg-light">
-                    <tr>
-                        <th>ชื่อ-นามสกุล</th>
-                        <th>เบอร์โทร/Email</th>
-                        <th>ห้องปัจจุบัน</th>
-                        <th class="text-center">จัดการ</th>
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="input-group shadow-sm border rounded-pill overflow-hidden bg-white">
+                <span class="input-group-text bg-white border-0 ps-3"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" id="tenantSearch" class="form-control border-0 shadow-none ps-1"
+                    placeholder="พิมพ์ชื่อผู้เช่าเพื่อค้นหา...">
+            </div>
+        </div>
+        <div class="col-md-8 text-end d-flex align-items-center justify-content-end">
+            <span class="badge bg-light text-secondary border fw-normal px-3 py-2 rounded-pill">
+                ทั้งหมด <b class="text-primary">{{ tenants|length }}</b> รายชื่อ
+            </span>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4 overflow-hidden">
+        <div class="table-responsive" style="max-height: 550px; overflow-y: auto;">
+            <table class="table table-hover align-middle mb-0" id="tenantTable">
+                <thead class="bg-light sticky-top" style="z-index: 5;">
+                    <tr class="text-secondary">
+                        <th class="ps-4 border-0">ชื่อ-นามสกุล</th>
+                        <th class="border-0">เบอร์โทร / Email</th>
+                        <th class="border-0">สถานะห้อง</th>
+                        <th class="text-center pe-4 border-0">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for t in tenants %}
                     <tr>
-                        <td>
-                            <strong>{{ t.fname }} {{ t.lname }}</strong><br>
-                            <small class="text-muted">เลขบัตรประชาชน: {{ t.id_card }}</small>
+                        <td class="ps-4">
+                            <div class="fw-bold text-dark">{{ t.fname }} {{ t.lname }}</div>
+                            <small class="text-muted">เลขบัตร: {{ t.id_card }}</small>
                         </td>
-                        <td>{{ t.tel }}<br><small>{{ t.email }}</small></td>
+                        <td>
+                            <div class="small"><i class="bi bi-telephone me-1"></i>{{ t.tel }}</div>
+                            <div class="small text-muted text-truncate" style="max-width: 180px;">
+                                <i class="bi bi-envelope me-1"></i>{{ t.email if t.email else '-' }}
+                            </div>
+                        </td>
                         <td>
                             {% if t.current_room %}
-                            <span class="badge bg-success">ห้อง {{ t.current_room }}</span>
+                            <span
+                                class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3">
+                                ห้อง {{ t.current_room }}
+                            </span>
                             {% else %}
-                            <span class="badge bg-secondary">ไม่มีสัญญา</span>
+                            <span class="badge bg-light text-secondary border rounded-pill px-3">ไม่มีสัญญา</span>
                             {% endif %}
                         </td>
-                        <td class="text-center">
+                        <td class="pe-4 text-center">
                             <div class="d-flex justify-content-center gap-1">
                                 {% if t.id_card_img %}
                                 <a href="{{ url_for('download_id_card', filename=t.id_card_img) }}"
                                     download="บัตรประชาชน_{{ t.fname }}_{{ t.lname }}"
-                                    class="btn btn-sm btn-info text-white">
+                                    class="btn btn-sm btn-outline-info rounded-3" title="ดาวน์โหลดสำเนาบัตร">
                                     <i class="bi bi-download"></i>
                                 </a>
                                 {% else %}
-                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled
-                                    title="ไม่มีไฟล์">
+                                <button class="btn btn-sm btn-outline-secondary rounded-3" disabled title="ไม่มีไฟล์">
                                     <i class="bi bi-image"></i>
                                 </button>
                                 {% endif %}
 
-                                <button type="button" class="btn btn-sm btn-warning edit-tenant-btn text-dark"
+                                <button type="button" class="btn btn-sm btn-outline-warning edit-tenant-btn rounded-3"
                                     data-tenant='{{ t | tojson | safe }}' title="แก้ไขข้อมูล">
                                     <i class="bi bi-pencil"></i>
                                 </button>
@@ -60,11 +87,19 @@
                                     class="d-inline delete-form">
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="tenant_id" value="{{ t.tenant_id }}">
-                                    <button type="button" class="btn btn-sm btn-danger delete-btn" title="ลบข้อมูล">
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-btn rounded-3"
+                                        title="ลบข้อมูล">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </form>
                             </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="bi bi-people fs-1 d-block mb-2 opacity-25"></i>
+                            ไม่พบข้อมูลผู้เช่า
                         </td>
                     </tr>
                     {% endfor %}
@@ -76,60 +111,59 @@
 
 <div class="modal fade" id="tenantModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <form id="tenantForm" method="POST" enctype="multipart/form-data" class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modalTitle">ข้อมูลผู้เช่า</h5>
+        <form id="tenantForm" method="POST" enctype="multipart/form-data"
+            class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0 bg-light py-3">
+                <h5 class="modal-title fw-bold" id="modalTitle">ข้อมูลผู้เช่า</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <input type="hidden" name="action" id="formAction">
                 <input type="hidden" name="tenant_id" id="tenant_id">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label>เลขบัตรประชาชน</label>
+                        <label class="form-label small fw-bold">เลขบัตรประชาชน</label>
                         <input type="text" name="id_card" id="id_card" class="form-control" maxlength="13" required>
                     </div>
                     <div class="col-md-3">
-                        <label>ชื่อ</label>
+                        <label class="form-label small fw-bold">ชื่อ</label>
                         <input type="text" name="fname" id="fname" class="form-control" required>
                     </div>
                     <div class="col-md-3">
-                        <label>นามสกุล</label>
+                        <label class="form-label small fw-bold">นามสกุล</label>
                         <input type="text" name="lname" id="lname" class="form-control" required>
                     </div>
-                    <div class="col-md-2">
-                        <label>เพศ</label>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">เพศ</label>
                         <select name="gender" id="gender" class="form-select">
                             <option value="ชาย">ชาย</option>
                             <option value="หญิง">หญิง</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label>อายุ</label>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">อายุ</label>
                         <input type="number" name="age" id="age" class="form-control" required>
                     </div>
-                    <div class="col-md-4">
-                        <label>วันเกิด</label>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">วันเกิด</label>
                         <input type="date" name="bd" id="bd" class="form-control" required>
                     </div>
-                    <div class="col-md-4">
-                        <label>เบอร์โทร</label>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">เบอร์โทร</label>
                         <input type="text" name="tel" id="tel" class="form-control" placeholder="08x-xxx-xxxx" required>
                     </div>
-                    <div class="col-md-12">
-                        <label>ที่อยู่ปัจจุบันที่สามารถติดต่อได้</label>
-                        <textarea name="address" id="address" class="form-control" rows="2"
-                            placeholder="บ้านเลขที่ ถนน เขต จังหวัด"></textarea>
-                    </div>
-                    <div class="col-md-12">
-                        <label>Email</label>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Email</label>
                         <input type="email" name="email" id="email" class="form-control" placeholder="xxx@gmail.com">
                     </div>
                     <div class="col-md-12">
-                        <label class="form-label fw-bold">อัปโหลดสำเนาบัตรประชาชน</label>
+                        <label class="form-label small fw-bold">ที่อยู่ปัจจุบัน</label>
+                        <textarea name="address" id="address" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">อัปโหลดสำเนาบัตรประชาชน</label>
                         <input type="file" name="id_card_file" id="id_card_file" class="form-control"
                             accept="image/*,.pdf">
-
                         <div id="fileInfoArea" class="mt-2" style="display: none;">
                             <small class="text-muted">ไฟล์ปัจจุบัน: </small>
                             <span id="currentFileName" class="badge bg-light text-dark border"></span>
@@ -137,19 +171,58 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="submit" class="btn btn-primary">บันทึกข้อมูล</button>
+            <div class="modal-footer border-0 bg-light p-3">
+                <button type="button" class="btn btn-light rounded-3 px-4" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="submit" class="btn btn-primary rounded-3 px-4">บันทึกข้อมูล</button>
             </div>
         </form>
     </div>
 </div>
 
+<style>
+    /* Fixed Header Table */
+    .sticky-top {
+        top: 0;
+        background-color: #f8f9fa !important;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    /* Scrollbar Style */
+    .table-responsive::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+    }
+
+    .table-responsive::-webkit-scrollbar-track {
+        background: #f1f5f9;
+    }
+
+    .table th {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .edit-tenant-btn:hover {
+        background-color: #fffbeb;
+    }
+
+    .delete-btn:hover {
+        background-color: #fef2f2;
+    }
+</style>
 
 <script>
-    // 1. ฟังก์ชันเปิด Modal (ต้องอยู่นอก DOMContentLoaded เพื่อให้ปุ่ม HTML เรียกใช้ได้)
+    // 1. ฟังก์ชันเปิด Modal
     function openTenantModal(mode, data = null) {
         const modalElement = document.getElementById('tenantModal');
         const modal = new bootstrap.Modal(modalElement);
+        const fileInfoArea = document.getElementById('fileInfoArea');
+        const currentFileName = document.getElementById('currentFileName');
 
         document.getElementById('formAction').value = mode;
         document.getElementById('modalTitle').innerText = mode === 'add' ? 'เพิ่มผู้เช่าใหม่' : 'แก้ไขข้อมูลผู้เช่า';
@@ -164,8 +237,7 @@
 
             if (data.bd) {
                 const date = new Date(data.bd);
-                const formattedDate = date.toISOString().split('T')[0];
-                document.getElementById('bd').value = formattedDate;
+                document.getElementById('bd').value = date.toISOString().split('T')[0];
             } else {
                 document.getElementById('bd').value = '';
             }
@@ -174,14 +246,12 @@
             document.getElementById('address').value = data.address || '';
             document.getElementById('email').value = data.email || '';
 
-            // เช็คว่ามีรูปภาพเดิมไหม (id_card_img คือชื่อคอลัมน์ใน DB)
             if (data.id_card_img) {
                 fileInfoArea.style.display = 'block';
                 currentFileName.innerText = data.id_card_img;
             } else {
                 fileInfoArea.style.display = 'none';
             }
-
         } else {
             document.getElementById('tenantForm').reset();
             document.getElementById('tenant_id').value = '';
@@ -191,6 +261,19 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        // 2. ค้นหา Real-time
+        const searchInput = document.getElementById('tenantSearch');
+        const tableRows = document.querySelectorAll('#tenantTable tbody tr');
+
+        searchInput.addEventListener('input', function () {
+            const filter = searchInput.value.toLowerCase();
+            tableRows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(filter) ? '' : 'none';
+            });
+        });
+
+        // 3. Flash Messages (SweetAlert2)
         const dataElement = document.getElementById('flash-data');
         if (dataElement) {
             const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
@@ -205,38 +288,31 @@
             });
         }
 
-        // --- 3. จัดการปุ่มแก้ไข (Edit) ---
+        // 4. ปุ่มแก้ไข
         document.querySelectorAll('.edit-tenant-btn').forEach(btn => {
             btn.addEventListener('click', function () {
-                try {
-                    const data = JSON.parse(this.getAttribute('data-tenant'));
-                    console.log("Editing Data:", data);
-                    openTenantModal('edit', data);
-                } catch (e) {
-                    console.error("JSON Parse Error:", e);
-                }
+                const data = JSON.parse(this.getAttribute('data-tenant'));
+                openTenantModal('edit', data);
             });
         });
 
-        // --- 4. จัดการปุ่มลบ (Delete) ---
+        // 5. ปุ่มลบพร้อมการยืนยัน
         document.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', function () {
                 const form = this.closest('.delete-form');
                 Swal.fire({
                     title: 'ยืนยันการลบ?',
-                    text: "คุณต้องการลบข้อมูลผู้เช่ารายนี้ใช่หรือไม่!",
+                    text: "ข้อมูลผู้เช่าจะถูกลบออกจากระบบ!",
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#3085d6',
-                    confirmButtonText: 'ใช่, ลบเลย!',
-                    cancelButtonText: 'ยกเลิก'
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#64748b',
+                    confirmButtonText: 'ลบทันที',
+                    cancelButtonText: 'ยกเลิก',
+                    reverseButtons: true
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        console.log("Console Status: User confirmed delete.");
                         form.submit();
-                    } else {
-                        console.log("Console Status: Delete cancelled.");
                     }
                 });
             });

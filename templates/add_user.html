@@ -161,10 +161,26 @@
                                 <label class="form-label">สิทธิ์การใช้งาน *</label>
                                 <select name="role_id" class="form-select" required>
                                     <option value="" selected disabled>-- เลือกสิทธิ์การใช้งาน --</option>
+
+                                    {# ถ้าเป็น Admin ให้เลือกได้ทุกอย่าง #}
+                                    {% if session['role'] == 'admin' %}
                                     <option value="1">Admin (ผู้ดูแลระบบ)</option>
                                     <option value="2">Manager (ผู้จัดการ)</option>
                                     <option value="3">Staff (พนักงาน)</option>
+
+                                    {# ถ้าเป็น Manager ให้เลือกได้แค่ Manager และ Staff #}
+                                    {% elif session['role'] == 'manager' %}
+                                    <option value="2">Manager (ผู้จัดการ)</option>
+                                    <option value="3">Staff (พนักงาน)</option>
+
+                                    {# ถ้าเป็น Staff ให้เลือกได้แค่ Staff เท่านั้น #}
+                                    {% else %}
+                                    <option value="3" selected>Staff (พนักงาน)</option>
+                                    {% endif %}
                                 </select>
+                                {% if session['role'] not in ['admin', 'manager'] %}
+                                <small class="text-muted">* คุณสามารถเพิ่มได้เฉพาะผู้ใช้งานระดับพนักงานเท่านั้น</small>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -176,12 +192,18 @@
                             <div class="col-md-6">
                                 <label class="form-label">รหัสผ่าน *</label>
                                 <input type="password" name="password" id="password" class="form-control" required
-                                    placeholder="รหัสผ่านอย่างน้อย 6 ตัว" />
+                                    placeholder="รหัสผ่านอย่างน้อย 8 ตัว" oninput="checkPasswordStrength()" />
+                                <div class="progress mt-2" style="height: 5px; border-radius: 10px;">
+                                    <div id="strength-bar" class="progress-bar" role="progressbar" style="width: 0%">
+                                    </div>
+                                </div>
+                                <small id="strength-text" class="text-muted small"></small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">ยืนยันรหัสผ่าน *</label>
                                 <input type="password" id="confirm_password" class="form-control" required
-                                    placeholder="กรอกรหัสผ่านอีกครั้ง" />
+                                    placeholder="กรอกรหัสผ่านอีกครั้ง" oninput="checkMatchPassword()" />
+                                <small id="match-text" class="small"></small>
                             </div>
                         </div>
 

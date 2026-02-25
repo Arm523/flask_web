@@ -17,7 +17,7 @@
         background: var(--glass-bg);
         border-radius: 15px;
         padding: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         border: 1px solid #e2e8f0;
     }
 
@@ -25,14 +25,14 @@
     .lease-card {
         border: none;
         border-radius: 20px;
-        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+        transition: all 0.3s cubic-bezier(.25, .8, .25, 1);
         overflow: hidden;
         background: #fff;
     }
 
     .lease-card:hover {
         transform: translateY(-10px);
-        box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important;
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1) !important;
     }
 
     .card-accent {
@@ -73,7 +73,7 @@
     .status-icon-img {
         width: 60px;
         height: 60px;
-        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+        filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
     }
 </style>
 
@@ -90,7 +90,7 @@
                 <select name="status" class="form-select border-0 bg-light">
                     <option value="">ทั้งหมด</option>
                     {% for key, label in status_map.items() %}
-                    <option value="{{ key }}" {% if selected_status == key %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ key }}" {% if selected_status==key %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -99,14 +99,15 @@
                 <select name="room" class="form-select border-0 bg-light">
                     <option value="">ทั้งหมด</option>
                     {% for unit in all_units %}
-                    <option value="{{ unit.unit_id }}" {% if selected_room == unit.unit_id|string %}selected{% endif %}>
+                    <option value="{{ unit.unit_id }}" {% if selected_room==unit.unit_id|string %}selected{% endif %}>
                         ห้อง {{ unit.name }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm" style="border-radius: 10px; height: 38px;">
+                <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm"
+                    style="border-radius: 10px; height: 38px;">
                     <i class="fas fa-search me-2"></i> ค้นหา
                 </button>
             </div>
@@ -124,8 +125,8 @@
                             <h5 class="fw-bold mb-1 text-dark">{{ lease.tenant_name }}</h5>
                             <span class="text-primary fw-bold">ห้อง {{ lease.room_number }}</span>
                         </div>
-                        <img src="{{ url_for('static', filename='icons/' + status_icons[lease.status]) }}" 
-                             class="status-icon-img" alt="status">
+                        <img src="{{ url_for('static', filename='icons/' + status_icons[lease.status]) }}"
+                            class="status-icon-img" alt="status">
                     </div>
 
                     <div class="mb-4 small">
@@ -149,25 +150,27 @@
                     {% if lease.contracts_file %}
                     <div class="d-grid gap-2">
                         <a href="{{ url_for('contracts', filename=lease.contracts_file) }}" target="_blank"
-                           class="btn btn-view-contract btn-sm py-2">
-                           <i class="far fa-eye me-1"></i> ดูเอกสารสัญญา
+                            class="btn btn-view-contract btn-sm py-2">
+                            <i class="far fa-eye me-1"></i> ดูเอกสารสัญญา
                         </a>
 
                         <div class="upload-zone mt-2">
                             <label class="small fw-bold text-muted d-block mb-1">อัปโหลดไฟล์ใหม่ (.pdf, .jpg)</label>
-                            <form action="{{ url_for('edit_signed_contract', contract_id=lease.contract_id) }}" 
-                                  method="POST" enctype="multipart/form-data" class="edit-contract-form">
+                            <form action="{{ url_for('edit_signed_contract', contract_id=lease.contract_id) }}"
+                                method="POST" enctype="multipart/form-data" class="edit-contract-form">
                                 <div class="input-group input-group-sm">
-                                    <input type="file" name="file" class="form-control border-0 bg-transparent" required>
+                                    <input type="file" name="file" class="form-control border-0 bg-transparent"
+                                        required>
                                     <button type="submit" class="btn btn-warning btn-sm fw-bold">🔁 แก้ไข</button>
                                 </div>
                             </form>
                         </div>
 
                         {% if lease.status in [5, 6] %}
-                        <form method="post" action="{{ url_for('delete_contract', contract_id=lease.contract_id) }}" 
-                              class="delete-contract-form mt-2">
-                            <button type="submit" class="btn btn-link btn-sm text-danger text-decoration-none w-100 fw-bold">
+                        <form method="post" action="{{ url_for('delete_contract', contract_id=lease.contract_id) }}"
+                            class="delete-contract-form mt-2">
+                            <button type="submit"
+                                class="btn btn-link btn-sm text-danger text-decoration-none w-100 fw-bold">
                                 <i class="far fa-trash-alt me-1"></i> ลบข้อมูลสัญญา
                             </button>
                         </form>
@@ -183,7 +186,8 @@
         </div>
         {% else %}
         <div class="col-12 text-center py-5">
-            <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" style="width: 80px; opacity: 0.3;" alt="empty">
+            <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" style="width: 80px; opacity: 0.3;"
+                alt="empty">
             <p class="text-muted mt-3">ไม่พบข้อมูลสัญญาที่ค้นหา</p>
         </div>
         {% endfor %}
@@ -197,47 +201,56 @@
     document.querySelectorAll('.delete-contract-form').forEach(form => {
         form.addEventListener('submit', function (e) {
             e.preventDefault();
+
             Swal.fire({
-                title: 'คุณแน่ใจหรือไม่?',
-                text: "การลบสัญญานี้จะไม่สามารถกู้คืนได้!",
+                title: 'ยืนยันการลบ?',
+                text: "ข้อมูลไฟล์จะหายไปถาวร!",
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#ef4444',
-                cancelButtonColor: '#64748b',
-                confirmButtonText: 'ใช่ ลบเลย!',
+                confirmButtonText: 'ถัดไป',
                 cancelButtonText: 'ยกเลิก'
-            }).then((first) => {
-                if (first.isConfirmed) {
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // ขั้นตอนยืนยันรหัสผ่าน
                     Swal.fire({
-                        title: 'ยืนยันรหัสผ่าน',
+                        title: 'ยืนยันตัวตน',
                         input: 'password',
-                        inputLabel: 'กรอกรหัสผ่านเพื่อยืนยันการลบ',
+                        inputLabel: 'กรุณากรอกรหัสผ่านของคุณเพื่อยืนยัน',
+                        inputPlaceholder: 'Password',
                         showCancelButton: true,
-                        preConfirm: (password) => {
-                            if (!password) { Swal.showValidationMessage('กรุณากรอกรหัสผ่าน!'); }
-                            return password;
+                        preConfirm: (value) => {
+                            if (!value) { Swal.showValidationMessage('กรุณากรอกรหัสผ่าน'); }
+                            return value;
                         }
-                    }).then((second) => {
-                        if (second.isConfirmed) {
-                            let pwdInput = document.createElement("input");
-                            pwdInput.type = "hidden";
-                            pwdInput.name = "user_password";
-                            pwdInput.value = second.value;
-                            form.appendChild(pwdInput);
-                            
+                    }).then((passResult) => {
+                        if (passResult.isConfirmed) {
+                            // แสดง Loading ระหว่างทำงาน
+                            Swal.fire({ title: 'กำลังดำเนินการ...', didOpen: () => Swal.showLoading() });
+
+                            const formData = new FormData(form);
+                            formData.append('user_password', passResult.value); // ส่งรหัสผ่านไป
+
                             fetch(form.action, {
                                 method: 'POST',
-                                body: new FormData(form),
-                                credentials: 'same-origin'
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.status === 'error') {
-                                    Swal.fire('ล้มเหลว', data.message, 'error');
-                                } else {
-                                    Swal.fire('สำเร็จ', 'ลบเอกสารเรียบร้อย', 'success').then(() => location.reload());
+                                body: formData,
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest' // ✅ บรรทัดนี้ทำให้ Decorator ส่ง JSON กลับมา
                                 }
-                            });
+                            })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.status === 'success') {
+                                        Swal.fire('สำเร็จ!', data.message, 'success').then(() => {
+                                            // ✅ กลับไปหน้า /leases_uploaded หลังกด ตกลง
+                                            window.location.href = "/leases_uploaded";
+                                        });
+                                    } else {
+                                        // ❌ แจ้งเตือนกรณี รหัสผิด หรือ ไม่มีสิทธิ์ จะเด้งตรงนี้
+                                        Swal.fire('ล้มเหลว', data.message, 'error');
+                                    }
+                                })
+                                .catch(err => Swal.fire('Error', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error'));
                         }
                     });
                 }
@@ -249,21 +262,55 @@
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             const fileInput = form.querySelector('input[type="file"]');
+
             if (!fileInput.files.length) {
                 Swal.fire('คำเตือน', 'กรุณาเลือกไฟล์ก่อน', 'warning');
                 return;
             }
+
             Swal.fire({
                 title: 'ยืนยันการแก้ไข?',
                 text: 'ไฟล์เดิมจะถูกแทนที่ทันที',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#f59e0b',
-                confirmButtonText: 'ตกลง, อัปโหลด'
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'ตกลง, อัปโหลด',
+                cancelButtonText: 'ยกเลิก'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({ title: 'กำลังอัปโหลด...', didOpen: () => Swal.showLoading() });
-                    form.submit();
+                    // แสดง Loading ระหว่างรอ Server ประมวลผล
+                    Swal.fire({
+                        title: 'กำลังอัปโหลด...',
+                        allowOutsideClick: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+
+                    // ใช้ Fetch แทน form.submit()
+                    const formData = new FormData(form);
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'สำเร็จ!',
+                                    text: data.message,
+                                    confirmButtonText: 'ตกลง'
+                                }).then(() => {
+                                    window.location.href = "/leases_uploaded";
+                                });
+                            } else {
+                                Swal.fire('เกิดข้อผิดพลาด', data.message, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Fetch error:', error);
+                            Swal.fire('Error', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
+                        });
                 }
             });
         });
