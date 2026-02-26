@@ -105,16 +105,5 @@
         },
         "config_register": {},
         "path": "/123/log"
-    },
-    "modelB": {
-        "type": "api",
-        "read_register": {
-            "total_kwh": {
-                "key_name": "kwh",
-                "gain": 1
-            }
-        },
-        "config_register": {},
-        "path": "/123/log"
     }
 }

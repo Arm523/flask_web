@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการบิลทั้งหมด - Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f4f7f6;
+        }
+
+        .invoice-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .table thead th {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            color: #495057;
+        }
+
+        .badge-paid {
+            background-color: #d1fae5;
+            color: #065f46;
+            border-radius: 8px;
+        }
+
+        .badge-unpaid {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border-radius: 8px;
+        }
+
+        .btn-action {
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+
+        .btn-action:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="fw-bold text-dark mb-0"><i class="bi bi-wallet2 me-2"></i>Invoices Management</h3>
+                <p class="text-muted">จัดการรายการบิลและสถานะการชำระเงินสำหรับ Admin/Manager</p>
+            </div>
+            <div class="d-flex gap-2">
+                <span class="badge bg-dark px-3 py-2 rounded-pill">Role: {{ session.get('role') }}</span>
+                <a href="/dashboard" class="btn btn-outline-secondary btn-action px-3"><i class="bi bi-house"></i></a>
+            </div>
+        </div>
+
+        <div class="invoice-card p-4">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th width="80">ID</th>
+                            <th width="120">เลขห้อง</th>
+                            <th>ชื่อผู้เช่า</th>
+                            <th>ยอดรวมทั้งหมด</th>
+                            <th>สถานะ</th>
+                            <th>วันที่บันทึก</th>
+                            <th class="text-end">การจัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in invoices %}
+                        <tr>
+                            <td class="fw-bold">#{{ inv.invoice_id }}</td>
+                            <td><span class="badge bg-primary px-3">{{ inv.room_name }}</span></td>
+                            <td>
+                                <div class="fw-semibold">{{ inv.fname or 'Guest' }}</div>
+                                <small class="text-muted">{{ inv.lname or '-' }}</small>
+                            </td>
+                            <td class="fw-bold text-primary">฿{{ "{:,.2f}".format(inv.total_amount) }}</td>
+                            <td>
+                                {% if inv.status == 'paid' %}
+                                <span class="badge badge-paid px-3 py-2 fw-normal"><i
+                                        class="bi bi-check-circle me-1"></i>ชำระแล้ว</span>
+                                {% elif inv.status == 'cancelled' %}
+                                <span class="badge badge-unpaid px-3 py-2 fw-normal"><i
+                                        class="bi bi-clock-history me-1"></i>ค้างชำระ</span>
+
+                                {% elif inv.status == 'draft' %}
+                                <span class="badge badge-pending px-3 py-2 fw-normal"><i
+                                        class="bi bi-hourglass me-1"></i>รอการชำระ</span>
+
+                                {% elif inv.status == 'overdue' %}
+                                <span class="badge badge-unpaid px-3 py-2 fw-normal"><i
+                                        class="bi bi-exclamation-triangle me-1"></i>เกินกำหนด</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ inv.created_at }}</small></td>
+                            <td class="text-end">
+                                <div class="btn-group gap-1">
+                                    {% if inv.slip_file %}
+                                    <a href="{{ url_for('static', filename='uploads/slips/' + inv.slip_file) }}"
+                                        target="_blank" class="btn btn-light btn-sm text-info border"
+                                        title="ดูหลักฐานการโอน">
+                                        <i class="bi bi-image"></i>
+                                    </a>
+                                    {% endif %}
+
+                                    {% if inv.status != 'paid' %}
+                                    <a href="/payment/{{ inv.invoice_id }}"
+                                        class="btn btn-success btn-sm btn-action px-3">
+                                        จ่ายเงิน
+                                    </a>
+                                    {% endif %}
+
+                                    <button onclick="confirmDelete('{{ inv.invoice_id }}')"
+                                        class="btn btn-outline-danger btn-sm border">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        function confirmDelete(id) {
+            Swal.fire({
+                title: 'ยืนยันการลบบิล?',
+                text: "ข้อมูลบิลหมายเลข #" + id + " จะถูกลบถาวร!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'ใช่, ลบเลย!',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = "/delete_invoice/" + id;
+                }
+            })
+        }
+    </script>
+
+</body>
+
+</html>

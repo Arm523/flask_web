@@ -336,8 +336,6 @@
                         <h6 class="fw-bold mb-0" style="font-size: 13px;">
                             <i class="bi bi-exclamation-circle text-danger me-1"></i> ห้องที่ค้างชำระ
                         </h6>
-                        <button class="btn btn-link btn-sm p-0 text-decoration-none" onclick="location.href='/billing'"
-                            style="font-size: 11px;">ดูทั้งหมด</button>
                     </div>
                     <div id="unpaid-room-list" class="overflow-auto" style="max-height: 150px;">
                         <div class="text-center py-2"><small class="text-muted">กำลังโหลด...</small></div>
@@ -571,7 +569,7 @@
                     </a>
                     {% endif %}
 
-                    {% if room.contract_status == 4 and room.status_id == 6 %}
+                    {% if room.contract_status == 4 and room.status_id == 6 and room.i_status != 'paid' %}
                     <a href="{{ url_for('renew_contracts', contract_id=room.contract_id) }}"
                         class="btn btn-warning btn-sm mt-1">
                         ต่อสัญญา

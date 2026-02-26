@@ -42,7 +42,7 @@
                             <input type="text" id="contract_end_picker" name="contract_end"
                                 class="form-control form-control-lg bg-white" placeholder="เลือกวันที่ (วว/ดด/ปปปป)"
                                 required>
-                            <div class="form-text text-muted small">* ต้องเป็นวันที่หลังจากวันสิ้นสุดสัญญาเดิม</div>
+                            <div class="form-text text-muted small">* ต้องเป็นวันที่หลังจากวันสิ้นสุดสัญญาเดิม อย่างน้อย 1 เดือน</div>
                         </div>
 
                         <div class="mb-4">
@@ -84,10 +84,14 @@
 </style>
 
 <script>
+    const oldEndDate = new Date("{{ contract.contract_end }}");
+    const nextMonthDate = new Date(oldEndDate);
+    nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
+
     flatpickr("#contract_end_picker", {
         altInput: true,
         altFormat: "d/m/Y",
-        minDate: "{{ contract.contract_end }}",
+        minDate: nextMonthDate,
         locale: "th",
         disableMobile: "true"
     });

@@ -40,7 +40,7 @@ def save_config(path, data):
 def get_now(mocked=False):
     if mocked:
         # return datetime.now()
-        return datetime(2026, 7,2, 9, 0, 0)
+        return datetime(2026, 8,2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -809,6 +809,14 @@ def generate_monthly_invoices_if_due(mocked_date=None):
                 unit_id=c['unit_id'],
                 billing_month=today,
                 created_by=None
+            )
+
+            add_audit_log(
+                cursor, 
+                'INVOICE', 
+                'CREATE', 
+                f'สร้างบิลเดือน {today.month}/{today.year} สำหรับห้อง ID: {c["unit_id"]}', 
+                None
             )
 
             print(f"🧾 create_monthly_invoice() return = {invoice_id}")

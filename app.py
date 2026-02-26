@@ -28,7 +28,7 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_FOLDER = 'uploaded_docs'
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'jpg', 'png'}
 
-
+CONTRACTS_FOLDER = os.path.join(BASE_DIR, 'contracts_file')
 BASE_UPLOAD_PATH = os.path.join(BASE_DIR, 'uploads')
 EXPENSE_UPLOAD_PATH = os.path.join(BASE_UPLOAD_PATH, 'expense_slips')
 INCOME_UPLOAD_PATH = os.path.join(BASE_UPLOAD_PATH, 'income_slips')
@@ -36,7 +36,7 @@ UPLOAD_ID_CARD = os.path.join(BASE_DIR, 'uploads', 'id_card')
 UPLOAD_PROFILE = os.path.join(BASE_DIR, 'static', 'profile_user')
 UPLOAD_ID_CARD_TENANTS = os.path.join(BASE_DIR, 'uploads', 'id_card_tenants')
 
-PATHS = [UPLOAD_ID_CARD, EXPENSE_UPLOAD_PATH, INCOME_UPLOAD_PATH, UPLOAD_PROFILE, UPLOAD_ID_CARD_TENANTS]
+PATHS = [UPLOAD_ID_CARD, EXPENSE_UPLOAD_PATH, INCOME_UPLOAD_PATH, UPLOAD_PROFILE, UPLOAD_ID_CARD_TENANTS, CONTRACTS_FOLDER, UPLOAD_ID_CARD_TENANTS]
 for path in PATHS:
     os.makedirs(path, exist_ok=True)
     
@@ -236,7 +236,7 @@ def add_user():
             add_audit_log(
                 cursor, 
                 'USER', 
-                'CREATE', 
+                'INSERT', 
                 f'เพิ่มผู้ใช้งานใหม่ ID: {new_user_id}', 
                 session.get('user', {}).get('user_id')
             )
@@ -532,19 +532,6 @@ def update_invoice():
             elec_usage, water_usage, invoice_id
         ))
 
-        sql_refresh = """
-            UPDATE invoices i
-            JOIN (
-                SELECT invoice_id, 
-                (electricity_usage * electricity_rate) + (water_usage * water_rate) + room_price as new_total
-                FROM invoices WHERE invoice_id = %s
-            ) as calc ON i.invoice_id = calc.invoice_id
-            SET i.total_amount = calc.new_total
-        """
-        cursor.execute(sql_refresh, (invoice_id,)) # เปิดใช้งานหากสูตรคำนวณไม่ซับซ้อนเกินไป
-
-        # หากยังจำเป็นต้องใช้ฟังก์ชันเดิม ให้ตรวจสอบว่าข้างในไม่มีการเปิด/ปิด connection ใหม่
-        update_late_penalty(cursor, invoice_id)
         refresh_invoice_total(cursor, invoice_id)
         check_meter_save(cursor, invoice_id)
 
@@ -955,6 +942,51 @@ def get_usage_dashboard():
         cursor.close()
         conn.close()
 
+@app.route('/audit_logs')
+@role_required(['admin', 'manager'])
+def view_audit_logs():
+    selected_category = request.args.get('category', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT DISTINCT category FROM audit_log")
+    categories = [row['category'] for row in cursor.fetchall()]
+
+    query = """
+        SELECT al.*, u.username as staff_name, r.r_name, u.user_id as staff_id
+        FROM audit_log al
+        LEFT JOIN user u ON al.created_by = u.user_id
+        LEFT JOIN role r ON u.user_id = r.role_id
+        WHERE 1=1
+    """
+    params = []
+    if selected_category:
+        query += " AND al.category = %s"
+        params.append(selected_category)
+
+    if start_date:
+        query += " AND DATE(al.created_at) >= %s"
+        params.append(start_date)
+
+    if end_date:
+        query += " AND DATE(al.created_at) <= %s"
+        params.append(end_date)
+    
+    query += " ORDER BY al.created_at DESC LIMIT 1000"
+    
+    cursor.execute(query, tuple(params))
+    logs = cursor.fetchall()
+    conn.close()
+    
+    return render_template('audit_logs.html', 
+                           logs=logs, 
+                           categories=categories, 
+                           selected_category=selected_category,
+                           start_date=start_date,
+                           end_date=end_date)
 
 # ---------------------- DASHBOARD METER ----------------------
 @app.route('/meter_analysis', methods=['GET', 'POST'])
@@ -1343,7 +1375,7 @@ def create_invoice_extra_bill(contract_id):
             add_audit_log(
                 cursor, 
                 'INVOICE', 
-                'INSERT', 
+                'CREATE', 
                 f'สร้างบิลใหม่พิเศษ ID: {new_invoice_id}', 
                 session.get('user', {}).get('user_id')
             )
@@ -1765,7 +1797,7 @@ def daily_booking(unit_id):
         add_audit_log(
             cursor, 
             'DAILY_BOOKING', 
-            'INSERT', 
+            'CREATE', 
             f'จองรายวันบิล ID: {daily_booking_id}', 
             session.get('user', {}).get('user_id')
         )
@@ -2795,7 +2827,7 @@ def manage_doc():
 
 
 # ---------------------- MANAGE TRANETS -----------------------
-@app.route('/tenants', methods=['GET', 'POST'])
+@app.route('/manage_tenants', methods=['GET', 'POST'])
 def manage_tenants():
 
     conn = get_db_connection()
@@ -2908,7 +2940,7 @@ def manage_tenants():
         SELECT t.*, 
            (SELECT u.name FROM contracts c 
             JOIN unit u ON c.room_id = u.unit_id 
-            WHERE c.tenant_id = t.tenant_id AND c.status = 3 LIMIT 1) as current_room
+            WHERE c.tenant_id = t.tenant_id AND c.status IN (1,2,3,4) LIMIT 1) as current_room
         FROM tenants t
         WHERE (t.fname LIKE %s OR t.lname LIKE %s OR t.tel LIKE %s) AND t.is_deleted = 0
         ORDER BY t.tenant_id DESC
@@ -3179,14 +3211,22 @@ def delete_contract(contract_id):
         row = cursor.fetchone()
 
         if row and row['contracts_file']:
-            file_name = row['contracts_file']
-            # ระบุ path ตามเครื่องคุณ
-            file_path = os.path.join('/home/precise/flask_web/contracts_file', file_name)
+            file_name = os.path.basename(row['contracts_file']) 
+            file_path = os.path.join(CONTRACTS_FOLDER, file_name) 
+            
             if os.path.isfile(file_path):
                 os.remove(file_path)
 
         # 3️⃣ อัปเดต Database ให้ค่าไฟล์เป็น NULL
         cursor.execute("UPDATE contracts SET contracts_file = NULL WHERE contract_id = %s", (contract_id,))
+
+        add_audit_log(
+            cursor, 
+            'CONTRACT', 
+            'DELETE_DOC', 
+            f'ลบไฟล์เอกสารออกจากสัญญา ID: {contract_id}', 
+            u_id
+        )
         conn.commit()
         
         return jsonify({'status': 'success', 'message': 'ลบเอกสารสัญญาเรียบร้อยแล้ว'})
@@ -3263,6 +3303,15 @@ def edit_user(user_id):
             params.append(user_id)
 
             cursor.execute(sql, tuple(params))
+
+            add_audit_log(
+                cursor, 
+                'USER', 
+                'UPDATE', 
+                f'แก้ไขข้อมูลผู้ใช้ ID: {user_id}', 
+                session['user_id']
+            )
+
             conn.commit()
             flash('อัปเดตข้อมูลและรหัสผ่านเรียบร้อย', 'success')
         except Exception as e:
@@ -3324,6 +3373,15 @@ def remove_user_file(file_type, user_id):
 
         # 4. อัปเดต Database ให้ค่านั้นเป็น NULL
         query = f"UPDATE user SET {column_name} = NULL WHERE user_id = %s"
+        
+        add_audit_log(
+                cursor, 
+                'USER', 
+                'DELET_USER_FILE', 
+                f'ลบไฟล์ผู้ใช้งาน ID: {user_id}', 
+                session['user_id']
+            )
+
         cursor.execute(query, (user_id,))
         conn.commit()
 
@@ -3353,6 +3411,11 @@ def delete_user(user_id):
         # 2. ลองสั่ง DELETE เลย
         try:
             cursor.execute("DELETE FROM user WHERE user_id = %s", (user_id,))
+            add_audit_log(
+                cursor, 'USER', 'DELETE', 
+                f'ลบผู้ใช้งาน ID: {user_id} แบบถาวร', 
+                session.get('user', {}).get('user_id')
+            )
             conn.commit()
             
             # --- ถ้าทำงานมาถึงตรงนี้ แปลว่าลบจาก DB สำเร็จ (ไม่มีคนดึง FK ไว้) ---
@@ -3372,6 +3435,11 @@ def delete_user(user_id):
             # ตรวจสอบว่าเป็น Error เกี่ยวกับ Foreign Key หรือไม่ (MySQL Code 1451)
             if "1451" in str(db_err):
                 cursor.execute("UPDATE user SET is_deleted = 1 WHERE user_id = %s", (user_id,))
+                add_audit_log(
+                    cursor, 'USER', 'DELETE', 
+                    f'ปิดการใช้งานผู้ใช้งาน ID: {user_id} (มีข้อมูลเชื่อมโยง)', 
+                    session.get('user', {}).get('user_id')
+                )
                 conn.commit()
                 flash(f'User นี้มีข้อมูลผูกไว้กับระบบอื่น จึงเปลี่ยนเป็น "ปิดการใช้งาน" แทนการลบถาวร', 'info')
             else:
@@ -3581,6 +3649,14 @@ def confirm_payment(invoice_id):
             conn.close()
             return redirect(url_for('dashboard'))
 
+        add_audit_log(
+            cursor, 
+            'INVOICE', 
+            'PAYMENT', 
+            f'ชำระเงินใบแจ้งหนี้ ID: {invoice_id}', 
+            session.get('user', {}).get('user_id')
+        )
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -3692,6 +3768,14 @@ def confirm_daily_payment(invoice_id):
                 created_by=payee_id
             )
 
+            add_audit_log(
+                cursor, 
+                'INVOICE', 
+                'PAYMENT_DAILY', 
+                f'ชำระเงินใบแจ้งหนี้รายวัน ID: {invoice_id}', 
+                session.get('user', {}).get('user_id')
+            )
+
             conn.commit()
             flash("ชำระเงินเรียบร้อยแล้ว", "success")
             return redirect(url_for('print_receipt', invoice_id=invoice_id))
@@ -3747,6 +3831,14 @@ def add_expense():
                 note=f"บันทึกรายจ่าย {category}",
                 created_by=created_by
             )
+
+        add_audit_log(
+            cursor,
+            'EXPENSE',
+            'INSERT',
+            f'บันทึกรายจ่ายใหม่ ID: {expense_id}, หมวดหมู่: {category}, จำนวน: {amount}',
+            created_by
+        )
         conn.commit()
         
         return jsonify({"status": "success", "message": "บันทึกรายจ่ายแล้ว"})
@@ -3757,6 +3849,36 @@ def add_expense():
     finally:
         cursor.close()
         conn.close()
+
+@app.route('/billing')
+def billing():
+    # ตรวจสอบสิทธิ์ (ถ้าไม่ใช่ admin/manager ให้เด้งออก)
+    if session.get('role') not in ['admin', 'manager']:
+        flash("คุณไม่มีสิทธิ์เข้าถึงหน้านี้", "danger")
+        return redirect(url_for('dashboard'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # ดึงบิลทั้งหมด (เรียงตามวันที่สร้างล่าสุด)
+    # เรา JOIN unit และ tenants เพื่อเอาชื่อมาแสดงผล
+    sql = """
+        SELECT 
+            i.*, 
+            u.name as room_name, 
+            t.fname, 
+            t.lname
+        FROM invoices i
+        JOIN unit u ON i.unit_id = u.unit_id
+        LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
+        ORDER BY i.created_at DESC
+    """
+    cursor.execute(sql)
+    all_invoices = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+    return render_template('billing.html', invoices=all_invoices)
 
 # ---------------------- print_receipt ----------------------
 @app.route('/print_receipt/<int:invoice_id>')
@@ -3842,26 +3964,45 @@ def confirm_contract(contract_id):
     if request.method == 'POST':
         file = request.files.get('file')
         if file and allowed_file(file.filename):
-            filename = f"contract_signed_{contract_id}_{secure_filename(file.filename)}"
-            filepath = os.path.join(app.config['SIGNED_FOLDER'], filename)
+            # ใช้ f-string จัดการชื่อไฟล์ให้สื่อความหมาย
+            filename = f"signed_{contract_id}_{secure_filename(file.filename)}"
+            
+            # ✅ เปลี่ยนมาใช้ CONTRACTS_FOLDER ที่เราสร้างไว้ใน PATHS
+            filepath = os.path.join(CONTRACTS_FOLDER, filename)
             file.save(filepath)
 
-            cursor.execute(
-                "UPDATE contracts SET signed_contract_file = %s WHERE contract_id = %s", (filename, contract_id))
-            conn.commit()
-            flash("อัปโหลดไฟล์สำเร็จ", "success")
+            try:
+                # อัปเดตชื่อไฟล์ลงใน Database
+                cursor.execute(
+                    "UPDATE contracts SET contracts_file = %s, status = 2 WHERE contract_id = %s", 
+                    (filename, contract_id)
+                )
+                
+                # 🟢 เพิ่ม Audit Log บันทึกประวัติ
+                add_audit_log(
+                    cursor, 
+                    'CONTRACT', 
+                    'CONFIRM', 
+                    f'ยืนยันสัญญาและอัปโหลดไฟล์ (ID: {contract_id})', 
+                    session.get('user', {}).get('user_id')
+                )
+                
+                conn.commit()
+                flash("ยืนยันสัญญาและอัปโหลดไฟล์สำเร็จ", "success")
+            except Exception as e:
+                conn.rollback()
+                flash(f"เกิดข้อผิดพลาด: {e}", "danger")
         else:
-            flash("กรุณาเลือกไฟล์ .pdf หรือ .docx", "danger")
+            flash("กรุณาเลือกไฟล์ให้ถูกต้อง", "danger")
 
         return redirect(url_for('confirm_contract', contract_id=contract_id))
 
     # GET - Load data
-    cursor.execute(
-        "SELECT * FROM contracts WHERE contract_id = %s", (contract_id,))
+    cursor.execute("SELECT * FROM contracts WHERE contract_id = %s", (contract_id,))
     contract = cursor.fetchone()
+    
     cursor.close()
     conn.close()
-
     return render_template('confirm_contract.html', contract=contract)
 
 @app.route('/approve_contract/<int:contract_id>', methods=['POST'])
@@ -3870,6 +4011,13 @@ def approve_contract(contract_id):
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE contracts SET status = 2 WHERE contract_id = %s", (contract_id,))
+    
+    add_audit_log(
+        cursor, 'CONTRACT', 'APPROVE', 
+        f'อนุมัติสัญญา ID: {contract_id}', 
+        session.get('user', {}).get('user_id')
+    )
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -3887,37 +4035,70 @@ def upload_signed_contract(contract_id):
         flash('กรุณาเลือกไฟล์', 'danger')
         return redirect(url_for('dashboard'))
 
+    # 1. จัดการชื่อไฟล์และ Path (ใช้ตัวแปรกลางที่คุณตั้งไว้)
     now = datetime.now()
-    filename = f"contract_signed_{contract_id}_{now.strftime('%d-%m-%Y')}_{secure_filename(file.filename)}"
-    os.makedirs('contracts_file', exist_ok=True)
-    filepath = os.path.join('contracts_file', filename)
-    file.save(filepath)
-
+    filename = f"signed_{contract_id}_{now.strftime('%d-%m-%Y')}_{secure_filename(file.filename)}"
+    
+    # ✅ ใช้ CONTRACTS_FOLDER ที่ประกาศไว้ตอนเริ่มแอป
+    filepath = os.path.join(CONTRACTS_FOLDER, filename)
+    
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True) # ใช้ dictionary เพื่อความง่าย
 
-    cursor.execute("""
-        UPDATE contracts 
-        SET contracts_file = %s, status = 2 , created_at = NOW()
-        WHERE contract_id = %s
-    """, (filename, contract_id))
+    try:
+        # บันทึกไฟล์ลง Disk
+        file.save(filepath)
 
-    cursor.execute(
-        "SELECT room_id FROM contracts WHERE contract_id=%s", (contract_id,))
-    room_id = cursor.fetchone()[0]
+        # 2. อัปเดตสถานะสัญญา
+        cursor.execute("""
+            UPDATE contracts 
+            SET contracts_file = %s, status = 2, created_at = NOW()
+            WHERE contract_id = %s
+        """, (filename, contract_id))
 
-    cursor.execute("UPDATE unit SET status_id=5 WHERE unit_id=%s", (room_id,))
+        # 3. ดึง room_id และอัปเดตสถานะห้อง
+        cursor.execute("SELECT room_id FROM contracts WHERE contract_id = %s", (contract_id,))
+        contract_data = cursor.fetchone()
+        
+        if contract_data:
+            room_id = contract_data['room_id']
+            cursor.execute("UPDATE unit SET status_id = 5 WHERE unit_id = %s", (room_id,))
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # 4. 🟢 เพิ่ม Audit Log (ใช้ add_audit_log ที่เราคุยกัน)
+        add_audit_log(
+            cursor, 
+            'CONTRACT', 
+            'UPLOAD_SIGNED', 
+            f'อัปโหลดสัญญาเซ็นแล้ว ห้อง ID: {room_id if "room_id" in locals() else "Unknown"}', 
+            session.get('user', {}).get('user_id')
+        )
 
-    flash('✅ อัปโหลดสัญญาเซ็นแล้วสำเร็จ', 'success')
+        conn.commit()
+        flash('✅ อัปโหลดสัญญาเซ็นแล้วสำเร็จ', 'success')
+
+    except Exception as e:
+        if conn: conn.rollback()
+        # ถ้าพังและไฟล์ถูกเซฟไปแล้ว อาจจะพิจารณาลบไฟล์ทิ้งเพื่อความสะอาด
+        if os.path.exists(filepath): os.remove(filepath)
+        flash(f'เกิดข้อผิดพลาด: {str(e)}', 'danger')
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
     return redirect(url_for('dashboard'))
 
 @app.route('/download_signed_contract/<filename>')
 def download_signed_contract(filename):
-    return send_from_directory('contracts_file', filename, as_attachment=True)
+    try:
+        safe_filename = os.path.basename(filename)
+        
+        return send_from_directory(
+            CONTRACTS_FOLDER, 
+            safe_filename, 
+            as_attachment=True
+        )
+    except FileNotFoundError:
+        abort(404)
 
 @app.route('/save_contract', methods=['POST'])
 def save_contract():
@@ -3968,10 +4149,9 @@ def save_contract():
        
 @app.route('/contracts/<filename>')
 def contracts(filename):
-    # โฟลเดอร์ที่เก็บไฟล์จริง
-    folder_path = os.path.join(app.root_path, 'contracts_file')
+    safe_filename = os.path.basename(filename)
     try:
-        return send_from_directory(folder_path, filename)
+        return send_from_directory(CONTRACTS_FOLDER, safe_filename)
     except FileNotFoundError:
         abort(404)
 
@@ -3992,6 +4172,15 @@ def edit_signed_contract(contract_id):
         # 2. ดึงไฟล์เดิมเพื่อลบออก (ป้องกันไฟล์ขยะเต็ม Server)
         cursor.execute("SELECT contracts_file FROM contracts WHERE contract_id=%s", (contract_id,))
         contract = cursor.fetchone()
+
+        if contract and contract['contracts_file']:
+            old_files = contract['contracts_file'].split(',')
+            for f_name in old_files:
+                # ✅ ใช้ CONTRACTS_FOLDER ที่เป็น Absolute Path
+                old_path = os.path.join(CONTRACTS_FOLDER, f_name.strip())
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+
         old_file = contract['contracts_file'] if contract else None
         folder = 'contracts_file'
 
@@ -4008,9 +4197,17 @@ def edit_signed_contract(contract_id):
 
         # 4. อัปเดตชื่อไฟล์ใน Database
         cursor.execute("UPDATE contracts SET contracts_file = %s WHERE contract_id = %s", (filename, contract_id))
+
+        add_audit_log(
+            cursor, 
+            'CONTRACT',
+            'UPDATE',
+            f'แก้ไขไฟล์สัญญาเซ็นแล้ว ID: {contract_id}', 
+            session.get('user', {}).get('user_id')
+        )
+
         conn.commit()
         
-        # ✅ ส่ง JSON กลับไปบอก JS ว่า "เสร็จแล้วนะ"
         return jsonify({
             'status': 'success', 
             'message': 'อัปโหลดไฟล์สัญญาใหม่เรียบร้อยแล้ว'
@@ -4057,6 +4254,13 @@ def update_settings():
                 UPDATE settings SET setting_value=%s WHERE setting_key=%s
             """, (value, key))
 
+        add_audit_log(
+            cursor, 
+            'SETTINGS', 
+            'UPDATE',
+            f'อัพเดท setting ค่า: {", ".join(keys)}',
+            session.get('user', {}).get('user_id')
+        )
         conn.commit()
         flash('บันทึกการตั้งค่าสำเร็จ ✅', 'success')
         return redirect(url_for('update_settings'))
@@ -4203,6 +4407,14 @@ def notice_move_out(contract_id):
         SET status_id = 7 
         WHERE unit_id = (SELECT room_id FROM contracts WHERE contract_id = %s)
     """, (contract_id,))
+
+    add_audit_log(
+        cursor, 
+        'TENANT', 
+        'NOTICE_MOVE_OUT', 
+        f'แจ้งย้ายออกสัญญา ID: {contract_id}, วันที่แจ้ง: {notice_date_str}', 
+        session.get('user', {}).get('user_id')
+    )
 
     conn.commit()
     cursor.close()
@@ -4376,6 +4588,14 @@ def create_invoice_move_out(contract_id):
         WHERE contract_id = %s AND status IN ('unpaid', 'overdue') AND invoice_id != %s
     """, (contract_id, invoice_id))
 
+    add_audit_log(
+        cursor, 
+        'TENANT', 
+        'CREATE_FINAL_INVOICE', 
+        f'สร้างบิลย้ายออกสัญญา ID: {contract_id}, บิล ID: {invoice_id}, ยอดรวม: {total_amount}', 
+        session.get('user', {}).get('user_id')
+    )
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -4499,6 +4719,14 @@ def update_meter():
 
         # 10. คำนวณยอดรวมสุทธิใหม่ (จะไปเช็ค Logic invoice_type ในนี้ต่อ)
         refresh_invoice_total(cursor, invoice['invoice_id'])
+
+        add_audit_log(
+            cursor, 
+            'METER', 
+            'UPDATE', 
+            f'อัปเดตมิเตอร์ห้อง ID: {unit_id} - ไฟ: {electricity} (Usage: {elec_usage}), น้ำ: {water} (Usage: {water_usage})', 
+            session.get('user', {}).get('user_id')
+        )
         
         conn.commit()
         return jsonify({"status": "success", "message": "บันทึกมิเตอร์เรียบร้อยแล้ว"})

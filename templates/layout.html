@@ -362,7 +362,7 @@
           </i>
         </a>
 
-        
+
         <div
           class="collapse {% if request.path in ['/manage_units', '/manage_option', '/manage_meter', '/manage_doc', '/manage_tenants'] %}show{% endif %}"
           id="manageMenu">
@@ -399,7 +399,7 @@
               <a href="{{ url_for('manage_tenants') }}"
                 class="nav-link sub-link {% if request.path == '/manage_tenants' %}active{% endif %}">
                 <i class="bi bi-person-vcard"></i>
-                <span class="nav-text">Manage Tranets</span>
+                <span class="nav-text">Manage Tenants</span>
               </a>
             </li>
           </ul>
@@ -423,12 +423,20 @@
         <i class="bi bi-gear"></i>
         <span class="nav-text">การตั้งค่าระบบ</span>
       </a>
-       {% endif %}
+      {% endif %}
 
       <a href="/leases_uploaded" class="nav-link {% if '/leases_uploaded' in request.path %}active{% endif %}">
         <i class="bi bi-file-check"></i>
         <span class="nav-text">สัญญาเช่า</span>
       </a>
+
+      {% if session['role'] in ['admin', 'manager'] %}
+      <a href="{{ url_for('view_audit_logs') }}"
+        class="nav-link {% if request.endpoint == 'view_audit_logs' %}active{% endif %}">
+        <i class="bi bi-clock-history"></i>
+        <span class="nav-text">ประวัติการใช้งานระบบ</span>
+      </a>
+      {% endif %}
 
       {% if session['role'] == 'admin' %}
       <a href="/tool_meter" class="nav-link {% if '/tool_meter' in request.path %}active{% endif %}">
