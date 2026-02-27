@@ -115,12 +115,19 @@
     <strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building
     }} ชั้น {{ invoice.floor }}
   </p>
-  <p>
-    <strong>รอบบิล:</strong>
-    {% if invoice.is_first_month %} ชําระ ค่ามัดจํา งวดเเรก {% elif
-    invoice.invoice_type == 'monthly' or invoice.invoice_type == 'final' %} {{
-    display_start.strftime('%d/%m/%Y') }} - {{
-    display_end.strftime('%d/%m/%Y') }} {% else %} ไม่มีรอบบิล {% endif %}
+  <p><strong>ช่วงเวลาบิล:</strong>
+    {% if invoice.is_first_month %}
+    งวดเเรก
+    {% elif invoice.is_extra_bill %}
+    บิลพิเศษ
+    {% else %}
+    {# เช็คว่าตัวแปรมีค่า และ ไม่เป็น None ก่อนจะสั่ง strftime #}
+    {% if display_start and display_end %}
+    {{ display_start.strftime('%d/%m/%Y') }} ถึง {{ display_end.strftime('%d/%m/%Y') }}
+    {% else %}
+    บิลทั่วไป (ไม่ได้ระบุวันที่)
+    {% endif %}
+    {% endif %}
   </p>
   <p>
     <strong>จ่ายภายในวันที่:</strong>

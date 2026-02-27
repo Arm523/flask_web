@@ -154,8 +154,15 @@
         <p><strong>ช่วงเวลาบิล:</strong>
             {% if invoice.is_first_month %}
             งวดเเรก
+            {% elif invoice.is_extra_bill %}
+            บิลพิเศษ
             {% else %}
+            {# เช็คว่าตัวแปรมีค่า และ ไม่เป็น None ก่อนจะสั่ง strftime #}
+            {% if display_start and display_end %}
             {{ display_start.strftime('%d/%m/%Y') }} ถึง {{ display_end.strftime('%d/%m/%Y') }}
+            {% else %}
+            บิลทั่วไป (ไม่ได้ระบุวันที่)
+            {% endif %}
             {% endif %}
         </p>
 
@@ -168,7 +175,7 @@
                 <th style="text-align:right;">ราคา/หน่วย</th>
                 <th style="text-align:right;">รวม</th>
             </tr>
-            {% if not invoice.is_first_month %}
+            {% if not invoice.is_first_month and not invoice.is_extra_bill and invoice.rent_amount > 0 %}
             <tr>
                 <td>ค่าเช่าห้อง</td>
                 <td style="text-align:center;">1</td>
@@ -268,7 +275,8 @@
         {% endif %}
 
         {% if invoice.reimburse and invoice.reimburse > 0 %}
-        <h4 style="color: rgb(28, 102, 28); line-height: 1.2; border-bottom: 1px solid #ccc; margin-top: 2px;">คืนค่าประกัน / มัดจํา:</h4>
+        <h4 style="color: rgb(28, 102, 28); line-height: 1.2; border-bottom: 1px solid #ccc; margin-top: 2px;">
+            คืนค่าประกัน / มัดจํา:</h4>
         <table>
             <tr>
                 <th>รายการ</th>

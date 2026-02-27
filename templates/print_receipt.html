@@ -124,7 +124,20 @@
         <p><strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building }} ชั้น {{ invoice.floor }}</p>
 
         <p><strong>ช่วงเวลาบิล:</strong>
-            {{ invoice.billing_period_start or '-' }} ถึง {{ invoice.billing_period_end or '-' }}
+            {% if invoice.is_first_month %}
+            งวดเเรก
+            {% elif invoice.is_extra_bill %}
+            บิลพิเศษ
+            {% else %}
+            {# เช็คว่าตัวแปรมีค่า และ ไม่เป็น None ก่อนจะสั่ง strftime #}
+            {% if display_start and display_end %}
+            {{ display_start.strftime('%d/%m/%Y') }} ถึง {{ display_end.strftime('%d/%m/%Y') }}
+            {% else %}
+            บิลทั่วไป (ไม่ได้ระบุวันที่)
+            {% endif %}
+            {% endif %}
+        </p>
+
         <p><strong>ชําระเมื่อ:</strong>
             {{ invoice.payment_date or '-' }}
         </p>

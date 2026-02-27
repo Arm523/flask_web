@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบจัดการบิลทั้งหมด - Admin Panel</title>
+    <title>ระบบจัดการการเงิน - Admin Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -13,18 +13,42 @@
         body {
             font-family: 'Sarabun', sans-serif;
             background-color: #f4f7f6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+            margin-bottom: 1.5rem;
+            padding: 1.5rem;
         }
 
         .invoice-card {
             background: white;
             border-radius: 15px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .table-responsive {
+            overflow-y: auto;
+            flex: 1;
         }
 
         .table thead th {
+            position: sticky;
+            top: 0;
             background-color: #f8f9fa;
             border-bottom: 2px solid #dee2e6;
             color: #495057;
+            z-index: 10;
         }
 
         .badge-paid {
@@ -39,6 +63,18 @@
             border-radius: 8px;
         }
 
+        .badge-pending {
+            background-color: #fef3c7;
+            color: #92400e;
+            border-radius: 8px;
+        }
+
+        .badge-expense {
+            background-color: #ffd1d1;
+            color: #bd0f0f;
+            border-radius: 8px;
+        }
+
         .btn-action {
             border-radius: 10px;
             transition: all 0.2s;
@@ -47,88 +83,157 @@
         .btn-action:hover {
             transform: scale(1.05);
         }
+
+        /* เพิ่มสไตล์สำหรับรายจ่าย */
+        .text-expense {
+            color: #dc3545 !important;
+        }
+
+        .text-income {
+            color: #0d6efd !important;
+        }
     </style>
 </head>
 
 <body>
 
-    <div class="container-fluid py-4">
+    <div class="container-fluid py-4 d-flex flex-column" style="height: 100%;">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
-                <h3 class="fw-bold text-dark mb-0"><i class="bi bi-wallet2 me-2"></i>Invoices Management</h3>
-                <p class="text-muted">จัดการรายการบิลและสถานะการชำระเงินสำหรับ Admin/Manager</p>
+                <h3 class="fw-bold text-dark mb-0"><i class="bi bi-wallet2 me-2"></i>Financial Management</h3>
+                <p class="text-muted mb-0">จัดการรายรับ (บิลหอพัก) และรายจ่ายทั้งหมด</p>
             </div>
             <div class="d-flex gap-2">
-                <span class="badge bg-dark px-3 py-2 rounded-pill">Role: {{ session.get('role') }}</span>
-                <a href="/dashboard" class="btn btn-outline-secondary btn-action px-3"><i class="bi bi-house"></i></a>
+                <span class="badge bg-dark px-3 py-2 rounded-pill d-flex align-items-center">Role: {{
+                    session.get('role') }}</span>
+                <a href="/dashboard" class="btn btn-outline-secondary btn-action px-3"><i class="bi bi-house"></i>
+                    กลับ</a>
+            </div>
+        </div>
+
+        <div class="filter-card">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">ค้นหาเลขห้อง, ชื่อ หรือรายการ</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-0"><i class="bi bi-search"></i></span>
+                        <input type="text" id="liveSearch" class="form-control border-0 bg-light"
+                            placeholder="พิมพ์สิ่งที่ต้องการค้นหา...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">ตั้งแต่วันที่</label>
+                    <input type="date" id="startDate" class="form-control border-0 bg-light">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">ถึงวันที่</label>
+                    <input type="date" id="endDate" class="form-control border-0 bg-light">
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button onclick="clearFilters()"
+                        class="btn btn-light border w-100 btn-action text-muted">ล้างการกรอง</button>
+                </div>
             </div>
         </div>
 
         <div class="invoice-card p-4">
             <div class="table-responsive">
-                <table class="table table-hover align-middle">
+                <table class="table table-hover align-middle" id="invoiceTable">
                     <thead>
                         <tr>
                             <th width="80">ID</th>
-                            <th width="120">เลขห้อง</th>
-                            <th>ชื่อผู้เช่า</th>
-                            <th>ยอดรวมทั้งหมด</th>
+                            <th width="120">เลขห้อง/ประเภท</th>
+                            <th>รายละเอียด/ผู้เช่า</th>
+                            <th>ยอดเงิน</th>
                             <th>สถานะ</th>
-                            <th>วันที่บันทึก</th>
+                            <th>วันที่</th>
                             <th class="text-end">การจัดการ</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for inv in invoices %}
-                        <tr>
-                            <td class="fw-bold">#{{ inv.invoice_id }}</td>
-                            <td><span class="badge bg-primary px-3">{{ inv.room_name }}</span></td>
-                            <td>
-                                <div class="fw-semibold">{{ inv.fname or 'Guest' }}</div>
-                                <small class="text-muted">{{ inv.lname or '-' }}</small>
+                        <tr class="invoice-row" data-type="{{ inv.type }}">
+                            <td class="fw-bold">#{{ inv.id }}</td>
+                            <td class="room-name">
+                                <span
+                                    class="badge {% if inv.type == 'income' %}bg-primary{% else %}bg-danger{% endif %} px-3">
+                                    {{ inv.room }}
+                                </span>
                             </td>
-                            <td class="fw-bold text-primary">฿{{ "{:,.2f}".format(inv.total_amount) }}</td>
+                            <td class="tenant-name">
+                                <div class="fw-semibold">{{ inv.name or 'ทั่วไป' }}</div>
+                                <small class="text-muted type-label">{% if inv.type == 'income' %}รายรับ (บิลหอพัก){%
+                                    else %}รายจ่ายระบบ{% endif %}</small>
+                            </td>
+                            <td
+                                class="fw-bold {% if inv.type == 'income' and inv.amount >= 0 %}text-income{% else %}text-expense{% endif %}">
+                                {% if inv.type == 'expense' or inv.amount < 0 %} - {% endif %} ฿{{ "{:,.2f}"
+                                    .format(inv.amount | abs) }} </td>
                             <td>
                                 {% if inv.status == 'paid' %}
                                 <span class="badge badge-paid px-3 py-2 fw-normal"><i
-                                        class="bi bi-check-circle me-1"></i>ชำระแล้ว</span>
-                                {% elif inv.status == 'cancelled' %}
-                                <span class="badge badge-unpaid px-3 py-2 fw-normal"><i
-                                        class="bi bi-clock-history me-1"></i>ค้างชำระ</span>
-
-                                {% elif inv.status == 'draft' %}
-                                <span class="badge badge-pending px-3 py-2 fw-normal"><i
-                                        class="bi bi-hourglass me-1"></i>รอการชำระ</span>
-
+                                        class="bi bi-check-circle me-1"></i>รับชำระแล้ว</span>
                                 {% elif inv.status == 'overdue' %}
                                 <span class="badge badge-unpaid px-3 py-2 fw-normal"><i
                                         class="bi bi-exclamation-triangle me-1"></i>เกินกำหนด</span>
+                                {% elif inv.status == 'draft' %}
+                                <span class="badge badge-pending px-3 py-2 fw-normal"><i
+                                        class="bi bi-clock-history me-1"></i>รอชำระ</span>
+                                {% elif inv.status == 'expense' %}
+                                <span class="badge badge-expense px-3 py-2 fw-normal"><i
+                                        class="bi bi-check-circle me-1"></i>จ่ายชําระหนี้</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark px-3 py-2 fw-normal"><i
+                                        class="bi bi-question-circle me-1"></i>ยกเลิกเเล้ว</span>
                                 {% endif %}
                             </td>
-                            <td><small>{{ inv.created_at }}</small></td>
+                            <td>
+                                <small class="text-muted created-at">{{ inv.date }}</small>
+                            </td>
                             <td class="text-end">
                                 <div class="btn-group gap-1">
                                     {% if inv.slip_file %}
-                                    <a href="{{ url_for('static', filename='uploads/slips/' + inv.slip_file) }}"
-                                        target="_blank" class="btn btn-light btn-sm text-info border"
-                                        title="ดูหลักฐานการโอน">
+                                    {% if inv.type == 'income' %}
+                                    {% set folder = 'uploads/income_slips/' %}
+                                    {% else %}
+                                    {% set folder = 'uploads/expense_slips/' %}
+                                    {% endif %}
+                                    <a href="/{{ folder }}{{ inv.slip_file }}" target="_blank"
+                                        class="btn btn-light btn-sm text-info border" title="ดูหลักฐาน">
                                         <i class="bi bi-image"></i>
                                     </a>
                                     {% endif %}
 
-                                    {% if inv.status != 'paid' %}
-                                    <a href="/payment/{{ inv.invoice_id }}"
-                                        class="btn btn-success btn-sm btn-action px-3">
-                                        จ่ายเงิน
-                                    </a>
+                                    {% if inv.type == 'income' %}
+                                    {% if inv.status != 'paid' and inv.status != 'cancelled' %}
+                                    <a href="/confirm_payment/{{ inv.id }}"
+                                        class="btn btn-success btn-sm btn-action px-3">จ่ายเงิน</a>
                                     {% endif %}
 
-                                    <button onclick="confirmDelete('{{ inv.invoice_id }}')"
-                                        class="btn btn-outline-danger btn-sm border">
-                                        <i class="bi bi-trash"></i>
+                                    {% if inv.status != 'paid' and inv.status != 'cancelled' and inv.invoice_type == 'daily' %}
+                                    <a href="/confirm_daily_payment/{{ inv.id }}"
+                                        class="btn btn-success btn-sm btn-action px-3">จ่ายเงิน</a>
+                                    {% endif %}
+
+                                    {% if inv.status != 'cancelled' %}
+                                    <button onclick="confirmCancel('{{ inv.id }}')"
+                                        class="btn btn-outline-danger btn-sm border" title="ยกเลิกบิล">
+                                        <i class="bi bi-trash" style="font-size: 14px;"></i>
                                     </button>
+                                    {% endif %}
+
+                                    {% else %}
+                                    <button onclick="confirmDeleteExpense('{{ inv.id }}')"
+                                        class="btn btn-outline-danger btn-sm border" title="ลบรายจ่าย">
+                                        <i class="bi bi-trash" style="font-size: 14px;"></i>
+                                    </button>
+                                    {% endif %}
                                 </div>
                             </td>
+                        </tr>
+                        {% else %}
+                        <tr id="noDataRow">
+                            <td colspan="7" class="text-center py-5 text-muted">ไม่พบข้อมูลในระบบ</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -139,24 +244,99 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        function confirmDelete(id) {
+        function confirmCancel(id) {
             Swal.fire({
-                title: 'ยืนยันการลบบิล?',
-                text: "ข้อมูลบิลหมายเลข #" + id + " จะถูกลบถาวร!",
+                title: 'ยืนยันการยกเลิกบิล?',
+                text: "สถานะจะเปลี่ยนเป็น 'ยกเลิก' รายการจะถูกบันทึกประวัติไว้!",
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#6c757d',
-                confirmButtonText: 'ใช่, ลบเลย!',
-                cancelButtonText: 'ยกเลิก'
+                confirmButtonText: 'ยืนยันยกเลิก',
+                cancelButtonText: 'กลับ'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = "/delete_invoice/" + id;
+                    fetch('/cancel_invoice/' + id, { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                Swal.fire('สำเร็จ!', data.message, 'success').then(() => location.reload());
+                            } else {
+                                Swal.fire('ผิดพลาด!', data.message, 'error');
+                            }
+                        });
                 }
             })
         }
-    </script>
 
+        function confirmDeleteExpense(id) {
+            Swal.fire({
+                title: 'ลบรายการรายจ่าย?',
+                text: "ข้อมูลและไฟล์แนบจะถูกลบออกจากระบบทันที!",
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'ยืนยันการลบ',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // ส่ง POST Request ไปที่ Route ที่เราเขียนไว้
+                    fetch('/delete_expense/' + id, { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                Swal.fire('สำเร็จ!', data.message, 'success').then(() => location.reload());
+                            } else {
+                                Swal.fire('ผิดพลาด!', data.message, 'error');
+                            }
+                        });
+                }
+            })
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchInput = document.getElementById('liveSearch');
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate');
+            const tableRows = document.querySelectorAll('.invoice-row');
+
+            function filterTable() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const startDateValue = startDateInput.value;
+                const endDateValue = endDateInput.value;
+
+                tableRows.forEach(row => {
+                    const roomText = row.querySelector('.room-name').textContent.toLowerCase();
+                    const nameText = row.querySelector('.tenant-name').textContent.toLowerCase();
+                    const typeText = row.querySelector('.type-label').textContent.toLowerCase();
+                    const dateFullText = row.querySelector('.created-at').textContent;
+                    const rowDateStr = dateFullText.split(' ')[0];
+
+                    const matchesSearch = roomText.includes(searchTerm) ||
+                        nameText.includes(searchTerm) ||
+                        typeText.includes(searchTerm);
+
+                    let matchesDate = true;
+                    if (startDateValue && rowDateStr < startDateValue) matchesDate = false;
+                    if (endDateValue && rowDateStr > endDateValue) matchesDate = false;
+
+                    row.style.display = (matchesSearch && matchesDate) ? "" : "none";
+                });
+            }
+
+            searchInput.addEventListener('input', filterTable);
+            startDateInput.addEventListener('change', filterTable);
+            endDateInput.addEventListener('change', filterTable);
+        });
+
+        function clearFilters() {
+            document.getElementById('liveSearch').value = '';
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            const rows = document.querySelectorAll('.invoice-row');
+            rows.forEach(row => row.style.display = "");
+        }
+    </script>
 </body>
 
 </html>

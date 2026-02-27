@@ -257,6 +257,10 @@ def add_user():
     
     return render_template('add_user.html', roles=roles)
 
+@app.route('/uploads/<path:foldername>/<filename>')
+def custom_uploads(foldername, filename):
+    upload_path = os.path.join('uploads', foldername)
+    return send_from_directory(upload_path, filename)
 
 # ---------------------- DASHBOARD ----------------------
 @app.route('/dashboard')
@@ -1271,20 +1275,33 @@ def cancel_invoice(invoice_id):
     cursor = conn.cursor(dictionary=True)
     try:
         # ตรวจสอบสถานะก่อนอัปเดต
-        cursor.execute("SELECT status FROM invoices WHERE invoice_id = %s", (invoice_id,))
+        cursor.execute("SELECT * FROM invoices WHERE invoice_id = %s", (invoice_id,))
         inv = cursor.fetchone()
         
         if not inv:
             return jsonify({"status": "error", "message": "ไม่พบข้อมูลบิล"})
+        
+        if inv.get('slip_file'):
+            file_to_delete = os.path.join(INCOME_UPLOAD_PATH, inv['slip_file'])
+            try:
+                if os.path.exists(file_to_delete):
+                    os.remove(file_to_delete)
+                    print(f"ลบไฟล์สำเร็จ: {file_to_delete}")
+                else:
+                    print(f"ไม่พบไฟล์บน Server: {file_to_delete}")
+            except Exception as e:
+                print(f"เกิดข้อผิดพลาดขณะลบไฟล์: {e}")
             
-        if inv['status'] == 'paid':
-            return jsonify({"status": "error", "message": "ไม่สามารถยกเลิกบิลที่ชำระเงินแล้วได้"})
-
-        # อัปเดตสถานะ
         cursor.execute("""
             UPDATE invoices 
-            SET status = 'cancelled' 
-            WHERE invoice_id = %s AND status IN ('draft', 'overdue')
+            SET status = 'cancelled' , slip_file = NULL
+            WHERE invoice_id = %s
+        """, (invoice_id,))
+
+
+        cursor.execute("""
+            DELETE FROM transactions 
+            WHERE ref_invoice_id = %s AND type = 'income'
         """, (invoice_id,))
 
         add_audit_log(
@@ -3508,9 +3525,10 @@ def confirm_payment(invoice_id):
         FROM invoices
         WHERE contract_id = %s AND billing_period_start < %s
     """, (invoice['contract_id'], invoice['billing_period_start']))
-
     row = cursor.fetchone()
-    invoice['is_first_month'] = (row['prev_invoice_count'] == 0)
+
+    invoice['is_extra_bill'] = (invoice['invoice_type'] == 'extra_bill')
+    invoice['is_first_month'] = (invoice['invoice_type'] == 'first')
 
     if not invoice:
         flash("ไม่พบใบแจ้งหนี้", "warning")
@@ -3793,7 +3811,6 @@ def confirm_daily_payment(invoice_id):
 def add_expense():
     try:
         current_now = get_now().strftime('%Y-%m-%d %H:%M:%S')
-        # 1. อัปโหลดไฟล์
         file = request.files.get('slip_file')
         filename = None
         if file and file.filename != '':
@@ -3804,15 +3821,12 @@ def add_expense():
         
             file.save(os.path.join(EXPENSE_UPLOAD_PATH, filename))
 
-        # 2. รับข้อมูลจาก FormData
         expense_date = request.form.get('expense_date')
         category = request.form.get('category')
         description = request.form.get('description')
         amount = float(request.form.get('amount'))
-        # สมมติว่ามี session user_id หรือใส่ 1 ไว้ทดสอบ
         created_by = session['user']['user_id']
 
-        # 3. บันทึกลง Database
         conn = get_db_connection() # ฟังก์ชันเชื่อมต่อ DB ของคุณ
         cursor = conn.cursor()
         query = """
@@ -3850,44 +3864,154 @@ def add_expense():
         cursor.close()
         conn.close()
 
+@app.route('/delete_expense/<int:expense_id>', methods=['POST'])
+def delete_expense(expense_id):
+    if session.get('role') not in ['admin', 'manager']:
+        return jsonify({"status": "error", "message": "สิทธิ์ไม่เพียงพอ"}), 403
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT * FROM expenses WHERE expense_id = %s", (expense_id,))
+        expense = cursor.fetchone()
+
+        if not expense:
+            return jsonify({"status": "error", "message": "ไม่พบข้อมูลรายจ่าย"}), 404
+
+        if expense.get('slip_file'):
+            file_to_delete = os.path.join(EXPENSE_UPLOAD_PATH, expense['slip_file'])
+            try:
+                if os.path.exists(file_to_delete):
+                    os.remove(file_to_delete)
+                    print(f"ลบไฟล์สำเร็จ: {file_to_delete}")
+                else:
+                    print(f"ไม่พบไฟล์บน Server: {file_to_delete}")
+            except Exception as e:
+                print(f"เกิดข้อผิดพลาดขณะลบไฟล์: {e}")
+
+        cursor.execute("DELETE FROM transactions WHERE ref_expense_id = %s", (expense_id,))
+        cursor.execute("DELETE FROM expenses WHERE expense_id = %s", (expense_id,))
+
+        # 4. บันทึกประวัติ
+        add_audit_log(
+            cursor,
+            'EXPENSE',
+            'DELETE',
+            f'ลบรายจ่าย ID: {expense_id}, หมวด: {expense["category"]}, ยอด: {expense["amount"]}',
+            session['user']['user_id']
+        )
+        
+        conn.commit()
+        return jsonify({"status": "success", "message": "ลบข้อมูลและไฟล์หลักฐานเรียบร้อยแล้ว"})
+    
+    except Exception as e:
+        conn.rollback() # ย้อนกลับหากลบไม่สำเร็จ
+        print(f"Error deleting expense: {e}")
+        return jsonify({"status": "error", "message": "เกิดข้อผิดพลาดภายในระบบ"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.route('/billing')
 def billing():
-    # ตรวจสอบสิทธิ์ (ถ้าไม่ใช่ admin/manager ให้เด้งออก)
     if session.get('role') not in ['admin', 'manager']:
         flash("คุณไม่มีสิทธิ์เข้าถึงหน้านี้", "danger")
         return redirect(url_for('dashboard'))
 
+    search_room = request.args.get('room', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
-    # ดึงบิลทั้งหมด (เรียงตามวันที่สร้างล่าสุด)
-    # เรา JOIN unit และ tenants เพื่อเอาชื่อมาแสดงผล
-    sql = """
+    data_list = []
+
+    # --- ส่วนที่ 1: ดึงรายรับ (Invoices) ---
+    inv_sql = """
         SELECT 
-            i.*, 
-            u.name as room_name, 
-            t.fname, 
-            t.lname
+            i.invoice_id as id, 
+            i.created_at as date, 
+            'income' as type, 
+            u.name as room, 
+            i.total_amount as amount, 
+            i.status, 
+            i.invoice_type,
+            CONCAT(IFNULL(t.fname, i.guest_fname), ' ', IFNULL(t.lname, i.guest_lname)) as name,
+            i.slip_file
         FROM invoices i
         JOIN unit u ON i.unit_id = u.unit_id
         LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
-        ORDER BY i.created_at DESC
+        WHERE 1=1
     """
-    cursor.execute(sql)
-    all_invoices = cursor.fetchall()
-    
+    inv_params = []
+    if search_room:
+        inv_sql += " AND u.name LIKE %s"
+        inv_params.append(f"%{search_room}%")
+    if start_date:
+        inv_sql += " AND i.created_at >= %s"
+        inv_params.append(f"{start_date} 00:00:00")
+    if end_date:
+        inv_sql += " AND i.created_at <= %s"
+        inv_params.append(f"{end_date} 23:59:59")
+
+    cursor.execute(inv_sql, inv_params)
+    data_list.extend(cursor.fetchall())
+
+    # --- ส่วนที่ 2: ดึงรายจ่าย (Expenses) ---
+    exp_sql = """
+        SELECT 
+            expense_id as id, 
+            created_at as date, 
+            'expense' as type,
+            category as room, 
+            amount, 
+            'expense' as status, 
+            description as name,
+            slip_file
+        FROM expenses
+        WHERE 1=1
+    """
+    exp_params = []
+    if search_room:
+        exp_sql += " AND (category LIKE %s OR description LIKE %s)"
+        exp_params.extend([f"%{search_room}%", f"%{search_room}%"])
+    if start_date:
+        exp_sql += " AND expense_date >= %s"
+        exp_params.append(start_date)
+    if end_date:
+        exp_sql += " AND expense_date <= %s"
+        exp_params.append(end_date)
+
+    cursor.execute(exp_sql, exp_params)
+    data_list.extend(cursor.fetchall())
+
+    def sort_key(x):
+        d = x.get('date')
+        if d is None:
+            return datetime(1900, 1, 1).date() 
+        if isinstance(d, datetime):
+            return d.date()
+        return d
+
+    data_list.sort(key=sort_key, reverse=True)
     cursor.close()
     conn.close()
-    return render_template('billing.html', invoices=all_invoices)
+
+    return render_template('billing.html', 
+                           invoices=data_list, 
+                           search_room=search_room, 
+                           start_date=start_date, 
+                           end_date=end_date)
+
 
 # ---------------------- print_receipt ----------------------
 @app.route('/print_receipt/<int:invoice_id>')
 def print_receipt(invoice_id):
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # ดึง invoice
     cursor.execute("""
         SELECT i.*, 
             u.name AS room_name, u.building, u.floor,
@@ -3910,7 +4034,9 @@ def print_receipt(invoice_id):
     """, (invoice['contract_id'], invoice['billing_period_start']))
 
     row = cursor.fetchone()
-    invoice['is_first_month'] = (row['prev_invoice_count'] == 0)
+    
+    invoice['is_extra_bill'] = (invoice['invoice_type'] == 'extra_bill')
+    invoice['is_first_month'] = (invoice['invoice_type'] == 'first')
 
     if not invoice:
         flash("ไม่พบใบเสร็จ", "warning")
@@ -3954,6 +4080,7 @@ def print_receipt(invoice_id):
     return render_template('print_receipt.html', invoice=invoice, items=items, late_fee_per_day=late_fee_per_day, 
                            discount=discount,display_start=display_start,
                            display_end=display_end,meter_adjustment=meter_adjustment)
+
 
 # ---------------------- CONTRACT ----------------------
 @app.route('/confirm_contract/<int:contract_id>', methods=['GET', 'POST'])
@@ -4303,16 +4430,19 @@ def print_invoice(invoice_id):
     """, (invoice['contract_id'], invoice['billing_period_start']))
 
     row = cursor.fetchone()
-    invoice['is_first_month'] = (row['prev_invoice_count'] == 0)
+    
+    invoice['is_extra_bill'] = (invoice['invoice_type'] == 'extra_bill')
+    invoice['is_first_month'] = (invoice['invoice_type'] == 'first')
 
     if not invoice:
         flash("ไม่พบใบเสร็จ", "warning")
         return redirect(url_for('dashboard'))
     
-    meter_save = invoice['meter_saved']
-    if meter_save == 0 or (invoice['current_electricity_reading'] is None and invoice['current_water_reading'] is None):
-        flash("ยังไม่กรอกค่ามิเตอร์ ให้ครบ", "warning")
-        return redirect(request.referrer)
+    if invoice['invoice_type'] != 'extra_bill':
+        meter_save = invoice['meter_saved']
+        if meter_save == 0 or (invoice['current_electricity_reading'] is None and invoice['current_water_reading'] is None):
+            flash("ยังไม่กรอกค่ามิเตอร์ ให้ครบ", "warning")
+            return redirect(request.referrer)
     
     # กำหนดชื่อผู้เช่า/guest ตามประเภท invoice
     if invoice['invoice_type'] == 'daily':
