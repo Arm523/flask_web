@@ -351,7 +351,8 @@ def dashboard():
     # ------------------ latest daily invoice ------------------
     cursor.execute("""
         SELECT i.unit_id, i.invoice_id, i.billing_period_start, i.billing_period_end,
-            i.guest_fname, i.guest_lname, i.status, i.meter_saved
+            i.guest_fname, i.guest_lname, i.status, i.meter_saved, i.previous_electricity_reading , i.current_electricity_reading,
+            i.previous_water_reading, i.current_water_reading
         FROM invoices i
         JOIN (
             SELECT unit_id, MAX(invoice_id) AS invoice_id
@@ -405,17 +406,36 @@ def dashboard():
         if contract and contract.get('status') in (6,7):
             contract = None
 
-        if daily:
+        current_invoice = invoice_map.get(contract['contract_id']) if contract else None
+        has_daily_booking = 1 if daily else 0
+
+        if has_daily_booking:
+            # รายวัน: ดึงจากบิลรายวันล่าสุด
+            prev_elec = daily.get('previous_electricity_reading')
+            prev_wat  = daily.get('previous_water_reading')
+            curr_elec = daily.get('current_electricity_reading')
+            curr_wat  = daily.get('current_water_reading')
             tenant_name = f"{daily.get('guest_fname','')} {daily.get('guest_lname','')}".strip()
-            has_daily_booking = 1
-            billing_period_start = daily['billing_period_start']
-            billing_period_end = daily['billing_period_end']
-        else:
-            tenant_name = f"{contract.get('tenant_fname','')} {contract.get('tenant_lname','')}".strip() if contract else '-'
-            has_daily_booking = 0
+            billing_period_start = daily.get('billing_period_start')
+            billing_period_end = daily.get('billing_period_end')
+        elif current_invoice:
+            # รายเดือน: ดึงจากบิลรายเดือนล่าสุด
+            prev_elec = current_invoice.get('previous_electricity_reading')
+            prev_wat  = current_invoice.get('previous_water_reading')
+            curr_elec = current_invoice.get('current_electricity_reading')
+            curr_wat  = current_invoice.get('current_water_reading')
+            tenant_name = f"{contract.get('tenant_fname','')} {contract.get('tenant_lname','')}".strip()
             billing_period_start = None
             billing_period_end = None
-            daily = None
+        else:
+            # ไม่มีบิลเลย: ใช้ค่าเริ่มต้นจากห้อง (unit)
+            prev_elec = u.get('electricity_start', 0)
+            prev_wat  = u.get('water_start', 0)
+            curr_elec = None
+            curr_wat  = None
+            tenant_name = f"{contract.get('tenant_fname','')} {contract.get('tenant_lname','')}".strip() if contract else '-'
+            billing_period_start = None
+            billing_period_end = None
 
         options_selected = options_map.get(contract['contract_id'], []) if contract else []
         pay_date = contract.get('pay_date') if contract else None
@@ -463,10 +483,10 @@ def dashboard():
             'billing_period_end': billing_period_end,
             'notice_move_out_date': contract.get('notice_move_out_date') if contract else None,
             'active_move_out_date': contract.get('move_out_date') if contract else None,
-            'previous_electricity_reading': current_invoice.get('previous_electricity_reading') if current_invoice else None,
-            'previous_water_reading': current_invoice.get('previous_water_reading') if current_invoice else None,
-            'current_electricity_reading': current_invoice.get('current_electricity_reading') if current_invoice else None,
-            'current_water_reading': current_invoice.get('current_water_reading') if current_invoice else None,
+            'previous_electricity_reading': prev_elec,
+            'previous_water_reading': prev_wat,
+            'current_electricity_reading': curr_elec,
+            'current_water_reading': curr_wat,
             'current_invoice': current_invoice,
             'i_status': current_invoice.get('status') if current_invoice else None,
             'meter_saved': (
@@ -474,7 +494,6 @@ def dashboard():
                 (daily['meter_saved'] if daily and 'meter_saved' in daily else None)
             )
         })
-
     return render_template(
         'dashboard.html',
         rooms=rooms,today=today
@@ -732,16 +751,24 @@ def daily_pending(invoice_id):
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT i.invoice_id,i.invoice_type, i.issue_date, i.billing_period_start, i.billing_period_end, i.due_date, i.contract_id,
-                   i.total_amount, i.status, i.payment_date, i.late_penalty, u.name AS unit_name
+        SELECT 
+            i.invoice_id, i.invoice_type, i.issue_date, 
+            i.billing_period_start, i.billing_period_end, i.due_date, 
+            i.contract_id, i.total_amount, i.status, i.payment_date, 
+            i.late_penalty, u.name AS unit_name,
+            i.previous_electricity_reading, i.current_electricity_reading,
+            i.previous_water_reading, i.current_water_reading
         FROM invoices i
         JOIN unit u ON i.unit_id = u.unit_id
-        WHERE i.invoice_id = %s
+        WHERE i.invoice_id = %s OR parent_invoice_id = %s
         ORDER BY invoice_id DESC
-    """, (invoice_id,))
+    """, (invoice_id, invoice_id))
+    
     invoices = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
 
-    print(invoices)
     return render_template(
         "daily_invoices_pending.html",
         invoices=invoices,
@@ -1354,8 +1381,8 @@ def create_invoice_extra_bill(contract_id):
             insert_invoice_query = """
                 INSERT INTO invoices (
                     unit_id, tenant_id, contract_id, invoice_type, 
-                    issue_date, due_date, rent_amount, electricity_total, water_total, total_amount, status, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,  %s, %s, %s, NOW())
+                    issue_date, due_date, rent_amount, electricity_total, water_total, total_amount, status, created_by, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,  %s, %s, %s,%s, NOW())
             """
             invoice_values = (
                 contract['room_id'], 
@@ -1366,12 +1393,12 @@ def create_invoice_extra_bill(contract_id):
                 due_date,
                 0,0,0,
                 total_amount, 
-                'draft'
+                'draft',
+                session.get('user', {}).get('user_id')
+                
             )
             cursor.execute(insert_invoice_query, invoice_values)
-            
             new_invoice_id = cursor.lastrowid
-
             
             item_index = 0
             while True:
@@ -1403,13 +1430,11 @@ def create_invoice_extra_bill(contract_id):
         except Exception as e:
             conn.rollback()
             print(f"Error: {e}")
-
             return f"เกิดข้อผิดพลาด: {str(e)}", 500
         finally:
             cursor.close()
             conn.close()
 
-    # สำหรับ GET: แสดงหน้าฟอร์ม
     return render_template("create_invoice_extra_bill.html", 
                            contract_id=contract_id, 
                            room_name=contract['room_name'],
@@ -1749,18 +1774,34 @@ def create_lease(unit_id):
 # ---------------------- DAILY BOOKING ----------------------
 @app.route('/daily_booking/<int:unit_id>', methods=['GET', 'POST'])
 def daily_booking(unit_id):
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     # ดึงข้อมูลห้องและราคาต่อวัน
     cursor.execute("""
-        SELECT u.*, t.price_daily
+        SELECT u.*, t.price_daily, u.electricity_start, u.water_start
         FROM unit u
         JOIN type t ON u.type_unit_id = t.type_id
         WHERE u.unit_id = %s
     """, (unit_id,))
     room = cursor.fetchone()
+    if not room:
+        flash("ไม่พบข้อมูลห้อง", "danger")
+        return redirect(url_for('dashboard'))
+
+    electricity_start = float(room['electricity_start'] or 0)
+    water_start = float(room['water_start'] or 0)
+
+    cursor.execute("""
+        SELECT setting_key, setting_value
+        FROM settings
+        WHERE setting_key IN ('electricity_rate', 'water_rate')
+    """)
+    rows = cursor.fetchall()
+    rates = {row['setting_key']: float(
+        row['setting_value']) for row in rows}
+    electricity_rate = rates.get('electricity_rate', 0)
+    water_rate = rates.get('water_rate', 0)
 
     if request.method == 'POST':
         fname = request.form.get('guest_fname')
@@ -1795,19 +1836,25 @@ def daily_booking(unit_id):
         cursor.execute("""
             INSERT INTO invoices (
                 unit_id, guest_fname, guest_lname, guest_phone, invoice_type,
-                billing_period_start, billing_period_end,
+                billing_period_start, billing_period_end, 
+                previous_electricity_reading, previous_water_reading,
+                electricity_rate, water_rate,
                 issue_date, due_date, rent_amount,
                 total_amount, status, created_by, created_at
-            ) VALUES (%s, %s, %s, %s, 'daily',
-                    %s, %s,
-                    %s, %s, %s,
-                    %s, 'draft', %s, NOW())
+            ) VALUES (
+                %s, %s, %s, %s, 'daily',
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, 'draft', %s, NOW()
+            )
         """, (
-            unit_id, fname, lname, phone,
-            start, end,
-            issue_date, due_date,
-            rent_total, rent_total,
-            session['user']['user_id']
+            unit_id, fname, lname, phone,       # 4 ตัวแรก
+            start, end,                        # ช่วงวันที่
+            electricity_start, water_start,     # เลขมิเตอร์
+            electricity_rate, water_rate,       # เรทราคา (เพิ่มคอมม่าตรงนี้ใน SQL)
+            issue_date, due_date, rent_total,   # วันที่ออกบิล และค่าเช่า
+            rent_total,                         # total_amount (ใช้ค่าเดียวกับค่าเช่าก่อนในดราฟ)
+            session['user']['user_id']          # คนสร้าง
         ))
         daily_booking_id = cursor.lastrowid
 
@@ -1834,46 +1881,165 @@ def daily_booking(unit_id):
 
 @app.route('/cancel_daily_booking/<int:invoice_id>', methods=['POST'])
 def cancel_daily_booking(invoice_id):
-
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True) # แนะนำให้ใช้ dictionary=True จะอ่านง่ายขึ้น
 
-    # ตรวจสอบ invoice
-    cursor.execute(
-        "SELECT unit_id, status FROM invoices WHERE invoice_id = %s", (invoice_id,))
+    # 1. เช็คข้อมูลบิล
+    cursor.execute("SELECT unit_id, status FROM invoices WHERE invoice_id = %s", (invoice_id,))
     invoice = cursor.fetchone()
 
     if not invoice:
         flash("ไม่พบใบแจ้งหนี้", "danger")
         return redirect(url_for('dashboard'))
 
-    if invoice[1] != 'draft':
-        flash("ไม่สามารถยกเลิกใบแจ้งหนี้ที่ชำระแล้วได้", "warning")
+    if invoice['status'] != 'draft': # ใช้ชื่อคอลัมน์แทน index
+        flash("ไม่สามารถยกเลิกได้ เนื่องจากสถานะไม่ใช่ draft", "warning")
         return redirect(url_for('dashboard'))
 
-    unit_id = invoice[0]
+    try:
+        # 2. อัปเดตสถานะบิล และ คืนสถานะห้องเป็น 'ว่าง' (status_id=1)
+        cursor.execute("UPDATE invoices SET status = 'cancelled' WHERE invoice_id = %s", (invoice_id,))
+        cursor.execute("UPDATE unit SET status_id = 1 WHERE unit_id = %s", (invoice['unit_id'],))
+        
+        # 3. บันทึก Audit Log (ควรทำก่อน commit)
+        add_audit_log(
+            cursor, 
+            'DAILY_BOOKING', 
+            'DELETE', 
+            f'ยกเลิกการจองรายวัน ID: {invoice_id}', 
+            session.get('user', {}).get('user_id')
+        )
+        
+        conn.commit() # ยืนยันการเปลี่ยนแปลงทั้งหมด
+        flash("ยกเลิกการจองและคืนสถานะห้องเรียบร้อย", "success")
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
 
-    # อัปเดตใบแจ้งหนี้และสถานะห้อง
-    cursor.execute(
-        "UPDATE invoices SET status = 'cancelled' WHERE invoice_id = %s", (invoice_id,))
-    cursor.execute(
-        "UPDATE unit SET status_id = 1 WHERE unit_id = %s", (unit_id,))
-    conn.commit()
-
-    add_audit_log(
-        cursor, 
-        'DAILY_BOOKING', 
-        'DELETE', 
-        f'ยกเลิกการจองรายวัน ID: {invoice_id}', 
-        session.get('user', {}).get('user_id')
-    )
-
-    cursor.close()
-    conn.close()
-
-    flash("ยกเลิกการจองเรียบร้อย", "success")
     return redirect(url_for('dashboard'))
 
+@app.route("/create_invoice_daily_extra/<int:invoice_id>", methods=["GET", "POST"])
+def create_invoice_daily_extra(invoice_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # 1. ดึงข้อมูลบิลหลัก (ลบ tenant_id ออกถ้าไม่ได้ใช้ เพื่อป้องกัน Error)
+    cursor.execute("""
+        SELECT i.invoice_id, i.unit_id, i.guest_fname, i.guest_lname, i.guest_phone,
+               u.name as room_name
+        FROM invoices i
+        JOIN unit u ON i.unit_id = u.unit_id
+        WHERE i.invoice_id = %s
+    """, (invoice_id,))
+    main_invoice = cursor.fetchone()
+
+    if not main_invoice:
+        cursor.close()
+        conn.close()
+        flash("ไม่พบข้อมูลบิลหลัก", "danger")
+        return redirect(url_for('dashboard')) # ถ้าหาบิลไม่เจอ ให้กลับหน้าแรก
+
+    if request.method == 'POST':
+        try:
+            if not conn.in_transaction:
+                conn.start_transaction()
+
+            due_date = request.form.get('due_date')
+            total_amount = float(request.form.get('total_amount', 0))
+
+            insert_invoice_query = """
+                INSERT INTO invoices (
+                    unit_id, invoice_type, 
+                    guest_fname, guest_lname,
+                    issue_date, due_date, 
+                    rent_amount, electricity_total, water_total, total_amount, 
+                    status,created_by, created_at,parent_invoice_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, 0, 0, 0, %s, %s, %s, NOW(), %s)
+            """
+            invoice_values = (
+                main_invoice['unit_id'], 
+                'extra_bill', 
+                main_invoice['guest_fname'], 
+                main_invoice['guest_lname'],
+                datetime.now().date(), 
+                due_date,
+                total_amount, 
+                'draft',
+                session.get('user', {}).get('user_id'),
+                main_invoice['invoice_id']
+            )
+            cursor.execute(insert_invoice_query, invoice_values)
+            new_invoice_id = cursor.lastrowid
+
+            # 3. บันทึกรายการย่อย (Loop แบบวนตาม Index จริงเพื่อความปลอดภัย)
+            items_data = request.form.to_dict(flat=False)
+            for key in items_data:
+                if 'description' in key:
+                    idx = key.split('[')[1].split(']')[0]
+                    desc = request.form.get(f'items[{idx}][description]')
+                    if desc:
+                        amount = float(request.form.get(f'items[{idx}][amount]', 0))
+                        item_type = request.form.get(f'items[{idx}][type]', 'other')
+                        cursor.execute("""
+                            INSERT INTO invoice_items (
+                                invoice_id, description, unit_price, quantity, total_price, type
+                            ) VALUES (%s, %s, %s, 1, %s, %s)
+                        """, (new_invoice_id, desc, amount, amount, item_type))
+
+            conn.commit()
+            flash("สร้างบิลเพิ่มเติมสำเร็จ!", "success")
+            
+            # ✅ แก้ไขจุดนี้: ส่ง invoice_id (ตัวเดิม) กลับไปด้วยเพื่อให้ url_for ทำงานได้
+            return redirect(url_for('daily_pending', invoice_id=invoice_id))
+
+        except Exception as e:
+            if conn: conn.rollback()
+            flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+            return redirect(request.url)
+        finally:
+            if cursor: cursor.close()
+            if conn: conn.close()
+
+    # สำหรับ GET: แสดงหน้าฟอร์ม
+    return render_template("create_invoice_daily_extra.html", 
+                           invoice_id=invoice_id,
+                           room_name=main_invoice['room_name'],
+                           guest_name=f"{main_invoice['guest_fname']} {main_invoice['guest_lname']}",
+                           today_date=datetime.now().strftime('%Y-%m-%d'))
+
+@app.route('/update_daily_invoice', methods=['POST'])
+def update_daily_invoice():
+    inv_id = request.form.get('invoice_id')
+    bill_start = request.form.get('bill_start')
+    bill_end = request.form.get('bill_end')
+    due_date = request.form.get('due_date')
+    cur_elec = request.form.get('cur_elec')
+    cur_wat = request.form.get('cur_wat')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE invoices 
+            SET billing_period_start=%s, billing_period_end=%s, due_date=%s,
+                current_electricity_reading=%s, current_water_reading=%s,
+                meter_saved=1
+            WHERE invoice_id=%s
+        """, (bill_start, bill_end, due_date, cur_elec, cur_wat, inv_id))
+        conn.commit()
+        flash(f"แก้ไขบิล #{inv_id} เรียบร้อยแล้ว", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"ผิดพลาด: {str(e)}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(request.referrer)
 
 # --------------------- Checkout -----------------------------
 @app.route('/confirm_checkout/<int:unit_id>', methods=['POST'])
@@ -1932,7 +2098,8 @@ def confirm_checkout(unit_id):
             # เช็คว่าบิลรายวันล่าสุดของห้องนี้ จ่ายเงินหรือยัง
             cursor.execute("""
                 SELECT COUNT(*) AS daily_unpaid FROM invoices 
-                WHERE unit_id = %s AND invoice_type = 'daily' AND status != 'paid'
+                WHERE unit_id = %s AND invoice_type = 'daily' 
+                           AND status NOT IN ('paid', 'cancelled', 'void')
             """, (unit_id,))
             
             if cursor.fetchone()['daily_unpaid'] > 0:
@@ -3625,6 +3792,12 @@ def confirm_payment(invoice_id):
             elif invoice['total_amount'] >= 0:
                 type='income'
                 t_note=f"ค่าบริการเพิ่มเติม ห้อง {invoice['room_name']}"
+
+            cursor.execute("""
+                UPDATE unit
+                SET status_id = 6
+                WHERE unit_id = %s
+            """, (invoice['unit_id'],))
             
             record_transaction(
                 cursor, 
@@ -3706,7 +3879,7 @@ def confirm_daily_payment(invoice_id):
         SELECT i.*, u.name AS room_name, u.building, u.floor
         FROM invoices i
         JOIN unit u ON i.unit_id = u.unit_id
-        WHERE i.invoice_id = %s AND i.invoice_type='daily'
+        WHERE i.invoice_id = %s AND (i.invoice_type='daily' OR i.invoice_type='extra_bill')
     """, (invoice_id,))
     invoice = cursor.fetchone()
 
@@ -3749,6 +3922,12 @@ def confirm_daily_payment(invoice_id):
         conn.close()
         return redirect(url_for('dashboard'))
 
+    meter_save = invoice['meter_saved']
+    if invoice['invoice_type'] != 'extra_bill':
+        if meter_save == 0 or (invoice['current_electricity_reading'] is None and invoice['current_water_reading'] is None):
+            flash("ยังไม่กรอกค่ามิเตอร์ ให้ครบ", "warning")
+            return redirect(request.referrer)
+
     if request.method == 'POST':
         payment_method = request.form.get('payment_method', 'cash')
         file = request.files.get('slip')
@@ -3756,7 +3935,6 @@ def confirm_daily_payment(invoice_id):
 
         # --- 📂 ส่วนบันทึกไฟล์สลิป ---
         if file and file.filename != '':
-            # ใช้ตัวแปร INCOME_UPLOAD_PATH ที่คุณประกาศไว้ด้านบนสุดของไฟล์
             if not os.path.exists(INCOME_UPLOAD_PATH):
                 os.makedirs(INCOME_UPLOAD_PATH)
             slip_filename = generate_slip_filename(file, "slip_daily", invoice_id)

@@ -5,79 +5,110 @@
     <meta charset="UTF-8">
     <title>Pending Invoices</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <style>
         body {
             background: #c3c9eb;
             font-family: "Sarabun", sans-serif;
+            font-size: 13px;
+            /* ลดขนาดตัวอักษรทั้งหน้า */
         }
 
-        .btn-back-modern {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 18px;
-            font-weight: 600;
-            font-size: 14px;
-            color: #ffffff;
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            border: none;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(70, 65, 220, 0.3);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-
-        .btn-back-modern:hover {
-            transform: translateY(-2px);
-            background: linear-gradient(135deg, #4f46e5, #4338ca);
-        }
-
+        /* ปรับแต่ง Page Box ให้กระชับขึ้น */
         .page-box {
             background: white;
-            border-radius: 18px;
-            padding: 22px;
+            border-radius: 12px;
+            padding: 12px;
+            /* ลด Padding รอบข้าง */
             box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
         }
 
-        /* สไตล์หัวตาราง */
+        /* ปรับขนาดหัวตาราง */
         table thead th {
             background: #e7e7e7 !important;
             color: #333;
-            padding: 22px;
+            padding: 10px 8px !important;
+            /* ลดความสูงหัวตาราง */
+            font-size: 13px;
             font-weight: 600;
+            text-align: center;
         }
 
-        .custom-table thead th {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background: #e7e7e7 !important;
+        /* ปรับขนาดแถวตาราง */
+        .table tbody td {
+            padding: 6px 8px !important;
+            /* ลดความสูงของแต่ละแถว */
+            vertical-align: middle;
+            font-size: 12.5px;
+            text-align: center;
         }
 
-        /* สลับสีแถว */
+        /* ปรับสีแถวสลับกัน */
         table tbody tr:nth-child(odd) td {
             background-color: #ffffff !important;
         }
 
         table tbody tr:nth-child(even) td {
-            background-color: #c6ebfa !important;
+            background-color: #f0f8ff !important;
         }
 
+        /* ปรับแต่งปุ่มในตารางให้เล็กลงพิเศษ */
+        .btn-sm {
+            padding: 2px 6px !important;
+            font-size: 11px !important;
+            border-radius: 5px !important;
+            margin: 1px;
+        }
+
+        /* จัดกลุ่มปุ่ม Manage */
+        .action-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            justify-content: center;
+        }
+
+        /* ความสูงของส่วน Scroll */
         .table-scroll {
-            max-height: 420px;
-            /* ความสูงสูงสุดของตาราง */
+            max-height: 450px;
             overflow-y: auto;
-            /* เลื่อนแนวตั้ง */
-            overflow-x: auto;
-            /* ถ้าคอลัมน์เยอะก็เลื่อนแนวนอนได้ */
             border-radius: 12px;
+        }
+
+        /* ปรับขนาด Badge */
+        .badge {
+            font-size: 10px;
+            padding: 4px 6px;
+        }
+
+        .btn-back-modern {
+            padding: 6px 12px;
+            font-size: 12px;
         }
     </style>
 </head>
 
 <body>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <script>
+        Swal.fire({
+            icon: "{{ 'error' if category == 'danger' else category }}", // แปลง danger เป็น error
+            title: "แจ้งเตือน",
+            text: "{{ message }}",
+            confirmButtonText: "ตกลง",
+            confirmButtonColor: "#4f46e5"
+        });
+    </script>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
 
     <!-- HEADER -->
     <div class="container py-4">
@@ -87,7 +118,8 @@
 
                 <!-- หัวข้อ -->
                 <h4 class="fw-bold mb-3">
-                    💰 บิล รายวัน {{ invoices[0].invoice_id if invoices else '' }} – ห้อง {{ invoices[0].unit_name if invoices else '' }}
+                    💰 บิล รายวัน {{ invoices[0].invoice_id if invoices else '' }} – ห้อง {{ invoices[0].unit_name if
+                    invoices else '' }}
                 </h4>
 
                 <!-- กลุ่มตัวกรอง -->
@@ -108,7 +140,20 @@
                         <input type="radio" class="btn-check" name="statusFilter" id="filter-paid" value="paid">
                         <label class="btn btn-outline-success" for="filter-paid">ชำระแล้ว</label>
 
+                        <input type="radio" class="btn-check" name="statusFilter" id="filter-cancelled"
+                            value="cancelled" />
+                        <label class="btn btn-outline-warning" for="filter-cancelled">ยกเลิกบิล</label>
+
                     </div>
+                </div>
+
+                <div class="text-end layout-top-back mt-2">
+                    {% if invoices %}
+                    <a href="/create_invoice_daily_extra/{{ invoices[0].invoice_id }}"
+                        class="btn btn-success fw-bold px-4 shadow-sm" style="border-radius: 10px">
+                        สร้างบิลเพิ่มเติม (Extra Bill)
+                    </a>
+                    {% endif %}
                 </div>
 
                 <div class="text-end layout-top-back mt-2">
@@ -153,16 +198,7 @@
                         <td>#{{ inv.invoice_id }}</td>
 
                         <td>
-                            {% if inv.invoice_type == "first" %}
-                            <span>บิลเดือนเเรก</span>
-
-                            {% elif inv.invoice_type == "monthly" %}
-                            <span>บิลรายเดือน</span>
-
-                            {% elif inv.invoice_type == "final" %}
-                            <span>บิลสุดท้าย</span>
-
-                            {% elif inv.invoice_type == "daily" %}
+                            {% if inv.invoice_type == "daily" %}
                             <span>บิลรายวัน</span>
 
                             {% elif inv.invoice_type == "extra_bill" %}
@@ -182,33 +218,78 @@
 
                         <td>
                             {% if inv.status == "draft" %}
-                            <span class="badge bg-warning text-dark">ยังไม่จ่าย</span>
+                            <span class="badge bg-danger">ยังไม่จ่าย</span>
 
                             {% elif inv.status == "overdue" %}
-                            <span class="badge bg-danger">เกินกำหนด</span>
+                            <span class="badge bg-info text-dark">เกินกำหนด</span>
 
                             {% elif inv.status == "paid" %}
                             <span class="badge bg-success">ชำระแล้ว</span>
+
+                            {% elif inv.status == "cancelled" %}
+                            <span class="badge bg-warning text-dark">ยกเลิกบิล</span>
                             {% endif %}
                         </td>
 
                         <td>{{ inv.payment_date or '-' }}</td>
 
                         <td>
-                            {% if inv.status in ["draft", "overdue"] %}
-                            <a href="/add_invoice_item/{{ inv.invoice_id }}"
-                                class="btn btn-info btn-sm">เพิ่มรายการในบิล</a>
-                            {% if inv.current_electricity_reading is not none and inv.current_water_reading is not none
-                            %}
-                            <a href="/confirm_daily_payment/{{ inv.invoice_id }}"
-                                class="btn btn-primary btn-sm mt-2">ชำระเงิน</a>
-                            <a href="/print_invoice/{{ inv.invoice_id }}"
-                                class="btn btn-secondary btn-sm mt-2">พิมพ์บิล</a>
-                            {% endif %}
+                            <div class="action-grid">
+                                {% if inv.status in ["draft", "overdue"] %}
+                                <a href="/add_invoice_item/{{ inv.invoice_id }}"
+                                    class="btn btn-info btn-sm text-white">เพิ่มรายการ</a>
 
-                            {% elif inv.status == "paid" %}
-                            <a href="/print_receipt/{{ inv.invoice_id }}" class="btn btn-warning btn-sm">ดูใบเสร็จ</a>
-                            {% endif %}
+                                {% if (inv.current_electricity_reading is not none and
+                                inv.current_water_reading is not none) or inv.invoice_type ==
+                                "extra_bill" %}
+                                <button type="button" class="btn btn-primary btn-sm"
+                                    onclick="handlePaymentClick('{{ inv.invoice_id }}')">
+                                    ชำระเงิน
+                                </button>
+
+                                <a href="/print_invoice/{{ inv.invoice_id }}"
+                                    class="btn btn-success btn-sm">พิมพ์บิล</a>
+                                {% endif %}
+
+
+                                {% if inv.invoice_type != "extra_bill" %}
+                                <button type="button" class="btn btn-warning btn-sm" onclick="openEditModal(
+                                    '{{ inv.invoice_id }}', 
+                                    '{{ inv.billing_period_start }}', 
+                                    '{{ inv.billing_period_end }}', 
+                                    '{{ inv.due_date }}', 
+                                    '{{ inv.previous_electricity_reading }}', 
+                                    '{{ inv.previous_water_reading }}', 
+                                    '{{ inv.current_electricity_reading }}', 
+                                    '{{ inv.current_water_reading }}', 
+                                    '{{ inv.invoice_type }}'
+                                )">
+                                    แก้ไข
+                                </button>
+                                {% endif %}
+
+                                {% if inv.invoice_type != "daily" %}
+                                <button type="button" class="btn btn-outline-danger btn-sm btn-full-width"
+                                    onclick="confirmCancelInvoice('{{ inv.invoice_id }}')">
+                                    ยกเลิกบิล
+                                </button>
+                                {% endif %}
+
+                                {% elif inv.status == "paid" %}
+                                <a href="/print_receipt/{{ inv.invoice_id }}"
+                                    class="btn btn-warning btn-sm btn-full-width">ดูใบเสร็จ</a>
+
+                                {% if inv.slip_file %}
+                                <a href="{{ url_for('view_slip', filename=inv.slip_file) }}" target="_blank"
+                                    class="btn btn-sm btn-info btn-full-width">
+                                    <i class="bi bi-eye-fill"></i> ดูสลิป
+                                </a>
+                                <a href="{{ url_for('view_slip', filename=inv.slip_file) }}" download
+                                    class="btn btn-sm btn-secondary btn-full-width">
+                                    <i class="bi bi-cloud-download"></i> โหลด
+                                </a>
+                                {% endif %} {% endif %}
+                            </div>
                         </td>
 
                     </tr>
@@ -224,9 +305,112 @@
         </div>
     </div>
 
+    <div class="modal fade" id="editInvoiceModal" tabindex="-1" aria-labelledby="editInvoiceModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form action="/update_daily_invoice" method="POST">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editInvoiceModalLabel">📝 แก้ไขข้อมูลบิล <span
+                                id="display_inv_id"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="invoice_id" id="edit_inv_id">
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">วันที่เริ่มบิล</label>
+                                <input type="date" class="form-control" name="bill_start" id="edit_bill_start" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">วันที่สิ้นสุดบิล</label>
+                                <input type="date" class="form-control" name="bill_end" id="edit_bill_end" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">กำหนดชำระ (Due Date)</label>
+                                <input type="date" class="form-control" name="due_date" id="edit_due_date" required>
+                            </div>
+                            <hr>
+                            <h6 class="fw-bold">ข้อมูลมิเตอร์ (กรณีบิลรายวันที่มีค่าน้ำ/ไฟ)</h6>
+                            <div class="col-md-6">
+                                <label class="form-label">เลขไฟ (ครั้งก่อน)</label>
+                                <input type="number" step="0.01" class="form-control" name="pre_elec"
+                                    id="edit_pre_elec">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">เลขไฟ (ครั้งนี้)</label>
+                                <input type="number" step="0.01" class="form-control" name="cur_elec"
+                                    id="edit_cur_elec">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">เลขน้ำ (ครั้งก่อน)</label>
+                                <input type="number" step="0.01" class="form-control" name="pre_wat" id="edit_pre_wat">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">เลขน้ำ (ครั้งนี้)</label>
+                                <input type="number" step="0.01" class="form-control" name="cur_wat" id="edit_cur_wat">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                        <button type="submit" class="btn btn-primary">บันทึกการแก้ไข</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <!-- FILTER SCRIPT -->
     <script>
+        function openEditModal(id, start, end, due, preElec, preWat, curElec, curWat, type) {
+            try {
+                console.log("กำลังเปิดบิล ID:", id); // เช็คใน Console (F12) ว่าฟังก์ชันทำงานไหม
+
+                // ใส่ค่าลงใน Input
+                document.getElementById('edit_inv_id').value = id;
+                document.getElementById('display_inv_id').innerText = "#" + id;
+                document.getElementById('edit_bill_start').value = start;
+                document.getElementById('edit_bill_end').value = end;
+                document.getElementById('edit_due_date').value = due;
+
+                // จัดการค่ามิเตอร์ (ดักจับถ้าค่าเป็น None ให้เป็น 0)
+                document.getElementById('edit_pre_elec').value = (preElec && preElec !== 'None') ? preElec : 0;
+                document.getElementById('edit_cur_elec').value = (curElec && curElec !== 'None') ? curElec : 0;
+                document.getElementById('edit_pre_wat').value = (preWat && preWat !== 'None') ? preWat : 0;
+                document.getElementById('edit_cur_wat').value = (curWat && curWat !== 'None') ? curWat : 0;
+
+                // สั่งเปิด Modal ด้วยคำสั่งของ Bootstrap 5
+                var modalElement = document.getElementById('editInvoiceModal');
+                var myModal = new bootstrap.Modal(modalElement);
+                myModal.show();
+            } catch (err) {
+                console.error("เกิดข้อผิดพลาดใน JS:", err);
+            }
+        }
+
+        function handlePaymentClick(invoiceId) {
+            window.location.href = "/confirm_daily_payment/" + invoiceId;
+        }
+
+        function confirmCancelInvoice(id) {
+            Swal.fire({
+                title: 'ยืนยันการยกเลิก?',
+                text: "คุณต้องการยกเลิกบิลหมายเลข #" + id + " ใช่หรือไม่?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'ใช่, ยกเลิกเลย!',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = "/cancel_daily_booking/" + id;
+                }
+            })
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
 
             const radios = document.querySelectorAll('input[name="statusFilter"]');

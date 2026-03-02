@@ -315,9 +315,7 @@
         </table>
         {% endif %}
 
-        {% if invoice.total_amount < 0 %} <p style="color: red;" class="mt-2">*คืนจํานวนเงิน หลังจากหักค่าต่างๆ
-            </p>
-            {% endif %}
+        {% if invoice.total_amount < 0 %} <p style="color: red;" class="mt-2">*คืนจํานวนเงิน หลังจากหักค่าต่างๆ</p>{% endif %}
 
             <h4>💰 ยอดรวมทั้งหมด: {{ "{:,.2f}".format(invoice.total_amount) }} บาท</h4>
             <form action="{{ url_for('confirm_payment', invoice_id=invoice.invoice_id) }}" method="POST"
@@ -384,10 +382,21 @@
                     <div class="form-text text-danger">* กรุณาตรวจสอบความถูกต้องของสลิปก่อนยืนยัน</div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100 py-2 fs-5">✔ ยืนยันการชำระเงิน</button>
+                <button type="submit" id="confirmBtn" class="btn btn-primary w-100 py-2 fs-5">✔ ยืนยันการชำระเงิน</button>
             </form>
 
             <script>
+                function disableSubmitBtn() {
+                    const btn = document.getElementById('confirmBtn');
+                    if (!btn) return true; 
+                    const form = btn.closest('form');
+                    if (!form.checkValidity()) return true;
+
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> กำลังบันทึกข้อมูล...';
+                    return true; 
+                }
+
                 function updatePaymentUI() {
                     const method = document.getElementById('payment_method').value;
                     const detailsBox = document.getElementById('payment_details_box');

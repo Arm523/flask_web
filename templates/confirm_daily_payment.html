@@ -124,8 +124,14 @@
         <p><strong>ชื่อผู้เช่า:</strong> {{ invoice.guest_fname }} {{ invoice.guest_lname }}</p>
         <p><strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building }} ชั้น {{ invoice.floor }}</p>
 
-        <p><strong>วันที่เข้าพัก:</strong> {{ invoice.billing_period_start.strftime('%d/%m/%Y') }}
-            ถึง {{ invoice.billing_period_end.strftime('%d/%m/%Y') }}</p>
+        <p><strong>วันที่เข้าพัก:</strong>
+            {% if invoice.type == 'daily' %}
+            {{ invoice.billing_period_start.strftime('%d/%m/%Y') }}
+            ถึง {{ invoice.billing_period_end.strftime('%d/%m/%Y') }}
+            {% elif invoice.is_extra_bill %}
+            บิลพิเศษ
+            {% endif %}
+        </p>
 
         <!-- ตารางค่าเช่ารายวัน -->
         <h5>🏠 ค่าเช่ารายวัน / ค่าใช้จ่ายเพิ่มเติม:</h5>
@@ -136,6 +142,8 @@
                 <th style="text-align:right;">ราคา/วัน</th>
                 <th style="text-align:right;">รวม</th>
             </tr>
+            
+            {% if invoice.type == 'daily' %}
             <tr>
                 <td>ค่าเช่าห้อง</td>
                 <td style="text-align:center;">{{ ((invoice.billing_period_end - invoice.billing_period_start).days + 1)
@@ -143,6 +151,19 @@
                 <td style="text-align:right;">{{ "{:,.2f}".format(price_daily) }}</td>
                 <td style="text-align:right;">{{ "{:,.2f}".format(invoice.rent_amount) }}</td>
             </tr>
+            {% endif %}
+
+            {% if items %}
+            {% for item in items %}
+            <tr>
+                <td>{{ item.description }}</td>
+                <td style="text-align:center;">{{ "%.0f"|format(item.quantity or 1) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(item.unit_price or 0) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(item.total_price or 0) }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+
         </table>
 
         {% if invoice.overdue_days > 0 %}

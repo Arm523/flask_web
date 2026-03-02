@@ -40,7 +40,7 @@ def save_config(path, data):
 def get_now(mocked=False):
     if mocked:
         # return datetime.now()
-        return datetime(2026, 8,2, 9, 0, 0)
+        return datetime(2026, 10,5, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -111,6 +111,7 @@ def mark_contracts_expiring(today, cursor):
     print(f"\n🔍 [System Check: {today}] Starting maintenance job...")
 
     # --- STEP 1: ค้นหาสัญญาที่กำลังจะหมดใน 30 วัน และยังไม่มีบิล Final ---
+    # แก้ไข Query ใน STEP 1 ของพี่
     cursor.execute("""
         SELECT c.*, u.unit_id 
         FROM contracts c
@@ -118,9 +119,9 @@ def mark_contracts_expiring(today, cursor):
         LEFT JOIN invoices i ON c.contract_id = i.contract_id 
              AND i.invoice_type = 'final' 
              AND i.status != 'cancelled'
-        WHERE c.status IN (2, 3, 4) -- ครอบคลุมสถานะใกล้หมดอายุด้วย
+        WHERE c.status IN (2, 3, 4)
           AND c.contract_end IS NOT NULL
-          AND c.contract_end <= DATE_ADD(%s, INTERVAL 30 DAY)
+          AND c.contract_end <= DATE_ADD(%s, INTERVAL 5 DAY) 
           AND i.invoice_id IS NULL
     """, (today,))
     
@@ -154,7 +155,6 @@ def mark_contracts_expiring(today, cursor):
             prev_water = contract['water_start'] or 0
 
         # 1.2 สร้างบิลหลัก (Draft)
-        # ยอดตั้งต้นคือ ค่าเช่า - เงินประกัน (ถ้าบิลสุดท้ายมักจะหักคืนเงินประกันในบิลเลย)
         initial_total = rent_amount - reimburse
 
         cursor.execute("""
@@ -209,7 +209,6 @@ def mark_contracts_expiring(today, cursor):
         """, (option_total, invoice_id))
 
         # 1.5 อัปเดตสถานะห้องเป็น 6 (ตรวจสอบห้อง เครียร์บิลทั้งหมด)
-        cursor.execute("UPDATE unit SET status_id = 6 WHERE unit_id = %s", (contract['room_id'],))
         print(f"✅ บิลสุดท้ายสร้างเสร็จ (ID: {invoice_id}) สำหรับห้อง {contract['room_id']} (รวม Options: {option_total} บาท)")
 
     # --- STEP 2 & 3: ปักธงสถานะสัญญาและรายวัน (คงเดิม) ---
@@ -551,15 +550,13 @@ def calculate_next_billing_date(start_date, today, billing_day):
         return current_month_billing
 
 
-def create_monthly_invoice(unit_id, billing_month, created_by):
+def create_monthly_invoice(cursor, unit_id, billing_month, created_by):
     """
     สร้าง invoice รายเดือน (วิธีแยกบิล) รองรับ:
     - overdue invoice อัตโนมัติ
     - รวมค่าเช่า + options
     - ดึงค่าต่างๆ จาก settings และ contract
     """
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
             SELECT c.contract_id, c.tenant_id, c.price, c.contract_start, c.contract_end, c.billing_day,
@@ -609,14 +606,16 @@ def create_monthly_invoice(unit_id, billing_month, created_by):
         if billing_start < contract['contract_start']:
             billing_start = contract['contract_start']
 
-        if contract['contract_end'] and \
-            contract['contract_end'].month == billing_month.month and \
-            contract['contract_end'].year == billing_month.year:
+        is_expiring_this_month = (
+            contract['contract_end'] and 
+            contract['contract_end'].month == billing_month.month and 
+            contract['contract_end'].year == billing_month.year
+        )
                 
         # ถ้าสถานะเป็น 4 (รอต่ออายุ/กำลังจะหมดสัญญา) ให้ "ข้าม" เหมือนเดิม เพื่อไปทำบิล Final
-            if contract.get('status') == 4:
-                print(f"⏭️ ข้ามการสร้างบิลปกติ: ห้อง {unit_id} กำลังจะย้ายออกหรือหมดสัญญา (Status 4)")
-                return None
+        if is_expiring_this_month or contract.get('status') == 4:
+            print(f"⏭️ ข้ามการสร้างบิลปกติ: ห้อง {unit_id} จะหมดสัญญาเดือนนี้ หรือ Status=4 (จะไปสร้างบิล Final แทน)")
+            return None
         # 5. ตรวจ invoice เดือนนี้ (ไม่สร้างซ้ำ)
         cursor.execute("""
             SELECT invoice_id
@@ -715,19 +714,12 @@ def create_monthly_invoice(unit_id, billing_month, created_by):
             invoice_id
         ))
 
-        conn.commit()
         print("สร้าง invoice draft สำเร็จ ID:", invoice_id)
         return invoice_id
 
     except Exception as e:
-        conn.rollback()
-        print("Error create_monthly_invoice:", e)
-        import traceback
-        traceback.print_exc()
-        return None
-    finally:
-        cursor.close()
-        conn.close()
+        print(f"❌ Error ในห้อง {unit_id}: {e}")
+        raise e
 
 
 def generate_monthly_invoices_if_due(mocked_date=None):
@@ -783,9 +775,8 @@ def generate_monthly_invoices_if_due(mocked_date=None):
 
             if exist:
                 print(f"⏭️ ข้าม → มีบิลเดือนนี้แล้ว (ID {exist['invoice_id']})\n")
+                conn.rollback()
                 continue
-
-            print("✔ ยังไม่มีบิลเดือนนี้")
 
             # 2.2) คำนวณวันออกบิล
             billing_day = c['billing_day'] or 1
@@ -800,12 +791,14 @@ def generate_monthly_invoices_if_due(mocked_date=None):
 
             if today < next_billing_date:
                 print("⏭️ ข้าม → ยังไม่ถึงวันออกบิล\n")
+                conn.rollback()
                 continue
 
             print("✔ ถึงวันออกบิลแล้ว (today >= next_billing_date)")
 
             # 2.3) สร้างบิล
             invoice_id = create_monthly_invoice(
+                cursor=cursor,
                 unit_id=c['unit_id'],
                 billing_month=today,
                 created_by=None
@@ -823,12 +816,13 @@ def generate_monthly_invoices_if_due(mocked_date=None):
 
             if not invoice_id:
                 print("❌ ERROR → create_monthly_invoice ไม่คืน invoice_id\n")
+                conn.rollback()
                 continue
 
+            conn.commit()
             created_count += 1
             print(f"✅ สร้างบิลสำเร็จ ID {invoice_id}\n")
 
-        conn.commit()
         print(f"🎉 รวมสร้างบิลใหม่ทั้งหมด = {created_count} ใบ\n")
 
     except Exception as e:
@@ -966,6 +960,12 @@ def refresh_invoice_total(cursor, invoice_id):
         elec_total = 0.0
         water_total = 0.0
         meter_adjustment = 0.0 # เดือนแรกยังไม่เก็บเงินเปลี่ยนมิเตอร์ (รอเก็บเดือนหน้าตามที่คุณต้องการ)
+
+    elif inv['invoice_type'] == 'daily':
+        elec_total = 0.0
+        water_total = 0.0
+        meter_adjustment = 0.0 
+        
         
     else: # 'normal' หรือ 'final'
         # คิดค่าเช่า (ถ้าเดือนสุดท้ายให้ใช้ rent_amount ที่อาจจะมีการปรับลดวันแล้ว)

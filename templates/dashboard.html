@@ -534,7 +534,7 @@
 
                         {# เช็ควันหมดสัญญา #}
                         {% if room.contract_end %}
-                        {% if room.contract_end == room.today %}
+                        {% if room.contract_end <= room.today %}
                         <span class="alert-chip alert-danger">⚠️ หมดอายุเเล้ว ({{ room.contract_end.strftime('%d/%m/%Y')
                             }})</span>
                         {% else %}
@@ -665,7 +665,7 @@
                                 'ไม่มีสัญญา')
                                 }}</span></p>
 
-                        {% if room.status_id == 6 or room.has_daily_booking%}
+                        {% if room.status_id == 6 %}
                         <form id="checkout-form-{{ room.id }}"
                             action="{{ url_for('confirm_checkout', unit_id=room.id) }}" method="POST">
                             <button type="button" class="btn btn-success w-100"
@@ -673,6 +673,13 @@
                                 <i class="bi bi-box-arrow-left"></i> ยืนยัน Checkout (ห้องนี้)
                             </button>
                         </form>
+                        {% endif %}
+
+                        {% if room.status_id == 5 and room.has_daily_booking %}
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                            onclick="confirmCancelBooking('{{ room.invoice_id}}')">
+                            <i class="bi bi-x-circle"></i> ยกเลิกการจอง
+                        </button>
                         {% endif %}
 
                         {% if room.contract_id %}
@@ -813,6 +820,28 @@
                 document.getElementById(`checkout-form-${roomId}`).submit();
             }
         });
+    }
+
+    function confirmCancelBooking(invoiceId) {
+        Swal.fire({
+            title: 'ยืนยันการยกเลิก?',
+            text: "คุณต้องการยกเลิกการจองหมายเลข #" + invoiceId + " ใช่หรือไม่? (สถานะห้องจะกลับเป็นว่าง)",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ใช่, ยกเลิกเลย',
+            cancelButtonText: 'เปลี่ยนใจ'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // สร้าง Form ชั่วคราวเพื่อส่ง POST
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/cancel_daily_booking/' + invoiceId;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        })
     }
 
     async function openMeterModal(unitId, unitNumber, prevElec, prevWater, currElec, currWater) {
@@ -1247,6 +1276,8 @@
         loadFinanceBarChart();
         loadDonutAndStats();
     });
+
+
 </script>
 
 {% endblock %}

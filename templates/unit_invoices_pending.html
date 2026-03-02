@@ -97,6 +97,7 @@
       /* แชร์กันคนละครึ่งในแถวที่ 2 */
     }
   </style>
+  
 </head>
 
 <body>
@@ -207,6 +208,12 @@
 
               {% elif inv.invoice_type == "extra_bill" %}
               <span>บิลเพิ่มเติม</span>
+
+              {% elif inv.invoice_type == "manual" %}
+              <span>บิลสร้างเอง</span>
+
+              {% else %}
+              <span>ไม่ทราบประเภท</span>
               {% endif %}
             </td>
 
