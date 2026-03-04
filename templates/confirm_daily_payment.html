@@ -125,7 +125,7 @@
         <p><strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building }} ชั้น {{ invoice.floor }}</p>
 
         <p><strong>วันที่เข้าพัก:</strong>
-            {% if invoice.type == 'daily' %}
+            {% if invoice.invoice_type == 'daily' %}
             {{ invoice.billing_period_start.strftime('%d/%m/%Y') }}
             ถึง {{ invoice.billing_period_end.strftime('%d/%m/%Y') }}
             {% elif invoice.is_extra_bill %}
@@ -143,7 +143,7 @@
                 <th style="text-align:right;">รวม</th>
             </tr>
             
-            {% if invoice.type == 'daily' %}
+            {% if invoice.invoice_type == 'daily' %}
             <tr>
                 <td>ค่าเช่าห้อง</td>
                 <td style="text-align:center;">{{ ((invoice.billing_period_end - invoice.billing_period_start).days + 1)

@@ -2,6 +2,95 @@
 {% block content %}
 <title>Settings - จัดการห้องพัก</title>
 
+<style>
+    /* ปรับปรุงฟอนต์และพื้นหลังเบื้องต้น */
+    .manage-container {
+        background-color: #f8f9fa;
+        border-radius: 15px;
+        padding: 20px;
+    }
+
+    /* ส่วนของ Card ฟอร์ม */
+    .custom-card {
+        border: none;
+        border-radius: 12px;
+        transition: transform 0.2s;
+    }
+
+    .custom-card:hover {
+        transform: translateY(-3px);
+    }
+
+    .card-header {
+        border-radius: 12px 12px 0 0 !important;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    /* กำหนดความสูงของพื้นที่ตาราง และ Scrollbar */
+    .table-scroll-container {
+        max-height: 400px;
+        /* ความสูงที่โชว์ประมาณ 5-7 ห้อง */
+        overflow-y: auto;
+        overflow-x: auto;
+        border-radius: 8px;
+    }
+
+    /* ล็อคหัวตาราง (Sticky Header) */
+    .table-scroll-container thead th {
+        position: sticky;
+        top: 0;
+        background-color: #343a40 !important;
+        color: white;
+        z-index: 10;
+        border: none;
+        white-space: nowrap;
+    }
+
+    /* ตกแต่งแถวตาราง */
+    .table tbody tr {
+        transition: background-color 0.2s;
+    }
+
+    .table tbody tr:hover {
+        background-color: rgba(99, 102, 241, 0.05) !important;
+        /* สีม่วงอ่อนๆ เวลาชี้ */
+    }
+
+    /* ปรับแต่ง Scrollbar ให้ดูทันสมัย */
+    .table-scroll-container::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .table-scroll-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    .table-scroll-container::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 10px;
+    }
+
+    .table-scroll-container::-webkit-scrollbar-thumb:hover {
+        background: #999;
+    }
+
+    /* Badge สถานะให้ดูสวยขึ้น */
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.85em;
+        font-weight: 500;
+    }
+
+    .btn-action {
+        border-radius: 8px;
+        padding: 4px 12px;
+    }
+</style>
+
 <div id="flash-messages">
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -13,148 +102,212 @@
 </div>
 
 <div class="container mt-4">
-    <h2 class="m2-4">จัดการห้องพัก</h2>
-    <p class="text-muted">ตรวจสอบและจัดการห้อง</p>
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="fw-bold text-dark"> จัดการห้องพัก</h2>
+            <p class="text-muted">ตรวจสอบสถานะและตั้งค่าประเภทห้องพักในระบบ</p>
+        </div>
+    </div>
     <hr>
 
-    <!-- ฟอร์มเพิ่มห้องใหม่ -->
-    <div class="shadow-sm p-4 mb-4 rounded" style="background-color: rgb(250, 250, 250);">
-        <div class="row g-3 mb-4">
-            <!-- ฟอร์มเพิ่มห้องใหม่ -->
-            <div class="col-md-6">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-success text-white">
-                        เพิ่มห้องใหม่
-                    </div>
-                    <div class="card-body p-3 shadow-sm">
-                        <form method="POST" action="{{ url_for('manage_units') }}" class="row g-2">
-                            <div class="col-6">
-                                <input type="text" class="form-control" name="name" placeholder="ชื่อห้อง" required>
-                            </div>
-                            <div class="col-3">
-                                <input type="text" class="form-control" name="building" placeholder="ตึก" required>
-                            </div>
-                            <div class="col-3">
-                                <input type="number" class="form-control" name="floor" placeholder="ชั้น" required>
-                            </div>
-                            <div class="col-3">
-                                <input type="text" class="form-control" name="zone" placeholder="โซน">
-                            </div>
-                            <div class="col-6">
-                                <select class="form-select" name="type_unit_id" required>
-                                    <option value="">-- เลือกประเภทห้อง --</option>
-                                    {% for t in types %}
-                                    <option value="{{ t.type_id }}">{{ t.n_type }} ({{ t.price_monthly or t.price }} ฿)
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-3 text-end">
-                                <button type="submit" class="btn btn-success w-100">+ เพิ่มห้อง</button>
-                            </div>
-                        </form>
-                    </div>
+    <div class="row g-4 mb-5">
+        <div class="col-lg-6">
+            <div class="card custom-card shadow-sm">
+                <div class="card-header bg-success text-white py-3">
+                    <i class="fas fa-door-open me-2"></i> เพิ่มห้องใหม่
                 </div>
-            </div>
-
-            <!-- ฟอร์มเพิ่มประเภทห้องใหม่ -->
-            <div class="col-md-6">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        เพิ่มประเภทห้องใหม่
-                    </div>
-                    <div class="card-body p-3">
-                        <form method="POST" action="{{ url_for('add_type') }}" class="row g-2">
-                            <div class="col-6">
-                                <input type="text" class="form-control" name="n_type" placeholder="ชื่อประเภทห้อง"
-                                    required>
-                            </div>
-                            <div class="col-6">
-                                <input type="number" class="form-control" name="price_monthly"
-                                    placeholder="ราคา (รายเดือน)" required>
-                            </div>
-                            <div class="col-4 mt-2">
-                                <input type="number" class="form-control" name="price_daily" placeholder="ราคา (รายวัน)"
-                                    required>
-                            </div>
-                            <div class="col-4 mt-2 text-end">
-                                <button type="submit" class="btn btn-primary w-100">+ เพิ่มประเภทห้อง</button>
-                            </div>
-                        </form>
-                    </div>
+                <div class="card-body p-4">
+                    <form method="POST" action="{{ url_for('manage_units') }}" class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">ชื่อห้อง</label>
+                            <input type="text" class="form-control bg-light" name="name" placeholder="เช่น A101"
+                                required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">ตึก</label>
+                            <input type="text" class="form-control bg-light" name="building" placeholder="A" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">ชั้น</label>
+                            <input type="number" class="form-control bg-light" name="floor" placeholder="1" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">โซน</label>
+                            <input type="text" class="form-control bg-light" name="zone" placeholder="โซนหน้า">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">ประเภทห้อง</label>
+                            <select class="form-select bg-light" name="type_unit_id" required>
+                                <option value="">-- เลือกประเภท --</option>
+                                {% for t in types %}
+                                <option value="{{ t.type_id }}">{{ t.n_type }} ({{ t.price_monthly or t.price }} ฿)
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 text-end mt-4">
+                            <button type="submit" class="btn btn-success px-4 py-2 shadow-sm">
+                                <i class="fas fa-plus-circle me-1"></i> บันทึกข้อมูลห้อง
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
 
-        <!-- ตารางรายการห้องทั้งหมด -->
-        <div class="table-responsive mb-4">
-            <table class="table table-striped table-bordered align-middle">
-                <thead class="table-dark">
+        <div class="col-lg-6">
+            <div class="card custom-card shadow-sm">
+                <div class="card-header bg-primary text-white py-3">
+                    <i class="fas fa-tags me-2"></i> เพิ่มประเภทห้องใหม่
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST" action="{{ url_for('add_type') }}" class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label small fw-bold">ชื่อประเภทห้อง</label>
+                            <input type="text" class="form-control bg-light" name="n_type"
+                                placeholder="เช่น Standard Room" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">ราคา (รายเดือน)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control bg-light" name="price_monthly" placeholder="0"
+                                    required>
+                                <span class="input-group-text">฿</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">ราคา (รายวัน)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control bg-light" name="price_daily" placeholder="0"
+                                    required>
+                                <span class="input-group-text">฿</span>
+                            </div>
+                        </div>
+                        <div class="col-12 text-end mt-4">
+                            <button type="submit" class="btn btn-primary px-4 py-2 shadow-sm">
+                                <i class="fas fa-save me-1"></i> เพิ่มประเภท
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="manage-container shadow-sm border mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="fw-bold mb-0 text-dark"><i class="fas fa-list text-primary me-2"></i> รายการห้องพักทั้งหมด</h4>
+            <span class="badge bg-secondary rounded-pill">ทั้งหมด {{ units|length }} ห้อง</span>
+        </div>
+
+        <div class="table-scroll-container border rounded">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
                     <tr>
-                        <th>ชื่อห้อง</th>
-                        <th>ตึก</th>
-                        <th>ชั้น</th>
+                        <th class="ps-3">ชื่อห้อง</th>
+                        <th>ตึก / ชั้น</th>
                         <th>โซน</th>
                         <th>สถานะ</th>
-                        <th>ประเภทห้อง</th>
+                        <th>ประเภท / ราคา</th>
                         <th>วันที่เพิ่ม</th>
-                        <th>จัดการ</th>
+                        <th class="text-center">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for room in units %}
                     <tr>
-                        <td>{{ room.name }}</td>
-                        <td>{{ room.building }}</td>
-                        <td>{{ room.floor }}</td>
-                        <td>{{ room.zone }}</td>
-                        <td>{{ room.status_name }}</td>
-                        <td>{{ room.type_name }} ({{ room.price_monthly or room.price }} ฿)</td>
-                        <td>{{ room.created_at.strftime('%Y-%m-%d %H:%M') if room.created_at else '-' }}</td>
+                        <td class="ps-3">
+                            <div class="fw-bold text-primary" style="font-size: 1.1rem;">{{ room.name }}</div>
+                        </td>
+
                         <td>
-                            <a href="{{ url_for('edit_unit', unit_id=room.unit_id) }}"
-                                class="btn btn-sm btn-warning">แก้ไข</a>
-                            <form id="delete-form-{{ room.unit_id }}"
-                                action="{{ url_for('delete_unit', unit_id=room.unit_id) }}" method="POST"
-                                style="display:inline">
-                                <button type="button" class="btn btn-sm btn-danger"
-                                    onclick="confirmDelete('{{ room.unit_id }}', 'ห้อง {{ room.name }}')">ลบ</button>
-                            </form>
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">ตึก</small>
+                                    <span class="badge bg-dark px-2">{{ room.building }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">ชั้น</small>
+                                    <span class="fw-bold">{{ room.floor }}</span>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td><small class="text-muted">{{ room.zone or '-' }}</small></td>
+                        <td>
+                            {% if room.status_name == 'ว่าง' %}
+                            <span
+                                class="status-badge bg-success-subtle text-success border border-success-subtle">ว่าง</span>
+                            {% elif room.status_name == 'ปิดปรับปรุง' %}
+                            <span
+                                class="status-badge bg-danger-subtle text-danger border border-danger-subtle">ปิดปรับปรุง</span>
+                            {% else %}
+                            <span class="status-badge bg-warning-subtle text-warning border border-warning-subtle">{{
+                                room.status_name }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-bold">{{ room.type_name }}</div>
+                            <small class="text-muted">{{ "{:,.0f}".format(room.price_monthly or room.price) }} ฿</small>
+                        </td>
+                        <td><small>{{ room.created_at.strftime('%d/%m/%Y %H:%M') if room.created_at else '-' }}</small>
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="{{ url_for('edit_unit', unit_id=room.unit_id) }}"
+                                    class="btn btn-sm btn-outline-warning btn-action d-flex align-items-center px-3">
+                                    <i class="fas fa-edit me-1"></i> แก้ไข
+                                </a>
+
+                                <button type="button"
+                                    class="btn btn-sm btn-outline-danger btn-action d-flex align-items-center px-3"
+                                    onclick="confirmDelete('{{ room.unit_id }}', 'ห้อง {{ room.name }}')">
+                                    <i class="fas fa-trash-alt me-1"></i> ลบ
+                                </button>
+                                <form id="delete-form-{{ room.unit_id }}"
+                                    action="{{ url_for('delete_unit', unit_id=room.unit_id) }}" method="POST"></form>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+    </div>
 
-        <!-- ตารางประเภทห้อง -->
-        <div class="table-responsive">
-            <h4>ประเภทห้องทั้งหมด</h4>
-            <table class="table table-striped table-bordered align-middle">
-                <thead class="table-dark">
+    <div class="manage-container shadow-sm border mb-4 bg-white">
+        <h4 class="fw-bold mb-4 text-dark"><i class="fas fa-layer-group text-primary me-2"></i> ประเภทห้องทั้งหมด</h4>
+        <div class="table-responsive rounded">
+            <table class="table table-hover align-middle border-top">
+                <thead class="table-light">
                     <tr>
-                        <th>ชื่อประเภทห้อง</th>
+                        <th class="ps-3">ชื่อประเภทห้อง</th>
                         <th>ราคา (รายเดือน)</th>
                         <th>ราคา (รายวัน)</th>
-                        <th>จัดการ</th>
+                        <th class="text-center">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for t in types %}
                     <tr>
-                        <td>{{ t.n_type }}</td>
-                        <td>{{ t.price_monthly or t.price }}</td>
-                        <td>{{ t.price_daily }}</td>
-                        <td>
-                            <a href="{{ url_for('edit_type', type_id=t.type_id) }}"
-                                class="btn btn-sm btn-warning">แก้ไข</a>
+                        <td class="ps-3 fw-bold">{{ t.n_type }}</td>
+                        <td>{{ "{:,.0f}".format(t.price_monthly or t.price) }} ฿</td>
+                        <td>{{ "{:,.0f}".format(t.price_daily) if t.price_daily else '0' }} ฿</td>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="{{ url_for('edit_type', type_id=t.type_id) }}"
+                                    class="btn btn-sm btn-outline-warning btn-action d-flex align-items-center px-3">
+                                    <i class="fas fa-edit me-1"></i> แก้ไข
+                                </a>
 
-                            <form id="delete-type-{{ t.type_id }}"
-                                action="{{ url_for('delete_type', type_id=t.type_id) }}" method="POST"
-                                style="display:inline">
-                                <button type="button" class="btn btn-sm btn-danger"
-                                    onclick="confirmDeleteType('{{ t.type_id }}', '{{ t.n_type }}')">ลบ</button>
-                            </form>
+                                <button type="button"
+                                    class="btn btn-sm btn-outline-danger btn-action d-flex align-items-center px-3"
+                                    onclick="confirmDeleteType('{{ t.type_id }}', '{{ t.n_type }}')">
+                                    <i class="fas fa-trash-alt me-1"></i> ลบ
+                                </button>
+                                <form id="delete-type-{{ t.type_id }}"
+                                    action="{{ url_for('delete_type', type_id=t.type_id) }}" method="POST"></form>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -166,44 +319,31 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // 1. จัดการแสดง Flash Messages (Success / Danger / Warning)
+        // จัดการแสดง Flash Messages ด้วย SweetAlert2
         const flashData = document.querySelectorAll('.flash-data');
         flashData.forEach(function (el) {
             const category = el.getAttribute('data-category');
             const message = el.getAttribute('data-message');
-
-            let swalIcon = "info";
-            let swalTitle = "แจ้งเตือน";
-
-            if (category === 'success') {
-                swalIcon = "success";
-                swalTitle = "สำเร็จ!";
-            } else if (category === 'danger' || category === 'error') {
-                swalIcon = "error";
-                swalTitle = "เกิดข้อผิดพลาด";
-            } else if (category === 'warning') {
-                swalIcon = "warning";
-                swalTitle = "คำเตือน";
-            }
+            let swalIcon = category === 'success' ? 'success' : (category === 'warning' ? 'warning' : 'error');
 
             Swal.fire({
                 icon: swalIcon,
-                title: swalTitle,
+                title: category === 'success' ? 'สำเร็จ!' : 'แจ้งเตือน',
                 text: message,
                 confirmButtonColor: "#6366f1",
-                confirmButtonText: "ตกลง"
+                timer: 3000
             });
         });
     });
 
     function confirmDelete(id, name) {
         Swal.fire({
-            title: 'ยืนยันการลบ?',
-            text: "คุณแน่ใจหรือไม่ที่จะลบ " + name,
+            title: 'ยืนยันการลบห้อง?',
+            text: `คุณกำลังจะลบ ${name} ออกจากระบบ`,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#64748b',
             confirmButtonText: 'ใช่, ลบเลย!',
             cancelButtonText: 'ยกเลิก'
         }).then((result) => {
@@ -213,19 +353,14 @@
         });
     }
 
-    // --- 3. ฟังก์ชันยืนยันการลบประเภทห้อง ---
     function confirmDeleteType(id, name) {
         Swal.fire({
             title: 'ยืนยันการลบประเภทห้อง?',
-            html: `คุณกำลังจะลบประเภทห้อง: <b>${name}</b> นี้ <br><br>` +
-                `<p style="text-align: center; font-size: 0.9em; color: #555;">` +
-                `<b>หมายเหตุ:</b> การลบประเภทห้องจะไม่สามารถกู้คืนได้ และอาจส่งผลกระทบต่อห้องที่ใช้ประเภทนี้ ` +
-                `ห้องที่ใช้ประเภทนี้จะยังคงอยู่แต่จะ<b>ไม่มีประเภทห้อง</b>` +
-                `</p>`,
+            html: `คุณกำลังจะลบประเภท: <b>${name}</b> <br><small class="text-danger">การลบอาจส่งผลกระทบต่อข้อมูลห้องพักที่ใช้ประเภทนี้</small>`,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#d33',
-            confirmButtonText: 'ลบออก',
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'ยืนยันลบ',
             cancelButtonText: 'ยกเลิก'
         }).then((result) => {
             if (result.isConfirmed) {
@@ -234,6 +369,4 @@
         });
     }
 </script>
-
-
 {% endblock %}

@@ -1,9 +1,8 @@
 {% extends "layout.html" %}
 {% block content %}
-<title>Meter Analysis - การวิเคราะห์ข้อมูลจากมิเตอร์</title>
+<title>Meter Analysis - การวิเคราะห์ข้อมูล</title>
 
 <style>
-    /* ปรับแต่ง Scrollbar ให้ดูสะอาดตา */
     .table-responsive::-webkit-scrollbar {
         width: 6px;
     }
@@ -13,20 +12,15 @@
         border-radius: 10px;
     }
 
-    .table-responsive::-webkit-scrollbar-track {
-        background: #f8f9fa;
+    tr:hover td {
+        background-color: rgba(13, 110, 253, 0.05);
     }
 
     .table-sticky-header th {
         background: #f8f9fa !important;
         white-space: nowrap;
     }
-
-    tr:hover td {
-        background-color: rgba(13, 110, 253, 0.05);
-    }
 </style>
-
 
 <div id="data-bridge" data-usage='{{ usage_data | tojson | safe }}' style="display: none;"></div>
 
@@ -34,22 +28,14 @@
     <div class="card border-0 shadow-sm p-3 mb-4">
         <form action="/meter_analysis" method="GET" class="row g-2 align-items-center">
             <div class="col-auto">
-                <h4 class="mb-0 fw-bold text-dark">
-                    <i class="bi bi-speedometer2 text-primary"></i> Meter Analysis
-                </h4>
+                <h4 class="mb-0 fw-bold text-dark"><i class="bi bi-speedometer2 text-primary"></i> Meter Analysis</h4>
             </div>
             <div class="col-auto ms-md-3">
                 <div class="input-group">
                     <span class="input-group-text bg-white">ปีที่วิเคราะห์</span>
                     <input type="number" name="year" class="form-control" value="{{ year }}" min="2000" max="2100"
                         style="width: 100px;" />
-                    <button type="submit" class="btn btn-primary">ค้นหา</button>
-                </div>
-            </div>
-            <div class="col text-end">
-                <div class="d-inline-flex align-items-center p-2 bg-light rounded border border-success-subtle">
-                    <span class="me-2 text-muted small">ปี {{ year }} มิเตอร์ที่ Active:</span>
-                    <span class="badge bg-success fs-6">{{ active_meters }}</span>
+                    <button type="submit" class="btn btn-primary">ค้นหาปี</button>
                 </div>
             </div>
         </form>
@@ -58,9 +44,7 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm p-4">
-                <h5 class="card-title text-secondary d-flex align-items-center">
-                    <i class="bi bi-graph-up me-2"></i> แนวโน้มการใช้ไฟฟ้าและน้ำประปา (รายเดือน)
-                </h5>
+                <h5 class="card-title text-secondary"><i class="bi bi-graph-up me-2"></i> แนวโน้มการใช้รายเดือน</h5>
                 <hr class="opacity-10" />
                 <div id="compareChart"></div>
             </div>
@@ -69,99 +53,88 @@
 
     <div class="card border-0 shadow-sm overflow-hidden">
         <div class="card-header bg-white py-3">
-            <form action="/meter_analysis" method="GET" class="row g-2 align-items-center">
-                <input type="hidden" name="year" value="{{ year }}">
-
+            <div class="row g-2 align-items-center">
                 <div class="col-auto">
-                    <h6 class="mb-0 fw-bold text-dark">Reading Logs</h6>
+                    <h6 class="mb-0 fw-bold">
+                        Reading Logs
+                        <small class="text-muted fw-normal">
+                            {% if start_date and end_date %}(ตามช่วงวันที่){% else %}(ล่าสุด 100 รายการ){% endif %}
+                        </small>
+                    </h6>
                 </div>
 
                 <div class="col-auto ms-md-auto">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text">วันที่บันทึก</span>
-                        <input type="date" name="date" class="form-control" value="{{ target_date }}"
-                            onchange="this.form.submit()">
-                    </div>
+                    <form action="/meter_analysis" method="GET" id="filterForm" class="d-flex gap-2 align-items-center">
+                        <input type="hidden" name="year" value="{{ year }}">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">จาก</span>
+                            <input type="date" name="start_date" id="startDate" class="form-control"
+                                value="{{ start_date }}" onchange="this.form.submit()">
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">ถึง</span>
+                            <input type="date" name="end_date" id="endDate" class="form-control" value="{{ end_date }}"
+                                onchange="this.form.submit()">
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2"
+                            style="height: 31px; line-height: 1;" onclick="clearDateFilter()">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                    </form>
                 </div>
 
                 <div class="col-auto">
                     <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
-                        <input type="text" id="logSearch" class="form-control" placeholder="ค้นหาเลขห้อง..." />
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="logSearch" class="form-control" placeholder="ค้นห้อง..." />
                     </div>
                 </div>
-            </form>
+
+                <div class="col-auto">
+                    <button type="button" onclick="exportLogToExcel()" class="btn btn-sm btn-success"><i
+                            class="bi bi-filetype-xlsx" style="font-size: 1.2rem;"></i> Export Excel</button>
+                </div>
+            </div>
         </div>
 
-        <div class="table-responsive" style="max-height: 380px; overflow-y: auto">
+        <div class="table-responsive" style="max-height: 450px; overflow-y: auto">
             <table class="table table-hover align-middle mb-0" id="logTable" style="min-width: 1000px;">
                 <thead class="table-light shadow-sm" style="position: sticky; top: 0; z-index: 10">
                     <tr>
-                        <th class="ps-4" style="width: 15%;">วันที่</th>
-                        <th style="width: 10%;">Room</th>
-                        <th class="text-center" style="width: 12%;">ประเภทมิเตอร์</th>
-                        <th class="text-center" style="width: 15%;">(เลขมิเตอร์)Serial Meter</th>
-                        <th class="text-center" style="width: 10%;">(แหล่งที่มา)Source</th>
-                        <th class="text-center" style="width: 12%;">(ใบแจ้งหนี้)ID Invoice</th>
-                        <th class="text-end" style="width: 14%;">(ค่าที่ได้)Current value</th>
-                        <th class="ps-3" style="width: 12%;">Created By</th>
+                        <th class="ps-4">วันที่</th>
+                        <th>Room</th>
+                        <th class="text-center">ประเภท</th>
+                        <th class="text-center">Serial Meter</th>
+                        <th class="text-center">Source</th>
+                        <th class="text-center">ID Invoice</th>
+                        <th class="text-end">Current value</th>
+                        <th class="ps-3">Created By</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for log in logs %}
                     <tr>
-                        <td class="ps-4 text-nowrap">
-                            {{ log.read_date.strftime('%d/%m/%Y %H:%M') if log.read_date else '-' }}
-                        </td>
-
-                        <td class="unit-cell text-primary fw-bold">
-                            {{ log.name }}
-                        </td>
-
+                        <td class="ps-4 text-nowrap">{{ log.read_date.strftime('%d/%m/%Y %H:%M') if log.read_date else
+                            '-' }}</td>
+                        <td class="unit-cell text-primary fw-bold">{{ log.name }}</td>
                         <td class="text-center">
-                            {% if log.meter_type == 'electricity' %}
-                            <span class="badge bg-warning-subtle text-dark border border-warning px-2"
-                                style="min-width: 60px;">ไฟฟ้า</span>
-                            {% else %}
-                            <span class="badge bg-info-subtle text-dark border border-info px-2"
-                                style="min-width: 60px;">น้ำประปา</span>
-                            {% endif %}
-                        </td>
-
-                        <td class="text-center">
-                            <span class="px-2 py-1 rounded bg-success text-white fw-bold font-monospace"
-                                style="letter-spacing: 1px; font-size: 0.9rem;">
-                                {{ log.serial_meter if log.serial_meter else 'N/A' }}
+                            <span
+                                class="badge {{ 'bg-warning-subtle text-dark border border-warning' if log.meter_type == 'electricity' else 'bg-info-subtle text-dark border border-info' }} px-2">
+                                {{ 'ไฟฟ้า' if log.meter_type == 'electricity' else 'น้ำประปา' }}
                             </span>
                         </td>
-
+                        <td class="text-center"><span class="badge bg-success opacity-75">{{ log.serial_meter or 'N/A'
+                                }}</span></td>
                         <td class="text-center">
-                            {% if log.source == 'auto' %}
-                            <span class="badge bg-success opacity-75"><i class="bi bi-cpu"></i> Auto</span>
-                            {% else %}
-                            <span class="badge bg-secondary opacity-75"><i class="bi bi-person"></i> Manual</span>
-                            {% endif %}
+                            <small class="badge bg-secondary opacity-75">{{ log.source | capitalize }}</small>
                         </td>
-
-                        <td class="text-center">
-                            {% if log.invoice_id %}
-                            <span class="badge bg-light text-dark border">#{{ log.invoice_id }}</span>
-                            {% else %}
-                            <span class="text-muted small">ยังไม่มีบิล</span>
-                            {% endif %}
-                        </td>
-
-                        <td class="text-end fw-bold fs-6">
-                            {{ "{:,.2f}".format(log.current_reading or 0) }}
-                        </td>
-
-                        <td class="ps-3 text-nowrap">
-                            <small class="text-muted">UID: {{ log.created_by if log.created_by else 'System' }}</small>
-                        </td>
+                        <td class="text-center">{{ '#' + log.invoice_id|string if log.invoice_id else 'ไม่มีบิล' }}</td>
+                        <td class="text-end fw-bold">{{ "{:,.2f}".format(log.current_reading or 0) }}</td>
+                        <td class="ps-3">UID : <small class="text-muted">{{ log.created_by or 'System' }}</small></td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="text-center py-5 text-muted">ไม่พบข้อมูลการบันทึกในเงื่อนไขที่เลือก</td>
+                        <td colspan="8" class="text-center py-5 text-muted">ไม่พบข้อมูล</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -170,59 +143,117 @@
     </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        // ดึงข้อมูลจาก Data Bridge
-        const dataBridge = document.getElementById('data-bridge');
-        if (!dataBridge) return;
-        const dbData = JSON.parse(dataBridge.dataset.usage);
-
         // --- 1. กราฟ ApexCharts ---
-        const options = {
-            chart: {
-                type: 'area',
-                height: 400,
-                toolbar: { show: false },
-                zoom: { enabled: false }
-            },
-            series: [
-                { name: 'ไฟฟ้า (kWh)', data: dbData.map(d => d.electricity) },
-                { name: 'น้ำประปา (m³)', data: dbData.map(d => d.water) }
-            ],
-            xaxis: {
-                categories: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'],
-            },
-            colors: ['#f1c40f', '#0dcaf0'],
-            stroke: { curve: 'smooth', width: 3 },
-            fill: {
-                type: 'gradient',
-                gradient: { opacityFrom: 0.4, opacityTo: 0.1 }
-            },
-            dataLabels: { enabled: false },
-            yaxis: { labels: { formatter: (val) => val.toFixed(2) } },
-            tooltip: {
-                shared: true,
-                y: { formatter: (val) => val.toLocaleString() + ' หน่วย' }
-            }
-        };
+        const dataEl = document.getElementById('data-bridge');
+        if (dataEl) {
+            const dbData = JSON.parse(dataEl.dataset.usage);
+            new ApexCharts(document.querySelector("#compareChart"), {
+                chart: { type: 'area', height: 350, toolbar: { show: false } },
+                series: [
+                    { name: 'ไฟฟ้า', data: dbData.map(d => d.electricity) },
+                    { name: 'น้ำ', data: dbData.map(d => d.water) }
+                ],
+                xaxis: { categories: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'] },
+                colors: ['#f1c40f', '#0dcaf0'],
+                stroke: { curve: 'smooth' }
+            }).render();
+        }
 
-        const chart = new ApexCharts(document.querySelector("#compareChart"), options);
-        chart.render();
-
-        // --- 2. ระบบค้นหาเลขห้องแบบ Real-time (Client-side) ---
+        // --- 2. ค้นหา Real-time ---
         document.getElementById('logSearch').addEventListener('keyup', function () {
-            let value = this.value.toLowerCase();
-            let rows = document.querySelectorAll('#logTable tbody tr');
-
-            rows.forEach(row => {
-                let unitCell = row.querySelector('.unit-cell');
-                if (unitCell) {
-                    let text = unitCell.textContent.toLowerCase();
-                    row.style.display = text.includes(value) ? '' : 'none';
-                }
+            let val = this.value.toLowerCase();
+            document.querySelectorAll('#logTable tbody tr').forEach(row => {
+                let text = row.querySelector('.unit-cell').textContent.toLowerCase();
+                row.style.display = text.includes(val) ? '' : 'none';
             });
         });
     });
+
+    // --- 3. ฟังก์ชัน Clear วันที่ ---
+    function clearDateFilter() {
+        document.getElementById('startDate').value = '';
+        document.getElementById('endDate').value = '';
+        document.getElementById('filterForm').submit();
+    }
+
+    // --- 4. Export Excel ---
+    async function exportLogToExcel() {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Meter Logs');
+
+        // 1. ตั้งค่าความกว้างคอลัมน์ (ปรับให้กว้างขึ้นตามความเหมาะสมของข้อมูล)
+        worksheet.columns = [
+            { header: 'วัน/เวลา', key: 'date', width: 22 },
+            { header: 'ห้อง', key: 'room', width: 12 },
+            { header: 'ประเภท', key: 'type', width: 12 },
+            { header: 'Serial', key: 'serial', width: 18 },
+            { header: 'Source', key: 'source', width: 12 },
+            { header: 'Invoice', key: 'invoice', width: 12 },
+            { header: 'Value', key: 'value', width: 15 },
+            { header: 'User', key: 'user', width: 15 }
+        ];
+
+        // 2. ส่วนหัวรายงาน (Title)
+        const titleRow = worksheet.addRow(['รายงานการอ่านมิเตอร์']);
+        titleRow.font = { size: 16, bold: true };
+
+        const periodRow = worksheet.addRow([`ช่วงเวลา: ${document.getElementById('startDate').value || 'ล่าสุด'} ถึง ${document.getElementById('endDate').value || 'ล่าสุด'}`]);
+        periodRow.font = { color: { argb: 'FF444444' } };
+
+        worksheet.addRow([]); // เว้นบรรทัดว่าง
+
+        // 3. ตั้งค่า Header (ส่วนหัวตาราง)
+        const header = ['วัน/เวลา', 'ห้อง', 'ประเภท', 'Serial', 'Source', 'Invoice', 'Value', 'User'];
+        const headerRow = worksheet.addRow(header);
+
+        headerRow.eachCell((cell) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF2C3E50' } // สีน้ำเงินเข้มดูแพงกว่าสีดำบริสุทธิ์
+            };
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = {
+                top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
+            };
+        });
+
+        // 4. ดึงข้อมูลจากตาราง HTML
+        document.querySelectorAll('#logTable tbody tr').forEach(tr => {
+            if (tr.style.display !== 'none' && tr.cells.length > 1) {
+                // ดึงค่าทีละ Cell เพื่อจัดการ Alignment เฉพาะจุด
+                const rowData = Array.from(tr.cells).map(c => c.innerText.trim());
+                const addedRow = worksheet.addRow(rowData);
+
+                // จัดตำแหน่งข้อมูลในแต่ละแถว
+                addedRow.eachCell((cell, colNumber) => {
+                    cell.border = {
+                        top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
+                    };
+                    cell.alignment = { vertical: 'middle' };
+
+                    // คอลัมน์ Value (ลำดับที่ 7) ให้ชิดขวา
+                    if (colNumber === 7) {
+                        cell.alignment.horizontal = 'right';
+                        // ใส่ฟอร์แมตตัวเลข (Optional)
+                        cell.numFmt = '#,##0.00';
+                    } else if (colNumber === 3 || colNumber === 5) { // ประเภท และ Source ให้กึ่งกลาง
+                        cell.alignment.horizontal = 'center';
+                    }
+                });
+            }
+        });
+
+        // 5. บันทึกไฟล์
+        const buffer = await workbook.xlsx.writeBuffer();
+        saveAs(new Blob([buffer]), `Meter_Report_${Date.now()}.xlsx`);
+    }
 </script>
 {% endblock %}

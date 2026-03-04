@@ -38,17 +38,36 @@
         }
 
         .table-responsive {
+            max-height: 65vh;
             overflow-y: auto;
-            flex: 1;
+            position: relative;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .table-responsive::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .table-responsive::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 10px;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb:hover {
+            background: #999;
         }
 
         .table thead th {
             position: sticky;
             top: 0;
-            background-color: #f8f9fa;
-            border-bottom: 2px solid #dee2e6;
-            color: #495057;
-            z-index: 10;
+            background-color: #f8f9fa !important;
+            box-shadow: inset 0 -2px 0 #dee2e6;
+            z-index: 99;
+            padding: 15px 10px;
         }
 
         .badge-paid {
@@ -106,7 +125,7 @@
             <div class="d-flex gap-2">
                 <span class="badge bg-dark px-3 py-2 rounded-pill d-flex align-items-center">Role: {{
                     session.get('role') }}</span>
-                <a href="/dashboard" class="btn btn-outline-secondary btn-action px-3"><i class="bi bi-house"></i>
+                <a href="/finance" class="btn btn-outline-secondary btn-action px-3"><i class="bi bi-house"></i>
                     กลับ</a>
             </div>
         </div>
@@ -210,7 +229,8 @@
                                         class="btn btn-success btn-sm btn-action px-3">จ่ายเงิน</a>
                                     {% endif %}
 
-                                    {% if inv.status != 'paid' and inv.status != 'cancelled' and inv.invoice_type == 'daily' %}
+                                    {% if inv.status != 'paid' and inv.status != 'cancelled' and inv.invoice_type ==
+                                    'daily' %}
                                     <a href="/confirm_daily_payment/{{ inv.id }}"
                                         class="btn btn-success btn-sm btn-action px-3">จ่ายเงิน</a>
                                     {% endif %}

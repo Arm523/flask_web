@@ -158,36 +158,60 @@ def payment_summary():
 # 3. ดึงรายการธุรกรรมล่าสุด (Recent Transactions)
 @api.route('/api/recent_transactions')
 def get_recent_transactions():
+    # รับค่าวันที่จาก Query String (ถ้ามี)
+    start_date = request.args.get('start')  # รูปแบบ 'YYYY-MM-DD'
+    end_date = request.args.get('end')      # รูปแบบ 'YYYY-MM-DD'
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
-    # ดึงข้อมูลจากตารางเดียว (transactions)
-    query = """
-        SELECT 
-            transaction_date, 
-            type, 
-            category, 
-            COALESCE(note, '') as description, 
-            amount
-        FROM transactions
-        ORDER BY transaction_date DESC
-        LIMIT 15
-    """
     try:
-        cursor.execute(query)
+        if start_date and end_date:
+            # กรณีที่มีการเลือกวันที่: ค้นหาตามช่วงเวลา (ไม่จำกัด 15 อัน เพื่อให้เห็นบิลทั้งหมดในเดือนนั้น)
+            query = """
+                SELECT 
+                    transaction_date, 
+                    type, 
+                    category, 
+                    COALESCE(note, '') as description, 
+                    amount
+                FROM transactions
+                WHERE transaction_date >= %s AND transaction_date <= %s
+                ORDER BY transaction_date DESC
+            """
+            # เติมเวลาเพื่อให้ครอบคลุมทั้งวัน
+            params = (f"{start_date} 00:00:00", f"{end_date} 23:59:59")
+            cursor.execute(query, params)
+        else:
+            # กรณีหน้าแรก (ไม่มีการเลือกวันที่): ดึงแค่ 100 อันล่าสุด เพื่อความรวดเร็ว
+            query = """
+                SELECT 
+                    transaction_date, 
+                    type, 
+                    category, 
+                    COALESCE(note, '') as description, 
+                    amount
+                FROM transactions
+                ORDER BY transaction_date DESC
+                LIMIT 100
+            """
+            cursor.execute(query)
+
         rows = cursor.fetchall()
         
-        # จัดรูปแบบวันที่ให้ JS เข้าใจง่าย
         for row in rows:
             if row['transaction_date']:
-                row['transaction_date'] = row['transaction_date'].strftime('%d/%m/%Y')
+                row['transaction_date'] = row['transaction_date'].strftime('%Y-%m-%dT%H:%M:%S')
         
         return jsonify(rows)
+
     except Exception as e:
+        print(f"Error: {e}") # สำหรับ debug ฝั่ง server
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
+
 
 @api.route('/api/finance_data')
 def get_finance_data():

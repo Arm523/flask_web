@@ -1023,18 +1023,18 @@ def view_audit_logs():
 @app.route('/meter_analysis', methods=['GET', 'POST'])
 def meter_analysis():
     # 1. ตั้งค่าเริ่มต้น
-    today_str = datetime.now().strftime('%Y-%m-%d')
     current_year = datetime.now().year
     
-    # 2. รับค่าจาก Filter
+    # 2. รับค่าจาก Filter (ใช้ default เป็นค่าว่างเพื่อตรวจสอบการกดล้างค่า)
     year = request.args.get('year', default=current_year, type=int)
-    target_date = request.args.get('date', default=today_str)
+    start_date = request.args.get('start_date', default='')
+    end_date = request.args.get('end_date', default='')
     unit_id = request.args.get('unit_id', default='')
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # --- ส่วนที่ 1: กราฟ (ยังดึงจาก invoices เพื่อดูผลต่างการใช้) ---
+    # --- ส่วนที่ 1: กราฟ (ดึงข้อมูลรายเดือนตามปีที่เลือก) ---
     sql_usage = """
         SELECT m.month, 
             ROUND(COALESCE(SUM(i.current_electricity_reading - i.previous_electricity_reading), 0), 2) as electricity,
@@ -1056,21 +1056,32 @@ def meter_analysis():
     cursor.execute("SELECT COUNT(DISTINCT unit_id) as active_count FROM invoices WHERE YEAR(billing_period_start) = %s", (year,))
     active_meters = cursor.fetchone()['active_count'] or 0
 
-    # --- ส่วนที่ 3: Log จากตาราง meter_reading (ปรับแก้ Syntax) ---
+    # --- ส่วนที่ 3: Log (ดึงตามช่วงวันที่ หรือ 100 รายการล่าสุด) ---
+    # ใช้ f-string หรือต่อสตริงเพื่อสร้าง Base SQL
     log_sql = """
-        SELECT u.name,mr.serial_meter, mr.meter_type, mr.meter_id, mr.source, mr.created_by, mr.invoice_id,
+        SELECT u.name, mr.serial_meter, mr.meter_type, mr.meter_id, mr.source, mr.created_by, mr.invoice_id,
                COALESCE(mr.current_reading, 0) as current_reading, 
                mr.read_date 
         FROM meter_reading mr
         INNER JOIN unit u ON mr.unit_id = u.unit_id
-        WHERE DATE(mr.read_date) = %s
     """
-    params = [target_date]
-    if unit_id:
-        log_sql += " AND unit_id = %s"
-        params.append(unit_id)
-        
-    log_sql += " ORDER BY read_date DESC"
+    params = []
+
+    if start_date and end_date:
+        # กรณีมีการเลือกช่วงวันที่
+        log_sql += " WHERE DATE(mr.read_date) BETWEEN %s AND %s"
+        params.extend([start_date, end_date])
+        if unit_id:
+            log_sql += " AND mr.unit_id = %s"
+            params.append(unit_id)
+        log_sql += " ORDER BY mr.read_date DESC"
+    else:
+        # กรณีไม่ได้เลือกวันที่ หรือกด Clear ให้โชว์ 100 อันล่าสุด
+        if unit_id:
+            log_sql += " WHERE mr.unit_id = %s"
+            params.append(unit_id)
+        log_sql += " ORDER BY mr.read_date DESC LIMIT 100"
+
     cursor.execute(log_sql, tuple(params))
     recent_logs = cursor.fetchall()
 
@@ -1079,12 +1090,12 @@ def meter_analysis():
 
     return render_template('meter_analysis.html', 
                            year=year, 
-                           target_date=target_date,
+                           start_date=start_date, 
+                           end_date=end_date,
                            selected_unit=unit_id,
                            usage_data=usage_res, 
                            active_meters=active_meters,
                            logs=recent_logs)
-
 
 # ---------------------- RENEW -----------------------
 @app.route('/contracts_renew/<int:contract_id>', methods=['GET', 'POST'])
@@ -3916,6 +3927,8 @@ def confirm_daily_payment(invoice_id):
     overdue_days = update_late_penalty(cursor, invoice_id)
     invoice['overdue_days'] = overdue_days
 
+    print(invoice['billing_period_start'])
+
     if not invoice:
         flash("ไม่พบใบแจ้งหนี้รายวันนี้", "warning")
         cursor.close()
@@ -4919,7 +4932,6 @@ def update_meter():
     electricity = request.form.get('electricity', type=float) or 0.0
     water = request.form.get('water', type=float) or 0.0
     
-    # รับค่าหน่วยค้าง (กรณีเปลี่ยนมิเตอร์กลางคัน)
     elec_old_units = request.form.get('elec_old_units', type=float) or 0.0
     water_old_units = request.form.get('water_old_units', type=float) or 0.0
 

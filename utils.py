@@ -240,7 +240,7 @@ def mark_invoices_overdue(mocked_date=None):
             UPDATE invoices
             SET status = 'overdue'
             WHERE billing_period_end < %s
-              AND status NOT IN ('paid','overdue','cancelled','void') AND invoice_type != 'final' 
+              AND status NOT IN ('paid','overdue','cancelled','void') AND invoice_type not in ('final','daily','extra_bill') 
         """, (today,))
         affected = cursor.rowcount
         conn.commit()
@@ -965,13 +965,11 @@ def refresh_invoice_total(cursor, invoice_id):
         elec_total = 0.0
         water_total = 0.0
         meter_adjustment = 0.0 
-        
+        rent = float(inv['rent_amount']) if inv['rent_amount'] is not None else 0.0
         
     else: # 'normal' หรือ 'final'
-        # คิดค่าเช่า (ถ้าเดือนสุดท้ายให้ใช้ rent_amount ที่อาจจะมีการปรับลดวันแล้ว)
         rent = float(inv['rent_amount'] or inv['contract_price'] or 0)
-        
-        # คำนวณน้ำไฟตาม Usage ในบิล
+
         elec_total = (inv['electricity_usage'] or 0) * elec_rate
         water_total = (inv['water_usage'] or 0) * water_rate
 
