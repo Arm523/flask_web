@@ -248,6 +248,11 @@
                                         <i class="bi bi-trash" style="font-size: 14px;"></i>
                                     </button>
                                     {% endif %}
+
+                                    {% if inv.type == 'income' and inv.status == 'paid' %}
+                                    <a href="/print_receipt/{{ inv.id }}"
+                                        class="btn btn-warning btn-sm btn-full-width">ดูใบเสร็จ</a>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

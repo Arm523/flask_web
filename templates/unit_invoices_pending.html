@@ -20,9 +20,10 @@
       font-family: "Sarabun", sans-serif;
     }
 
-    /* ขยาย Container ให้กว้างขึ้นเพื่อลดการบีบตาราง */
     .container {
       max-width: 95% !important;
+      max-height: 450px; 
+      overflow-y: auto; 
     }
 
     .page-box {
@@ -217,14 +218,13 @@
               {% endif %}
             </td>
 
-            <td>{{ inv.issue_date}}</td>
+            <td>{{ inv.issue_date.strftime('%d/%m/%Y') or '-' }}</td>
 
-            <td>{{ inv.billing_period_start or '-' }}</td>
+            <td>{{ inv.billing_period_start.strftime('%d/%m/%Y') or '-' }}</td>
 
-            <td>{{ inv.billing_period_end or '-' }}</td>
+            <td>{{ inv.billing_period_end.strftime('%d/%m/%Y') or '-' }}</td>
 
-            <td>{{ inv.due_date or '-' }}</td>
-
+            <td>{{ inv.due_date.strftime('%d/%m/%Y') or '-' }}</td>
             <td>
               {{ "%.2f"|format(inv.total_amount + (inv.penalty_amount or 0))
               }} ฿

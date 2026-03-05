@@ -489,6 +489,7 @@ def dashboard():
             'current_water_reading': curr_wat,
             'current_invoice': current_invoice,
             'i_status': current_invoice.get('status') if current_invoice else None,
+            'i_type': current_invoice.get('invoice_type') if contract else None,
             'meter_saved': (
                 current_invoice['meter_saved'] if current_invoice and 'meter_saved' in current_invoice else
                 (daily['meter_saved'] if daily and 'meter_saved' in daily else None)
@@ -994,10 +995,13 @@ def view_audit_logs():
         WHERE 1=1
     """
     params = []
+
+    # ฟิลเตอร์ตามหมวดหมู่
     if selected_category:
         query += " AND al.category = %s"
         params.append(selected_category)
 
+    # ฟิลเตอร์ตามวันที่
     if start_date:
         query += " AND DATE(al.created_at) >= %s"
         params.append(start_date)
@@ -1006,7 +1010,13 @@ def view_audit_logs():
         query += " AND DATE(al.created_at) <= %s"
         params.append(end_date)
     
-    query += " ORDER BY al.created_at DESC LIMIT 1000"
+    query += " ORDER BY al.created_at DESC"
+
+    # --- ส่วนที่เพิ่ม/แก้ไข: เช็คเงื่อนไขการ LIMIT ---
+    # ถ้าไม่ได้เลือกวันที่เริ่มต้น และ ไม่ได้เลือกวันที่สิ้นสุด ให้แสดงแค่ 50 รายการล่าสุด
+    if not start_date and not end_date:
+        query += " LIMIT 50"
+    # ------------------------------------------
     
     cursor.execute(query, tuple(params))
     logs = cursor.fetchall()
@@ -1022,7 +1032,6 @@ def view_audit_logs():
 # ---------------------- DASHBOARD METER ----------------------
 @app.route('/meter_analysis', methods=['GET', 'POST'])
 def meter_analysis():
-    # 1. ตั้งค่าเริ่มต้น
     current_year = datetime.now().year
     
     # 2. รับค่าจาก Filter (ใช้ default เป็นค่าว่างเพื่อตรวจสอบการกดล้างค่า)
@@ -1057,7 +1066,6 @@ def meter_analysis():
     active_meters = cursor.fetchone()['active_count'] or 0
 
     # --- ส่วนที่ 3: Log (ดึงตามช่วงวันที่ หรือ 100 รายการล่าสุด) ---
-    # ใช้ f-string หรือต่อสตริงเพื่อสร้าง Base SQL
     log_sql = """
         SELECT u.name, mr.serial_meter, mr.meter_type, mr.meter_id, mr.source, mr.created_by, mr.invoice_id,
                COALESCE(mr.current_reading, 0) as current_reading, 
@@ -1617,7 +1625,7 @@ def create_lease(unit_id):
                 SELECT u.*, t.price_monthly
                 FROM unit u
                 LEFT JOIN type t ON u.type_unit_id = t.type_id
-                WHERE u.unit_id=%s
+                WHERE u.unit_id=%s AND u.is_deleted = 0
             """, (unit_id,))
             room = cursor.fetchone()
             if not room:
@@ -1631,7 +1639,7 @@ def create_lease(unit_id):
                 SELECT u.*, t.price_monthly, u.electricity_start, u.water_start
                 FROM unit u
                 LEFT JOIN type t ON u.type_unit_id = t.type_id
-                WHERE u.unit_id=%s
+                WHERE u.unit_id=%s AND u.is_deleted = 0
             """, (unit_id,))
             room = cursor.fetchone()
             if not room:
@@ -1752,21 +1760,20 @@ def create_lease(unit_id):
     room_price = float(room['price_monthly'] or 0) if room else 0
 
     cursor.execute("""
-        SELECT t.* FROM tenants t
-        WHERE t.tenant_id NOT IN (
-            SELECT tenant_id 
-            FROM contracts 
-            WHERE status IN (1, 2, 3, 4)
+       SELECT t.* FROM tenants t
+        WHERE t.is_deleted = 0 
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM contracts c 
+            WHERE c.tenant_id = t.tenant_id 
+            AND c.status IN (1, 2, 3, 4)
         )
-        ORDER BY t.fname
+        ORDER BY t.fname;
     """)
     tenants = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM `option` ORDER BY name")
+    cursor.execute("SELECT * FROM `option` WHERE is_deleted = 0 ORDER BY name")
     options = cursor.fetchall()
-
-    cursor.execute("SELECT * FROM contract_type")
-    contract_types = cursor.fetchall()
 
     cursor.close()
     conn.close()
@@ -1776,7 +1783,6 @@ def create_lease(unit_id):
         room=room,
         tenants=tenants,
         options=options,
-        contract_types=contract_types,
         room_price=room_price,
         min_months=min_months
     )
@@ -2353,7 +2359,7 @@ def edit_unit(unit_id):
     cursor = conn.cursor(dictionary=True)
 
     # 1. ดึงข้อมูลห้องปัจจุบันขึ้นมาก่อน เพื่อเช็คสถานะเดิม
-    cursor.execute("SELECT * FROM unit WHERE unit_id = %s", (unit_id,))
+    cursor.execute("SELECT * FROM unit WHERE unit_id = %s AND is_deleted = 0", (unit_id,))
     room = cursor.fetchone()
 
     if not room:
@@ -2414,7 +2420,7 @@ def edit_unit(unit_id):
             conn.close()
 
     # GET: ดึงข้อมูลเพื่อแสดงผล
-    cursor.execute("SELECT type_id, n_type, price_monthly FROM type ORDER BY n_type")
+    cursor.execute("SELECT type_id, n_type, price_monthly FROM type WHERE is_deleted = 0 ORDER BY n_type")
     types = cursor.fetchall()
     
     cursor.close()
@@ -3024,7 +3030,6 @@ def manage_doc():
 # ---------------------- MANAGE TRANETS -----------------------
 @app.route('/manage_tenants', methods=['GET', 'POST'])
 def manage_tenants():
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -3504,7 +3509,7 @@ def edit_user(user_id):
                 'USER', 
                 'UPDATE', 
                 f'แก้ไขข้อมูลผู้ใช้ ID: {user_id}', 
-                session['user_id']
+                session.get('user', {}).get('user_id')
             )
 
             conn.commit()
@@ -3574,7 +3579,7 @@ def remove_user_file(file_type, user_id):
                 'USER', 
                 'DELET_USER_FILE', 
                 f'ลบไฟล์ผู้ใช้งาน ID: {user_id}', 
-                session['user_id']
+                session.get('user', {}).get('user_id')
             )
 
         cursor.execute(query, (user_id,))
@@ -3802,6 +3807,7 @@ def confirm_payment(invoice_id):
                 t_note=f"ค่ารายจ่ายเพิ่มเติม ห้อง {invoice['room_name']}"
             elif invoice['total_amount'] >= 0:
                 type='income'
+                total_amount = invoice['total_amount']
                 t_note=f"ค่าบริการเพิ่มเติม ห้อง {invoice['room_name']}"
 
             cursor.execute("""
@@ -4745,183 +4751,187 @@ def notice_move_out(contract_id):
 
 @app.route('/create_invoice_move_out/<int:contract_id>', methods=['POST'])
 def create_invoice_move_out(contract_id):
-    
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)   
     today = datetime.today().date()
 
-    # 1. ยกเลิก draft invoice ถ้ามี
-    cursor.execute("""
-        SELECT invoice_id FROM invoices 
-        WHERE contract_id = %s AND status = 'draft'
-    """, (contract_id,))
-    draft = cursor.fetchone()
-    if draft:
+    try:
+        # 1. ยกเลิก draft invoice ถ้ามี
         cursor.execute("""
-            UPDATE invoices
-            SET status = 'cancelled'
-            WHERE invoice_id = %s
-        """, (draft['invoice_id'],))
+            SELECT invoice_id FROM invoices 
+            WHERE contract_id = %s AND status = 'draft'
+        """, (contract_id,))
+        draft = cursor.fetchone()
+        if draft:
+            cursor.execute("""
+                UPDATE invoices
+                SET status = 'cancelled'
+                WHERE invoice_id = %s
+            """, (draft['invoice_id'],))
 
-    # 2. ดึงข้อมูลสัญญา + ห้อง + ผู้เช่า
-    cursor.execute("""
-        SELECT c.contract_id, c.price, c.premiums, c.room_id, c.electricity_start, c.water_start,
-            t.tenant_id, t.fname, t.lname, c.notice_move_out_date, c.contract_start, c.contract_end
-        FROM contracts c
-        JOIN tenants t ON c.tenant_id = t.tenant_id
-        WHERE c.contract_id = %s
-    """, (contract_id,))
-    contract = cursor.fetchone()
-
-    if not contract:
-        flash("ไม่พบสัญญา", "warning")
-        cursor.close()
-        conn.close()
-        return redirect(url_for('dashboard'))
-    
-
-    move_out_date = contract['notice_move_out_date']    
-
-    # 3. ดึง invoice ล่าสุดที่ชำระแล้ว
-    cursor.execute("""
-        SELECT billing_period_end
-        FROM invoices
-        WHERE contract_id=%s AND status='paid'
-        ORDER BY billing_period_end DESC
-        LIMIT 1
-    """, (contract_id,))
-    last_invoice = cursor.fetchone()
-
-    if last_invoice:
-        start_date = last_invoice['billing_period_end'] + timedelta(days=1)
-    else:
-        start_date = contract['contract_start']
-
-    # 4. ดึง electricity_rate, water_rate
-    cursor.execute("""
-        SELECT setting_key, setting_value
-        FROM settings
-        WHERE setting_key IN ('electricity_rate', 'water_rate')
-    """)
-    settings = cursor.fetchall()
-    settings_dict = {s['setting_key']: float(s['setting_value']) for s in settings}
-    electricity_rate = settings_dict.get('electricity_rate', 0)
-    water_rate = settings_dict.get('water_rate', 0)
-
-    # 5. ดึง previous electricity/water
-    cursor.execute("""
-        SELECT current_electricity_reading, current_water_reading
-        FROM invoices
-        WHERE unit_id=%s
-        AND contract_id=%s
-        AND invoice_type='monthly'
-        AND status NOT IN ('cancelled','void')
-        ORDER BY billing_period_start DESC
-        LIMIT 1
-    """, (contract['room_id'], contract_id))
-    last_invoice = cursor.fetchone()
-    if last_invoice:
-        prev_elec = last_invoice['current_electricity_reading'] or 0
-        prev_water = last_invoice['current_water_reading'] or 0
-    else:
-        prev_elec = contract['electricity_start'] or 0
-        prev_water = contract['water_start'] or 0
-
-    # 6. คำนวณค่าใช้จ่าย (เพิ่มการดึงหนี้เก่า)
-    cursor.execute("""
-        SELECT invoice_id, total_amount, billing_period_start, billing_period_end 
-        FROM invoices 
-        WHERE contract_id = %s AND status IN ('unpaid', 'overdue')
-    """, (contract_id,))
-    unpaid_invoices = cursor.fetchall()
-    unpaid_amount = sum(inv['total_amount'] for inv in unpaid_invoices)
-
-    rent = contract['price']
-    reimburse = contract['premiums'] or 0
-    penalty = 0 
-
-    # ยอดรวม = ค่าเช่าใหม่ + หนี้เก่า + ค่าปรับ - เงินมัดจำ(ถ้าจะหักเลย)
-    total_amount = rent + unpaid_amount + penalty - reimburse
-
-    # 7. สร้าง final invoice
-    cursor.execute("""
-        INSERT INTO invoices (
-            unit_id, tenant_id, contract_id,
-            invoice_type, billing_period_start, billing_period_end,
-            issue_date, due_date, rent_amount, previous_electricity_reading, electricity_rate,
-            previous_water_reading, water_rate, reimburse, total_amount, status, created_by, created_at,premiums
-        ) VALUES (%s, %s, %s, 'final', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s,0)
-    """, (
-        contract['room_id'], contract['tenant_id'], contract_id,
-        start_date, move_out_date,
-        today, move_out_date,
-        rent, prev_elec, electricity_rate, prev_water, water_rate,
-        reimburse, total_amount, session['user']['user_id'], datetime.today()
-    ))
-    invoice_id = cursor.lastrowid  
-
-    for inv in unpaid_invoices:
-        desc = f"ยอดค้างชำระจากบิล #{inv['invoice_id']} ({inv['billing_period_start']} ถึง {inv['billing_period_end']})"
+        # 2. ดึงข้อมูลสัญญา + ห้อง + ผู้เช่า
         cursor.execute("""
-            INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (invoice_id, desc, inv['total_amount'], 1, inv['total_amount']))
+            SELECT c.contract_id, c.price, c.premiums, c.room_id, c.electricity_start, c.water_start,
+                   t.tenant_id, t.fname, t.lname, c.notice_move_out_date, c.contract_start, c.contract_end
+            FROM contracts c
+            JOIN tenants t ON c.tenant_id = t.tenant_id
+            WHERE c.contract_id = %s
+        """, (contract_id,))
+        contract = cursor.fetchone()
 
-    # 8. เพิ่ม option ลง invoice_items
-    cursor.execute("""
-        SELECT o.id, o.name, o.price, o.option_type, o.unit_name
-        FROM contract_option co
-        JOIN `option` o ON co.option_id = o.id
-        WHERE co.contract_id = %s
-    """, (contract_id,))
-    options = cursor.fetchall()
+        if not contract:
+            flash("ไม่พบสัญญา", "warning")
+            return redirect(url_for('dashboard'))
 
-    for opt in options:
-        option_id = opt['id']
-        opt_name = opt['name']
-        opt_price = opt['price']
-        opt_type = opt['option_type']
-        unit_name = opt['unit_name']
+        move_out_date = contract['notice_move_out_date']    
 
-        if opt_type == "fixed":
-            qty = 1
-            total = opt_price
+        # 3. ดึง invoice ล่าสุดที่ชำระแล้ว
+        cursor.execute("""
+            SELECT billing_period_end
+            FROM invoices
+            WHERE contract_id=%s AND status='paid'
+            ORDER BY billing_period_end DESC
+            LIMIT 1
+        """, (contract_id,))
+        last_invoice_paid = cursor.fetchone()
+
+        if last_invoice_paid:
+            start_date = last_invoice_paid['billing_period_end'] + timedelta(days=1)
         else:
-            qty = 0
-            total = 0
+            start_date = contract['contract_start']
 
+        # 4. ดึง electricity_rate, water_rate
         cursor.execute("""
-            INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price, option_id)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (invoice_id, f"{opt_name}" + (f" ({unit_name})" if unit_name else ""), opt_price, qty, total, option_id))
+            SELECT setting_key, setting_value
+            FROM settings
+            WHERE setting_key IN ('electricity_rate', 'water_rate')
+        """)
+        settings = cursor.fetchall()
+        settings_dict = {s['setting_key']: float(s['setting_value']) for s in settings}
+        electricity_rate = settings_dict.get('electricity_rate', 0)
+        water_rate = settings_dict.get('water_rate', 0)
 
-    # 9. อัปเดตสถานะห้องรอชําระบิลสุดท้าย
-    cursor.execute("""
-        UPDATE unit
-        SET status_id=6
-        WHERE unit_id=%s
-    """, (contract['room_id'],))
+        # 5. ดึง previous electricity/water
+        cursor.execute("""
+            SELECT current_electricity_reading, current_water_reading
+            FROM invoices
+            WHERE unit_id=%s
+            AND contract_id=%s
+            AND invoice_type='monthly'
+            AND status NOT IN ('cancelled','void')
+            ORDER BY billing_period_start DESC
+            LIMIT 1
+        """, (contract['room_id'], contract_id))
+        last_reading = cursor.fetchone()
+        
+        if last_reading:
+            prev_elec = last_reading['current_electricity_reading'] or 0
+            prev_water = last_reading['current_water_reading'] or 0
+        else:
+            prev_elec = contract['electricity_start'] or 0
+            prev_water = contract['water_start'] or 0
 
-    # 10. (เพิ่มเติม) ควรเปลี่ยนสถานะบิลเก่าเป็น 'cancelled' หรือ 'transferred'
-    # เพื่อไม่ให้ยอดมันซ้ำซ้อนในระบบบัญชี
-    cursor.execute("""
-        UPDATE invoices SET status = 'cancelled' 
-        WHERE contract_id = %s AND status IN ('unpaid', 'overdue') AND invoice_id != %s
-    """, (contract_id, invoice_id))
+        # 6. คำนวณค่าใช้จ่าย (เพิ่มการดึงหนี้เก่า)
+        cursor.execute("""
+            SELECT invoice_id, total_amount, billing_period_start, billing_period_end 
+            FROM invoices 
+            WHERE contract_id = %s AND status IN ('unpaid', 'overdue')
+        """, (contract_id,))
+        unpaid_invoices = cursor.fetchall()
+        unpaid_amount = sum(inv['total_amount'] for inv in unpaid_invoices)
 
-    add_audit_log(
-        cursor, 
-        'TENANT', 
-        'CREATE_FINAL_INVOICE', 
-        f'สร้างบิลย้ายออกสัญญา ID: {contract_id}, บิล ID: {invoice_id}, ยอดรวม: {total_amount}', 
-        session.get('user', {}).get('user_id')
-    )
+        rent = contract['price']
+        reimburse = contract['premiums'] or 0
+        penalty = 0 
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # ยอดรวม = ค่าเช่าใหม่ + หนี้เก่า + ค่าปรับ - เงินมัดจำ
+        total_amount = rent + unpaid_amount + penalty - reimburse
 
-    flash("บันทึกย้ายออกและสร้างบิลสุดท้ายเรียบร้อยแล้ว", "success")
+        # 7. สร้าง final invoice
+        # หมายเหตุ: แก้ไขค่าคงที่ 0 ในพารามิเตอร์สุดท้ายให้ตรงกับโครงสร้าง TABLE ของคุณ
+        cursor.execute("""
+            INSERT INTO invoices (
+                unit_id, tenant_id, contract_id,
+                invoice_type, billing_period_start, billing_period_end,
+                issue_date, due_date, rent_amount, previous_electricity_reading, electricity_rate,
+                previous_water_reading, water_rate, reimburse, total_amount, status, created_by, created_at, premiums
+            ) VALUES (%s, %s, %s, 'final', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s, 0)
+        """, (
+            contract['room_id'], contract['tenant_id'], contract_id,
+            start_date, move_out_date,
+            today, move_out_date,
+            rent, prev_elec, electricity_rate, prev_water, water_rate,
+            reimburse, total_amount, session.get('user', {}).get('user_id'), datetime.now()
+        ))
+        invoice_id = cursor.lastrowid  
+
+        # เพิ่มรายการหนี้เก่าลงใน invoice_items
+        for inv in unpaid_invoices:
+            desc = f"ยอดค้างชำระจากบิล #{inv['invoice_id']} ({inv['billing_period_start']} ถึง {inv['billing_period_end']})"
+            cursor.execute("""
+                INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (invoice_id, desc, inv['total_amount'], 1, inv['total_amount']))
+
+        # 8. เพิ่ม option ลง invoice_items (แก้ไขให้ดึง unit_name มาด้วยป้องกัน Error)
+        cursor.execute("""
+            SELECT o.id, o.name, o.price
+            FROM contract_option co
+            JOIN `option` o ON co.option_id = o.id
+            WHERE co.contract_id = %s AND o.is_deleted = 0
+        """, (contract_id,))
+        options = cursor.fetchall()
+
+        for opt in options:
+            opt_name = opt['name']
+            opt_price = opt['price']
+
+            desc_option = f"{opt_name}" 
+            cursor.execute("""
+                INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price, option_id, type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (invoice_id, desc_option, opt_price, 1, opt_price, opt['id'], 'option'))
+
+        # 9. อัปเดตสถานะห้องรอชําระบิลสุดท้าย (status_id=6)
+        cursor.execute("""
+            UPDATE unit
+            SET status_id=6
+            WHERE unit_id=%s
+        """, (contract['room_id'],))
+
+        # 10. เปลี่ยนสถานะบิลเก่าเป็น 'cancelled' เพื่อไม่ให้ยอดซ้ำซ้อน
+        cursor.execute("""
+            UPDATE invoices SET status = 'cancelled' 
+            WHERE contract_id = %s AND status IN ('unpaid', 'overdue') AND invoice_id != %s
+        """, (contract_id, invoice_id))
+
+        # บันทึก Audit Log
+        add_audit_log(
+            cursor, 
+            'TENANT', 
+            'CREATE_FINAL_INVOICE', 
+            f'สร้างบิลย้ายออกสัญญา ID: {contract_id}, บิล ID: {invoice_id}, ยอดรวม: {total_amount}', 
+            session.get('user', {}).get('user_id')
+        )
+
+        # ยืนยันรายการทั้งหมด
+        conn.commit()
+        flash("บันทึกย้ายออกและสร้างบิลสุดท้ายเรียบร้อยแล้ว", "success")
+
+    except Exception as e:
+        # หากเกิด Error ใดๆ ให้ยกเลิกสิ่งที่ทำค้างไว้ทั้งหมดทันที
+        if conn:
+            conn.rollback()
+        print(f"❌ Error mark_invoices_overdue: {str(e)}")
+        flash(f"เกิดข้อผิดพลาดในการสร้างบิล: {str(e)}", "danger")
+
+    finally:
+        # ปิดการเชื่อมต่อเสมอเพื่อป้องกัน Lock ค้าง
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     return redirect(url_for('dashboard'))
 
 

@@ -526,27 +526,28 @@
                         {# --- สถานะบิลสุดท้าย/หมดสัญญา --- #}
                         {% if room.contract_status == 4 %}
                         {# เช็คสถานะการจ่ายเงินบิลสุดท้าย #}
-                        {% if room.i_status == 'paid' %}
+                        {% if room.i_status == 'paid' and room.i_type == 'final' %}
                         <span class="alert-chip alert-success">✅ ชําระบิลสุดท้ายเเล้ว</span>
-                        {% elif room.i_status == 'draft' %}
+                        {% elif room.i_status == 'draft' and room.i_type == 'final' %}
                         <span class="alert-chip alert-warning">⚠️ บิลสุดท้ายยังไม่ชําระ</span>
                         {% endif %}
 
                         {# เช็ควันหมดสัญญา #}
                         {% if room.contract_end %}
-                        {% if room.contract_end <= room.today %}
-                        <span class="alert-chip alert-danger">⚠️ หมดอายุเเล้ว ({{ room.contract_end.strftime('%d/%m/%Y')
+                        {% if room.contract_end <= room.today %} <span class="alert-chip alert-danger">⚠️ หมดอายุเเล้ว
+                            ({{ room.contract_end.strftime('%d/%m/%Y')
                             }})</span>
-                        {% else %}
-                        <span class="alert-chip alert-danger">⚠️ ใกล้หมดอายุ ({{ room.contract_end.strftime('%d/%m/%Y')
-                            }})</span>
-                        {% endif %}
-                        {% endif %}
-                        {% endif %}
+                            {% else %}
+                            <span class="alert-chip alert-danger">⚠️ ใกล้หมดอายุ ({{
+                                room.contract_end.strftime('%d/%m/%Y')
+                                }})</span>
+                            {% endif %}
+                            {% endif %}
+                            {% endif %}
 
-                        {% if room.bill == 0 %}
-                        <span class="alert-chip alert-danger">⚠️ มีการเปลี่ยนมิเตอร์ </span>
-                        {% endif %}
+                            {% if room.bill == 0 %}
+                            <span class="alert-chip alert-danger">⚠️ มีการเปลี่ยนมิเตอร์ </span>
+                            {% endif %}
                     </div>
                     {% endif %}
 
@@ -569,7 +570,7 @@
                     </a>
                     {% endif %}
 
-                    {% if room.contract_status == 4 and room.status_id == 6 and room.i_status != 'paid' %}
+                    {% if room.contract_status == 4 and room.i_status != 'paid' %}
                     <a href="{{ url_for('renew_contracts', contract_id=room.contract_id) }}"
                         class="btn btn-warning btn-sm mt-1">
                         ต่อสัญญา
@@ -780,7 +781,6 @@
                     </div>
                 </div>
             </div>
-
         </div>
         {% endfor %}
     </div>
@@ -1208,6 +1208,10 @@
     });
 
     document.addEventListener("DOMContentLoaded", function () {
+        const now = new Date();
+        const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const lastDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+
         const dataElement = document.getElementById('flash-data');
         if (dataElement) {
             const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
@@ -1225,7 +1229,14 @@
         setupYearFilters();
 
         // [B] ตั้งค่าเครื่องมืออื่นๆ
-        flatpickr("#notice_date", { dateFormat: "d-m-Y" });
+        flatpickr("#notice_date", {
+            dateFormat: "d-m-Y",
+            minDate: firstDayNextMonth, // ล็อกวันเริ่มต้นที่วันที่ 1 ของเดือนหน้า
+            maxDate: lastDayNextMonth,   // ล็อกวันสุดท้ายที่วันสิ้นเดือนของเดือนหน้า
+            // defaultDate: firstDayNextMonth // <--- ลบบรรทัดนี้ออก หรือคอมเมนต์ไว้
+            allowInput: false,            // แนะนำให้ใส่เพิ่มเพื่อป้องกันคนพิมพ์เองมั่วๆ
+            placeholder: "กรุณาเลือกวันที่" // ใส่ placeholder แทนเพื่อให้รู้ว่าต้องคลิก
+        });
         flatpickr("#startDate, #endDate", { dateFormat: "d-m-Y", locale: "th" });
 
         // [C] สร้าง Chart Objects รอไว้ (สำคัญ: ต้องสร้างก่อนโหลด Data)

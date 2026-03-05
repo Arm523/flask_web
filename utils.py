@@ -40,7 +40,7 @@ def save_config(path, data):
 def get_now(mocked=False):
     if mocked:
         # return datetime.now()
-        return datetime(2026, 10,5, 9, 0, 0)
+        return datetime(2026, 3,20, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -66,9 +66,9 @@ def generate_slip_filename(file, prefix, ref_id):
 def get_db_connection():
     try:
         conn = mysql.connector.connect(
-            host='192.168.137.1',
-            user='flask_user',
-            password='nit.P#1234',
+            host='192.168.137.20',
+            user='admin',
+            password='1234',
             database='apartment',
         )
         return conn

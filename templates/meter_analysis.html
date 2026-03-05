@@ -2,6 +2,14 @@
 {% block content %}
 <title>Meter Analysis - การวิเคราะห์ข้อมูล</title>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+
 <style>
     .table-responsive::-webkit-scrollbar {
         width: 6px;
@@ -68,13 +76,13 @@
                         <input type="hidden" name="year" value="{{ year }}">
                         <div class="input-group input-group-sm">
                             <span class="input-group-text">จาก</span>
-                            <input type="date" name="start_date" id="startDate" class="form-control"
-                                value="{{ start_date }}" onchange="this.form.submit()">
+                            <input type="text" name="start_date" id="startDate" class="form-control bg-white"
+                                value="{{ start_date }}" placeholder="วว/ดด/ปปปป" readonly>
                         </div>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text">ถึง</span>
-                            <input type="date" name="end_date" id="endDate" class="form-control" value="{{ end_date }}"
-                                onchange="this.form.submit()">
+                            <input type="text" name="end_date" id="endDate" class="form-control bg-white"
+                                value="{{ end_date }}" placeholder="วว/ดด/ปปปป" readonly>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-secondary px-2"
                             style="height: 31px; line-height: 1;" onclick="clearDateFilter()">
@@ -143,10 +151,6 @@
     </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         // --- 1. กราฟ ApexCharts ---
@@ -175,10 +179,30 @@
         });
     });
 
-    // --- 3. ฟังก์ชัน Clear วันที่ ---
+    const config = {
+        dateFormat: "Y-m-d",     // ส่งค่าไป Server เป็นปี-เดือน-วัน (Format มาตรฐาน DB)
+        altInput: true,          // เปิดตัวช่วยแสดงผล
+        altFormat: "d/m/Y",      // ให้ผู้ใช้เห็นเป็น วัน/เดือน/ปี
+        allowInput: false,
+        locale: "th",            // ถ้าต้องการภาษาไทย (ต้องโหลด Lib เพิ่ม)
+        onChange: function (selectedDates, dateStr, instance) {
+            // เมื่อเลือกวันที่เสร็จ ให้ Submit ฟอร์มทันทีเหมือนเดิม
+            if (selectedDates.length > 0) {
+                document.getElementById('filterForm').submit();
+            }
+        }
+    };
+
+    flatpickr("#startDate", config);
+    flatpickr("#endDate", config);
+
     function clearDateFilter() {
-        document.getElementById('startDate').value = '';
-        document.getElementById('endDate').value = '';
+        const start = document.querySelector("#startDate")._flatpickr;
+        const end = document.querySelector("#endDate")._flatpickr;
+
+        if (start) start.clear();
+        if (end) end.clear();
+
         document.getElementById('filterForm').submit();
     }
 
@@ -187,16 +211,15 @@
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Meter Logs');
 
-        // 1. ตั้งค่าความกว้างคอลัมน์ (ปรับให้กว้างขึ้นตามความเหมาะสมของข้อมูล)
         worksheet.columns = [
-            { header: 'วัน/เวลา', key: 'date', width: 22 },
-            { header: 'ห้อง', key: 'room', width: 12 },
-            { header: 'ประเภท', key: 'type', width: 12 },
-            { header: 'Serial', key: 'serial', width: 18 },
-            { header: 'Source', key: 'source', width: 12 },
-            { header: 'Invoice', key: 'invoice', width: 12 },
-            { header: 'Value', key: 'value', width: 15 },
-            { header: 'User', key: 'user', width: 15 }
+            { width: 22 },
+            { width: 12 },
+            { width: 12 },
+            { width: 18 },
+            { width: 12 },
+            { width: 12 },
+            { width: 15 },
+            { width: 15 }
         ];
 
         // 2. ส่วนหัวรายงาน (Title)
@@ -232,17 +255,14 @@
                 const rowData = Array.from(tr.cells).map(c => c.innerText.trim());
                 const addedRow = worksheet.addRow(rowData);
 
-                // จัดตำแหน่งข้อมูลในแต่ละแถว
                 addedRow.eachCell((cell, colNumber) => {
                     cell.border = {
                         top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
                     };
                     cell.alignment = { vertical: 'middle' };
 
-                    // คอลัมน์ Value (ลำดับที่ 7) ให้ชิดขวา
                     if (colNumber === 7) {
                         cell.alignment.horizontal = 'right';
-                        // ใส่ฟอร์แมตตัวเลข (Optional)
                         cell.numFmt = '#,##0.00';
                     } else if (colNumber === 3 || colNumber === 5) { // ประเภท และ Source ให้กึ่งกลาง
                         cell.alignment.horizontal = 'center';
