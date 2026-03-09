@@ -684,7 +684,7 @@
                         {% endif %}
 
                         {% if room.contract_id %}
-                        {% if not room.notice_move_out_date and room.contract_status != 4 %}
+                        {% if not room.notice_move_out_date and room.contract_status not in [1,2,4] %}
                         <form action="{{ url_for('notice_move_out', contract_id=room.contract_id) }}" method="POST"
                             class="mt-2 p-3 rounded shadow-sm border">
                             <label class="form-label fw-bold text-primary">📢 แจ้งย้ายออกวันที่:</label>
@@ -781,6 +781,13 @@
                     </div>
                 </div>
             </div>
+        </div>
+        {% else %}
+        <div
+            style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 100px 0;">
+            <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" style="width: 200px; opacity: 0.3;"
+                alt="empty">
+            <p class="text-muted mt-3">ไม่พบข้อมูลห้อง</p>
         </div>
         {% endfor %}
     </div>

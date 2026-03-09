@@ -1,5 +1,14 @@
 {% extends "layout.html" %} {% block title %}แก้ไขข้อมูลผู้ใช้ & เอกสาร{%
 endblock %} {% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+{% for category, message in messages %}
+<div class="flash-data" data-category="{{ 'success' if category == 'success' else 'error' }}"
+  data-message="{{ message }}">
+</div>
+{% endfor %}
+{% endif %}
+{% endwith %}
 <style>
   .edit-card {
     border: none;
@@ -229,14 +238,22 @@ endblock %} {% block content %}
                 <div class="col-md-6">
                   <label class="form-label">รหัสผ่านใหม่</label>
                   <input type="password" class="form-control bg-white" name="password" id="password"
-                    placeholder="••••••••" />
+                    placeholder="••••••••" oninput="checkStrength()" />
+                  <div id="strengthText" class="small mt-1" style="display:none;"></div>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">ยืนยันรหัสผ่านใหม่</label>
-                  <input type="password" class="form-control bg-white" id="confirm_password" placeholder="••••••••" />
+                  <input type="password" class="form-control bg-white" id="confirm_password" placeholder="••••••••"
+                    oninput="validatePasswordMatch()" />
                   <div id="passwordError" class="text-danger mt-1 small" style="display: none">
-                    รหัสผ่านไม่ตรงกัน
+                    <i class="bi bi-x-circle"></i> รหัสผ่านไม่ตรงกัน
                   </div>
+                </div>
+                <div class="col-12">
+                  <p class="text-muted small mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    หากเปลี่ยนรหัสผ่าน: ต้องมีอย่างน้อย 8 ตัวอักษร, ประกอบด้วย A-Z, a-z และ 0-9
+                  </p>
                 </div>
               </div>
 
@@ -267,12 +284,66 @@ endblock %} {% block content %}
   function validatePassword() {
     const password = document.getElementById("password").value;
     const confirm = document.getElementById("confirm_password").value;
-    const error = document.getElementById("passwordError");
-    if (password && password !== confirm) {
-      error.style.display = "block";
-      return false;
+
+    // ถ้ามีการกรอกรหัสผ่านใหม่
+    if (password.length > 0) {
+      // 1. เช็คความยาว
+      if (password.length < 8) {
+        Swal.fire('คำเตือน', 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร', 'warning');
+        return false;
+      }
+      // 2. เช็คตัวพิมพ์ใหญ่/เล็ก/ตัวเลข
+      const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+      if (!regex.test(password)) {
+        Swal.fire('คำเตือน', 'รหัสผ่านต้องประกอบด้วยตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก และตัวเลข', 'warning');
+        return false;
+      }
+      // 3. เช็คว่าตรงกันไหม
+      if (password !== confirm) {
+        Swal.fire('ผิดพลาด', 'การยืนยันรหัสผ่านไม่ตรงกัน', 'error');
+        return false;
+      }
     }
-    return true;
+    return true; // ผ่านการตรวจสอบ
+  }
+
+  function checkStrength() {
+    const password = document.getElementById("password").value;
+    const strengthText = document.getElementById("strengthText");
+
+    if (password.length === 0) {
+      strengthText.style.display = "none";
+      return;
+    }
+
+    strengthText.style.display = "block";
+
+    // เงื่อนไขความปลอดภัย
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const isLongEnough = password.length >= 8;
+
+    if (isLongEnough && hasUpperCase && hasLowerCase && hasNumbers) {
+      strengthText.innerHTML = '<i class="bi bi-check-circle-fill"></i> รหัสผ่านปลอดภัยมาก';
+      strengthText.className = "small mt-1 text-success fw-bold";
+    } else {
+      strengthText.innerHTML = '<i class="bi bi-exclamation-triangle"></i> รหัสผ่านยังไม่ปลอดภัยพอ';
+      strengthText.className = "small mt-1 text-warning";
+    }
+  }
+
+  // ฟังก์ชันเช็คว่ารหัสผ่านตรงกันหรือไม่
+  function validatePasswordMatch() {
+    const password = document.getElementById("password").value;
+    const confirm = document.getElementById("confirm_password").value;
+    const error = document.getElementById("passwordError");
+
+    if (confirm.length > 0 && password !== confirm) {
+      error.style.display = "block";
+    } else {
+      error.style.display = "none";
+    }
   }
 
   function updateFileName(input, textId, iconId, previewId) {

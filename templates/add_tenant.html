@@ -3,72 +3,118 @@
 {% block title %}เพิ่มผู้เช่าใหม่{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>เพิ่มผู้เช่าใหม่</h2>
+<style>
+    .card { border: none; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .card-header { background: linear-gradient(45deg, #4e73df, #224abe); color: white; border-radius: 15px 15px 0 0 !important; padding: 1.5rem; }
+    .form-label { font-weight: 600; color: #4a4a4a; margin-bottom: 0.5rem; }
+    .form-control, .form-select { border-radius: 8px; padding: 0.6rem 1rem; border: 1px solid #d1d3e2; }
+    .form-control:focus { border-color: #bac8f3; box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25); }
+    .btn-primary { background-color: #4e73df; border: none; padding: 0.6rem 2rem; border-radius: 8px; font-weight: 600; transition: all 0.3s; }
+    .btn-primary:hover { background-color: #2e59d9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(78,115,223,0.3); }
+    .btn-secondary { padding: 0.6rem 2rem; border-radius: 8px; font-weight: 600; }
+    .input-group-text { background-color: #f8f9fc; border-right: none; color: #a3a6b5; }
+    .has-icon .form-control { border-left: none; }
+</style>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    {% for category, message in messages %}
-    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show border-0 shadow-sm" role="alert">
+                            <i class="fas fa-info-circle me-2"></i> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-user-plus me-2"></i> ข้อมูลผู้เช่าใหม่ (ห้อง {{ unit_id }})</h4>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST" action="{{ url_for('add_tenant', unit_id=unit_id) }}">
+                        
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="fname" class="form-label">ชื่อ</label>
+                                <input type="text" class="form-control" id="fname" name="fname" placeholder="ภาษาไทยหรืออังกฤษ" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="lname" class="form-label">นามสกุล</label>
+                                <input type="text" class="form-control" id="lname" name="lname" placeholder="นามสกุล" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="id_card" class="form-label">เลขบัตรประชาชน</label>
+                            <div class="input-group has-icon">
+                                <span class="input-group-text"><i class="fas fa-id-card"></i></span>
+                                <input type="text" class="form-control" id="id_card" name="id_card" 
+                                       pattern="\d{13}" minlength="13" maxlength="13" 
+                                       placeholder="หมายเลข 13 หลัก" title="กรุณากรอกเลขบัตรประชาชน 13 หลัก" required>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="gender" class="form-label">เพศ</label>
+                                <select class="form-select" id="gender" name="gender" required>
+                                    <option value="" selected disabled>-- เลือกเพศ --</option>
+                                    <option value="ชาย">ชาย</option>
+                                    <option value="หญิง">หญิง</option>
+                                    <option value="อื่น ๆ">อื่น ๆ</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="bd" class="form-label">วันเกิด</label>
+                                <input type="date" class="form-control" id="bd" name="bd" required>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="tel" class="form-label">เบอร์โทรศัพท์</label>
+                                <div class="input-group has-icon">
+                                    <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                    <input type="tel" class="form-control" id="phone" name="phone" 
+                                           pattern="0[0-9]{8,9}" placeholder="08xxxxxxxx"
+                                           title="กรุณากรอกเบอร์โทรที่ถูกต้อง" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="email" class="form-label">อีเมล</label>
+                                <div class="input-group has-icon">
+                                    <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                    <input type="email" class="form-control" id="email" name="email" 
+                                           placeholder="example@mail.com" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="address" class="form-label">ที่อยู่ตามทะเบียนบ้าน/ที่อยู่ติดต่อ</label>
+                            <textarea class="form-control" id="address" name="address" rows="3" 
+                                      placeholder="บ้านเลขที่, ถนน, แขวง/ตำบล..." required></textarea>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i> ยกเลิก
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i> บันทึกข้อมูลผู้เช่า
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-    {% endfor %}
-    {% endif %}
-    {% endwith %}
-
-    <form method="POST" action="{{ url_for('add_tenant', unit_id=unit_id) }}">
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label for="fname" class="form-label">ชื่อ</label>
-                <input type="text" class="form-control" id="fname" name="fname" required>
-            </div>
-            <div class="col-md-6 mb-3">
-                <label for="lname" class="form-label">นามสกุล</label>
-                <input type="text" class="form-control" id="lname" name="lname" required>
-            </div>
-        </div>
-
-        <div class="mb-3">
-            <label for="id_card" class="form-label">เลขบัตรประชาชน</label>
-            <input type="text" class="form-control" id="id_card" name="id_card" pattern="\d{13}" minlength="13"
-                maxlength="13" title="กรุณากรอกเลขบัตรประชาชน 13 หลัก" required>
-        </div>
-
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label for="gender" class="form-label">เพศ</label>
-                <select class="form-select" id="gender" name="gender" required>
-                    <option value="">-- เลือกเพศ --</option>
-                    <option value="ชาย">ชาย</option>
-                    <option value="หญิง">หญิง</option>
-                    <option value="อื่น ๆ">อื่น ๆ</option>
-                </select>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label for="bd" class="form-label">วันเกิด</label>
-                <input type="date" class="form-control" id="bd" name="bd" required>
-            </div>
-        </div>
-
-        <div class="mb-3">
-            <label for="tel" class="form-label">เบอร์โทร</label>
-            <input type="tel" class="form-control" id="phone" name="phone" pattern="0[0-9]{8,9}"
-                title="กรุณากรอกเบอร์โทรที่ถูกต้อง" required>
-        </div>
-
-        <div class="mb-3">
-            <label for="email" class="form-label">อีเมล</label>
-            <input type="email" class="form-control" id="email" name="email" required>
-        </div>
-
-        <div class="mb-3">
-            <label for="address" class="form-label">ที่อยู่</label>
-            <textarea class="form-control" id="address" name="address" rows="3" required></textarea>
-        </div>
-
-        <button type="submit" class="btn btn-primary">เพิ่มผู้เช่า</button>
-        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">ยกเลิก</a>
-    </form>
 </div>
 {% endblock %}

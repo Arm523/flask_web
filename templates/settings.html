@@ -176,7 +176,7 @@
                         <div class="form-check form-switch large-switch">
                             <input class="form-check-input" type="checkbox" id="auto_delete_contract_files"
                                 name="auto_delete_contract_files" value="1" {% if settings.auto_delete_contract_files=='1' %}checked{% endif %} disabled>
-                            <label class="form-check-label ms-3 fw-bold" for="auto_delete_contract_files">
+                            <label class="form-check-label ms-3 fw-bold mt-2" for="auto_delete_contract_files">
                                 ระบบลบไฟล์สัญญาอัตโนมัติ (เมื่อครบกำหนด)
                             </label>
                         </div>
@@ -185,8 +185,8 @@
                         <div class="form-check form-switch large-switch">
                             <input class="form-check-input" type="checkbox" id="auto_generate_bill"
                                 name="auto_generate_bill" value="1" {% if settings.auto_generate_bill=='1' %}checked{% endif %} disabled>
-                            <label class="form-check-label ms-3 fw-bold" for="auto_generate_bill">
-                                ระบบสร้างบิลอัตโนมัติ 
+                            <label class="form-check-label ms-3 fw-bold mt-2" for="auto_generate_bill">
+                                ระบบสร้างบิลอัตโนมัติ (สร้างทุกๆวันที่ 1 ของเดือน)
                             </label>
                         </div>
                     </div>

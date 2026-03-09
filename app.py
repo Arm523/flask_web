@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from functools import wraps
 from datetime import datetime, date, timedelta
 import os
+import re
 from werkzeug.utils import secure_filename
 from docx import Document
 from utils import (allowed_file, auto_generate_all_invoices, prepare_placeholder_data, replace_placeholders, 
@@ -208,6 +209,22 @@ def add_user():
         role_id = request.form['role_id']
         start_card = request.form['start_card']
         end_card = request.form['end_card']
+
+        cursor.execute("SELECT user_id FROM user WHERE username = %s OR email = %s OR id_card = %s", 
+                       (username, email, id_card))
+        existing = cursor.fetchone()
+        if existing:
+            flash('ไม่สามารถเพิ่มได้: ชื่อผู้ใช้, อีเมล หรือเลขบัตรประชาชนนี้มีอยู่ในระบบแล้ว', 'danger')
+            return render_template('add_user.html', roles=roles)
+
+        if len(password) < 8:
+            flash('รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร', 'warning')
+            return render_template('add_user.html', roles=roles)
+        
+        if not re.search("[a-z]", password) or not re.search("[A-Z]", password) or not re.search("[0-123456789]", password):
+            flash('รหัสผ่านควรประกอบด้วยตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก และตัวเลข', 'warning')
+            return render_template('add_user.html', roles=roles)
+
         hashed_password = generate_password_hash(password)
 
         try:
@@ -447,7 +464,10 @@ def dashboard():
             WHERE unit_id = %s ORDER BY id DESC LIMIT 1
         """, (u['unit_id'],))
         result = cursor.fetchone() 
-        is_billed_status = result['is_billed'] if result else 0
+        if result:
+            is_billed_status = result['is_billed']
+        else:
+            is_billed_status = 1
 
         rooms.append({
             'has_pending_bill': True if (contract and contract.get('contract_id') in pending_map) else False,
@@ -2640,7 +2660,7 @@ def manage_meter():
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    user_id = session.get('user_id')
+    user_id = session.get('user', {}).get('user_id')
     now = datetime.now()
 
     # --- 1. โหลดไฟล์ Config JSON ---
@@ -2694,14 +2714,29 @@ def manage_meter():
                 request.form.get('note_elec') or None, 
                 request.form.get('electricity_status'),
                 request.form.get('elec_unit_key'), 
-                now, 
-                user_id
+                now, user_id
             )
 
-            if m_exists:
-                # เคส A: มีมิเตอร์เดิมอยู่แล้ว (Update)
+            if not m_exists:
+                # --- เคสที่ 1: เพิ่มมิเตอร์ครั้งแรก (INSERT) ---
+                cursor.execute("""
+                    INSERT INTO meter (
+                        serial_meter, slave_id, module, installdate, 
+                        comport, ip, port, base_url, api_auth_token, 
+                        note, status, unit_key, created_at, created_by, 
+                        unit_id, current_reading
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
+                """, elec_data + (unit_id,))
+                
+                m_id = cursor.lastrowid
+                add_audit_log(cursor, 'METER', 'INSERT', f'เพิ่มมิเตอร์ไฟฟ้าใหม่ ID: {m_id} ห้อง: {unit_id}', user_id)
+
+            else:
+                # --- เคสที่ 2: มีมิเตอร์อยู่แล้ว (UPDATE) ---
+                m_id = m_exists['id']
+
                 if change_elec:
-                    # 1. คำนวณหน่วยค้างจ่าย
+                    # 1. คำนวณหน่วยค้างจ่าย (ดัก NoneType กรณีพึ่งเคยมีบิลครั้งแรก)
                     cursor.execute("""
                         SELECT current_electricity_reading FROM invoices 
                         WHERE unit_id = %s AND status != 'draft' 
@@ -2709,42 +2744,31 @@ def manage_meter():
                     """, (unit_id,))
                     last_bill = cursor.fetchone()
                     
+                    # ถ้า last_bill เป็น None (ห้องใหม่พึ่งติดมิเตอร์) ให้ใช้ 0
                     last_bill_val = float(last_bill['current_electricity_reading'] or 0) if last_bill else 0
                     pending_calc = float(old_elec_last or 0) - last_bill_val
 
-                    # 2. บันทึกประวัติไฟฟ้า
+                    # 2. บันทึกประวัติการถอดมิเตอร์เก่า
                     cursor.execute("""
                         INSERT INTO meter_history (unit_id, type, old_serial, final_reading, pending_units, created_at) 
                         VALUES (%s, 'elec', %s, %s, %s, NOW())
                     """, (unit_id, m_exists['serial_meter'], old_elec_last, pending_calc))
 
-                    # 3. อัปเดตพร้อมรีเซ็ตเลขจดเป็น 0.00 (เพราะเปลี่ยนมิเตอร์ใหม่)
+                    # 3. อัปเดตพร้อมรีเซ็ตเลขจดเป็น 0.00 (เพราะเปลี่ยนตัวใหม่)
                     cursor.execute("""
                         UPDATE meter SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
                             comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
                             note=%s, status=%s, unit_key=%s, 
-                            updated_at=%s, updated_by=%s,
-                            current_reading = 0.00 
+                            updated_at=%s, updated_by=%s, current_reading = 0.00 
                         WHERE id=%s
-                    """, elec_data + (m_exists['id'],))
-
-                    cursor.execute("""
-                        UPDATE unit SET 
-                            electricity_start = 0
-                        WHERE unit_id=%s
-                    """, (unit_id,))
-
-                    add_audit_log(
-                        cursor, 
-                        'METER', 
-                        'UPDATE', 
-                        f'อัปเดตเปลี่ยนมิเตอร์ไฟฟ้าเลย ID: {m_exists["id"]}', 
-                        session.get('user', {}).get('user_id')
-                    )
-
+                    """, elec_data + (m_id,))
+                    
+                    # อัปเดตค่าเริ่มต้นในตาราง unit
+                    cursor.execute("UPDATE unit SET electricity_start = 0 WHERE unit_id=%s", (unit_id,))
+                    log_msg = f'เปลี่ยนมิเตอร์ไฟฟ้าใหม่ ID: {m_id}'
                 else:
-                    # 4. อัปเดตข้อมูลทั่วไป (ไม่รีเซ็ตเลขจด)
+                    # 4. อัปเดตข้อมูลทั่วไป (แก้ไขชื่อ/สาย/IP)
                     cursor.execute("""
                         UPDATE meter SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
@@ -2752,33 +2776,10 @@ def manage_meter():
                             note=%s, status=%s, unit_key=%s, 
                             updated_at=%s, updated_by=%s 
                         WHERE id=%s
-                    """, elec_data + (m_exists['id'],))
+                    """, elec_data + (m_id,))
+                    log_msg = f'อัปเดตข้อมูลมิเตอร์ไฟฟ้า ID: {m_id}'
 
-                    add_audit_log(
-                        cursor, 
-                        'METER', 
-                        'UPDATE', 
-                        f'อัปเดตมิเตอร์ไฟฟ้า ID: {m_exists["id"]}', 
-                        session.get('user', {}).get('user_id')
-                    )
-                
-                m_id = m_exists['id'] # เก็บ ID เดิมไว้ผูกกับ unit
-            else:
-                # เคส B: เพิ่มมิเตอร์ครั้งแรก (Insert)
-                cursor.execute("""
-                    INSERT INTO meter (serial_meter, slave_id, module, installdate, comport, ip, port, 
-                    base_url, api_auth_token, note, status, unit_key, created_at, created_by, unit_id) 
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """, elec_data + (unit_id,))
-                m_id = cursor.lastrowid # เก็บ ID ใหม่ไว้ผูกกับ unit
-
-                add_audit_log(
-                    cursor, 
-                    'METER', 
-                    'INSERT', 
-                    f'เพิ่มมิเตอร์ไฟฟ้า ID: {m_exists["id"]}', 
-                    session.get('user', {}).get('user_id')
-                )
+                add_audit_log(cursor, 'METER', 'UPDATE', log_msg, user_id)
 
             # --- จัดการน้ำ ---
             cursor.execute("SELECT id, serial_meter FROM meter_water WHERE unit_id=%s LIMIT 1", (unit_id,))
@@ -2800,85 +2801,68 @@ def manage_meter():
                 now, user_id
             )
 
-            if mw_exists:
+            if not mw_exists:
+                # --- เคส B: เพิ่มมิเตอร์น้ำครั้งแรก (INSERT) ---
+                cursor.execute("""
+                    INSERT INTO meter_water (
+                        serial_meter, slave_id, module, installdate, 
+                        comport, ip, port, base_url, api_auth_token, 
+                        note, status, unit_key, created_at, created_by, 
+                        unit_id, current_reading
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
+                """, water_data + (unit_id,))
+                
+                mw_id = cursor.lastrowid
+                add_audit_log(cursor, 'METER_WATER', 'INSERT', f'เพิ่มมิเตอร์น้ำใหม่ ID: {mw_id} ห้อง: {unit_id}', user_id)
+
+            else:
+                # --- เคส A: มีมิเตอร์น้ำเดิมอยู่แล้ว (UPDATE) ---
+                mw_id = mw_exists['id']
+
                 if change_water:
-                    # 1. คำนวณหน่วยน้ำค้างจ่าย
+                    # 1. คำนวณหน่วยค้างจ่ายน้ำ (ดัก NoneType สำหรับห้องใหม่)
                     cursor.execute("""
                         SELECT current_water_reading FROM invoices 
                         WHERE unit_id = %s AND status != 'draft' 
-                        ORDER BY billing_period_end DESC LIMIT 1
+                        ORDER BY invoice_id DESC LIMIT 1
                     """, (unit_id,))
                     last_bill_w = cursor.fetchone()
                     
                     last_bill_val_w = float(last_bill_w['current_water_reading'] or 0) if last_bill_w else 0
                     pending_calc_w = float(old_water_last or 0) - last_bill_val_w
 
-                    # 2. บันทึกประวัติน้ำ
+                    # 2. บันทึกประวัติการถอดมิเตอร์น้ำเก่า
                     cursor.execute("""
                         INSERT INTO meter_history (unit_id, type, old_serial, final_reading, pending_units, created_at) 
                         VALUES (%s, 'water', %s, %s, %s, NOW())
                     """, (unit_id, mw_exists['serial_meter'], old_water_last, pending_calc_w))
 
-                    # 3. อัปเดตข้อมูลมิเตอร์น้ำ + รีเซ็ตเลขจดเป็น 0
+                    # 3. อัปเดตพร้อมรีเซ็ตเลขจดน้ำ
                     cursor.execute("""
                         UPDATE meter_water SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
-                            comport=%s, ip=%s, port=%s,base_url=%s, api_auth_token=%s,  
+                            comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
                             note=%s, status=%s, unit_key=%s, 
-                            updated_at=%s, updated_by=%s,
-                            current_reading = 0.00 
+                            updated_at=%s, updated_by=%s, current_reading = 0.00 
                         WHERE id=%s
-                    """, water_data + (mw_exists['id'],))
-
-                    cursor.execute("""
-                        UPDATE unit SET 
-                            water_start = 0
-                        WHERE unit_id=%s
-                    """, (unit_id,))
-
-                    add_audit_log(
-                        cursor, 
-                        'METER', 
-                        'UPDATE', 
-                        f'อัปเดตเปลี่ยนมิเตอร์น้ำ ID: {mw_exists["id"]}', 
-                        session.get('user', {}).get('user_id')
-                    )
+                    """, water_data + (mw_id,))
+                    
+                    cursor.execute("UPDATE unit SET water_start = 0 WHERE unit_id=%s", (unit_id,))
+                    log_msg_w = f'เปลี่ยนมิเตอร์น้ำใหม่ ID: {mw_id}'
                 else:
-                    # กรณีแก้ไขข้อมูลทั่วไป (ไม่รีเซ็ตเลขจด)
+                    # 4. อัปเดตข้อมูลทั่วไป
                     cursor.execute("""
                         UPDATE meter_water SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
-                            comport=%s, ip=%s, port=%s,base_url=%s, api_auth_token=%s,  
+                            comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
                             note=%s, status=%s, unit_key=%s, 
                             updated_at=%s, updated_by=%s 
                         WHERE id=%s
-                    """, water_data + (mw_exists['id'],))
+                    """, water_data + (mw_id,))
+                    log_msg_w = f'อัปเดตข้อมูลมิเตอร์น้ำ ID: {mw_id}'
 
-                    add_audit_log(
-                        cursor, 
-                        'METER', 
-                        'UPDATE', 
-                        f'อัปเดตมิเตอร์น้ำ ID: {mw_exists["id"]}', 
-                        session.get('user', {}).get('user_id')
-                    )
-                
-                mw_id = mw_exists['id']
-            else:
-                # กรณีเพิ่มมิเตอร์น้ำครั้งแรก
-                cursor.execute("""
-                    INSERT INTO meter_water (serial_meter, slave_id, module, installdate, comport, ip, port, 
-                    base_url, api_auth_token, note, status, unit_key, created_at, created_by, unit_id) 
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """, water_data + (unit_id,))
-                mw_id = cursor.lastrowid
+                add_audit_log(cursor, 'METER_WATER', 'UPDATE', log_msg_w, user_id)
 
-                add_audit_log(
-                    cursor, 
-                    'METER', 
-                    'INSERT', 
-                    f'เพิ่มมิเตอร์น้ำ ID: {mw_id}', 
-                    session.get('user', {}).get('user_id')
-                )
             cursor.execute("UPDATE unit SET meter_id=%s, meter_water_id=%s WHERE unit_id=%s", (m_id, mw_id, unit_id))
             conn.commit()
             return jsonify({'status': 'success', 'massage': 'บันทึกข้อมูลเรียบร้อย'})
@@ -3460,80 +3444,86 @@ def user_settings():
 
 @app.route("/edit_user/<int:user_id>", methods=["GET", "POST"])
 def edit_user(user_id):
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
-        fname = request.form.get('fname')
-        lname = request.form.get('lname')
-        email = request.form.get('email')
-        tel = request.form.get('tel')
+        # รับค่าและตัดช่องว่าง
+        fname = request.form.get('fname', '').strip()
+        lname = request.form.get('lname', '').strip()
+        email = request.form.get('email', '').strip()
+        tel = request.form.get('tel', '').strip()
         role_id = request.form.get('role_id')
-        new_password = request.form.get('password') 
+        new_password = request.form.get('password', '').strip()
 
-        file_profile = request.files.get('profile_img')
-        if file_profile and file_profile.filename != '':
-            ext = file_profile.filename.rsplit('.', 1)[1].lower()
-            filename = f"profile_{user_id}.{ext}"
-            file_profile.save(os.path.join(UPLOAD_PROFILE, filename))
-            
-            cursor.execute("UPDATE user SET profile_img=%s WHERE user_id=%s", (filename, user_id))
-
-        file_id_card = request.files.get('id_card_file')
-        if file_id_card and file_id_card.filename != '':
-            ext = file_id_card.filename.rsplit('.', 1)[1].lower()
-            filename = f"idcard_{user_id}.{ext}"
-            
-            file_id_card.save(os.path.join(UPLOAD_ID_CARD, filename))
-            cursor.execute("UPDATE user SET id_card_file=%s WHERE user_id=%s", (filename, user_id))
+        # --- 1. เช็คอีเมลซ้ำ (ต้องไม่ใช่ ID ตัวเอง) ---
+        cursor.execute("SELECT user_id FROM user WHERE email = %s AND user_id != %s", (email, user_id))
+        if cursor.fetchone():
+            flash('อีเมลนี้ถูกใช้งานโดยผู้ใช้อื่นแล้ว', 'danger')
+            return redirect(url_for('edit_user', user_id=user_id))
 
         try:
-            # 1. อัปเดตข้อมูลพื้นฐานก่อน
-            sql = "UPDATE user SET fname=%s, lname=%s, email=%s, tel=%s, role_id=%s"
+            # เตรียม SQL และ Parameter พื้นฐาน
+            sql_parts = ["fname=%s", "lname=%s", "email=%s", "tel=%s", "role_id=%s"]
             params = [fname, lname, email, tel, role_id]
 
-            # 2. ถ้ามีการกรอกรหัสผ่านใหม่เข้ามา (ไม่ว่าง) ให้ทำการ Hash และเพิ่มใน SQL
-            if new_password and new_password.strip() != "":
-                hashed_pw = generate_password_hash(new_password)
-                sql += ", password=%s"
-                params.append(hashed_pw)
+            # --- 2. เช็ครหัสผ่านใหม่ (ถ้ามีการกรอกมา) ---
+            if new_password:
+                if len(new_password) < 8 or not re.search("[0-9]", new_password):
+                    flash('รหัสผ่านใหม่ต้องมี 8 ตัวขึ้นไปและมีตัวเลข', 'warning')
+                    return redirect(url_for('edit_user', user_id=user_id))
 
-            sql += " WHERE user_id=%s"
+                if not re.search("[A-Z]", new_password):
+                    flash('รหัสผ่านต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว', 'warning')
+                    return redirect(url_for('edit_user', user_id=user_id))
+                
+                sql_parts.append("password=%s")
+                params.append(generate_password_hash(new_password))
+
+            # --- 3. จัดการไฟล์รูปภาพ (บันทึกไฟล์ก่อนแล้วค่อยเก็บชื่อลง DB) ---
+            file_profile = request.files.get('profile_img')
+            if file_profile and file_profile.filename != '':
+                ext = file_profile.filename.rsplit('.', 1)[1].lower()
+                p_filename = f"profile_{user_id}_{int(datetime.now().timestamp())}.{ext}"
+                file_profile.save(os.path.join(UPLOAD_PROFILE, p_filename))
+                sql_parts.append("profile_img=%s")
+                params.append(p_filename)
+
+            file_id_card = request.files.get('id_card_file')
+            if file_id_card and file_id_card.filename != '':
+                ext = file_id_card.filename.rsplit('.', 1)[1].lower()
+                c_filename = f"idcard_{user_id}_{int(datetime.now().timestamp())}.{ext}"
+                file_id_card.save(os.path.join(UPLOAD_ID_CARD, c_filename))
+                sql_parts.append("id_card_file=%s")
+                params.append(c_filename)
+
+            final_sql = f"UPDATE user SET {', '.join(sql_parts)} WHERE user_id=%s"
             params.append(user_id)
-
-            cursor.execute(sql, tuple(params))
-
-            add_audit_log(
-                cursor, 
-                'USER', 
-                'UPDATE', 
-                f'แก้ไขข้อมูลผู้ใช้ ID: {user_id}', 
-                session.get('user', {}).get('user_id')
-            )
+            cursor.execute(final_sql, tuple(params))
+            
+            # บันทึกประวัติการแก้ไข
+            add_audit_log(cursor, 'USER', 'UPDATE', f'แก้ไขข้อมูลผู้ใช้ ID: {user_id}', session.get('user', {}).get('user_id'))
 
             conn.commit()
-            flash('อัปเดตข้อมูลและรหัสผ่านเรียบร้อย', 'success')
+            flash('อัปเดตข้อมูลสำเร็จ', 'success')
+            return redirect(url_for('user_settings'))
+
         except Exception as e:
             conn.rollback()
-            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+            flash(f'เกิดข้อผิดพลาด: {str(e)}', 'danger')
         finally:
             cursor.close()
             conn.close()
-        return redirect(url_for('user_settings'))
 
-    # ส่วน GET: ดึงข้อมูลไปแสดง (ไม่ต้องดึง password ไปแสดงใน form)
+    # ส่วน GET: ดึงข้อมูลเดิมมาแสดงใน Form
     cursor.execute("SELECT * FROM user WHERE user_id = %s", (user_id,))
-    user = cursor.fetchone()
-    
-    # ดึง Roles มาแสดงใน Dropdown
+    user_data = cursor.fetchone()
     cursor.execute("SELECT * FROM role")
     roles = cursor.fetchall()
     
     cursor.close()
     conn.close()
-
-    return render_template("edit_user.html", user=user, roles=roles)
+    return render_template("edit_user.html", user=user_data, roles=roles)
 
 @app.route('/remove_user_file/<file_type>/<int:user_id>', methods=['POST'])
 def remove_user_file(file_type, user_id):
@@ -4006,6 +3996,9 @@ def confirm_daily_payment(invoice_id):
 
 @app.route('/add_expense', methods=['POST'])
 def add_expense():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
     try:
         current_now = get_now().strftime('%Y-%m-%d %H:%M:%S')
         file = request.files.get('slip_file')
@@ -4018,14 +4011,17 @@ def add_expense():
         
             file.save(os.path.join(EXPENSE_UPLOAD_PATH, filename))
 
-        expense_date = request.form.get('expense_date')
+        expense_date_raw = request.form.get('expense_date')
+        try:
+            expense_date = datetime.strptime(expense_date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
+        except:
+            expense_date = datetime.now().strftime('%Y-%m-%d')
+        
         category = request.form.get('category')
         description = request.form.get('description')
         amount = float(request.form.get('amount'))
         created_by = session['user']['user_id']
 
-        conn = get_db_connection() # ฟังก์ชันเชื่อมต่อ DB ของคุณ
-        cursor = conn.cursor()
         query = """
             INSERT INTO expenses (expense_date, category, description, amount, created_by, created_at, slip_file)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -4125,6 +4121,8 @@ def billing():
     
     data_list = []
 
+    is_date_filtered = bool(start_date or end_date)
+
     # --- ส่วนที่ 1: ดึงรายรับ (Invoices) ---
     inv_sql = """
         SELECT 
@@ -4152,6 +4150,9 @@ def billing():
     if end_date:
         inv_sql += " AND i.created_at <= %s"
         inv_params.append(f"{end_date} 23:59:59")
+
+    if not is_date_filtered:
+        inv_sql += " ORDER BY i.created_at DESC LIMIT 50"
 
     cursor.execute(inv_sql, inv_params)
     data_list.extend(cursor.fetchall())
@@ -4181,6 +4182,9 @@ def billing():
         exp_sql += " AND expense_date <= %s"
         exp_params.append(end_date)
 
+    if not is_date_filtered:
+        exp_sql += " ORDER BY created_at DESC LIMIT 50"
+
     cursor.execute(exp_sql, exp_params)
     data_list.extend(cursor.fetchall())
 
@@ -4193,6 +4197,9 @@ def billing():
         return d
 
     data_list.sort(key=sort_key, reverse=True)
+
+    if not is_date_filtered:
+        data_list = data_list[:50]
     cursor.close()
     conn.close()
 
@@ -4552,7 +4559,6 @@ def update_settings():
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
-        # รับค่าจาก form
         keys = [
             'invoice_due_day', 'late_fee_per_day', 'vat_percent',
             'receipt_page_limit', 'bill_reminder_days',
@@ -4582,7 +4588,7 @@ def update_settings():
             cursor, 
             'SETTINGS', 
             'UPDATE',
-            f'อัพเดท setting ค่า: {", ".join(keys)}',
+            f'อัพเดท setting ในระบบ',
             session.get('user', {}).get('user_id')
         )
         conn.commit()

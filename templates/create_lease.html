@@ -200,9 +200,6 @@
     </form>
     {% else %}
     <p>ยังไม่มีข้อมูลผู้เช่า กรุณาเพิ่มผู้เช่าก่อน</p>
-    <a href="{{ url_for('add_tenant', unit_id=room.unit_id) }}" class="btn btn-success">
-      <i class="bi bi-person-plus"></i> เพิ่มผู้เช่าใหม่
-    </a>
     {% endif %}
   </div>
 </div>

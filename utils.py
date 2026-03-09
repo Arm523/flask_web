@@ -40,7 +40,7 @@ def save_config(path, data):
 def get_now(mocked=False):
     if mocked:
         # return datetime.now()
-        return datetime(2026, 3,20, 9, 0, 0)
+        return datetime(2026, 4,2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -643,7 +643,7 @@ def create_monthly_invoice(cursor, unit_id, billing_month, created_by):
         cursor.execute("""
             SELECT current_electricity_reading, current_water_reading, billing_period_start
             FROM invoices
-            WHERE unit_id=%s AND contract_id=%s AND invoice_type='monthly'
+            WHERE unit_id=%s AND contract_id=%s 
                 AND status NOT IN ('cancelled','void')
             ORDER BY billing_period_start DESC
             LIMIT 1

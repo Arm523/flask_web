@@ -23,8 +23,8 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label fw-bold">ตึก</label>
-                                <input type="number" class="form-control shadow-sm" name="building"
-                                    value="{{ room.building }}" required>
+                                <input type="text" class="form-control shadow-sm" name="building"
+                                    value="{{ room.building if room.building is not none else '' }}" required>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label fw-bold">ชั้น</label>
