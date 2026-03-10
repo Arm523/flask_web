@@ -1087,11 +1087,12 @@ def meter_analysis():
 
     # --- ส่วนที่ 3: Log (ดึงตามช่วงวันที่ หรือ 100 รายการล่าสุด) ---
     log_sql = """
-        SELECT u.name, mr.serial_meter, mr.meter_type, mr.meter_id, mr.source, mr.created_by, mr.invoice_id,
+        SELECT u.name, mr.serial_meter, mr.meter_type, mr.meter_id, mr.source, usr.username, mr.created_by, mr.invoice_id,
                COALESCE(mr.current_reading, 0) as current_reading, 
                mr.read_date 
         FROM meter_reading mr
         INNER JOIN unit u ON mr.unit_id = u.unit_id
+        LEFT JOIN user usr ON mr.created_by = usr.user_id
     """
     params = []
 
@@ -1618,11 +1619,9 @@ def manual_create_bill(contract_id):
 # ---------------------- LEASE ----------------------
 @app.route('/create_lease/<int:unit_id>', methods=['GET', 'POST'])
 def create_lease(unit_id):
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # ดึงขั้นตํ่าการสร้างสัญญา
     cursor.execute("""SELECT setting_value FROM settings WHERE setting_key='min_lease_months'""")
     result = cursor.fetchone()
     try:
@@ -1640,20 +1639,6 @@ def create_lease(unit_id):
             amount = int(request.form.get('amount') or 1)
             pay_date    = datetime.strptime(request.form['pay_date'], '%Y-%m-%d')
 
-            # ดึงราคาห้อง
-            cursor.execute("""
-                SELECT u.*, t.price_monthly
-                FROM unit u
-                LEFT JOIN type t ON u.type_unit_id = t.type_id
-                WHERE u.unit_id=%s AND u.is_deleted = 0
-            """, (unit_id,))
-            room = cursor.fetchone()
-            if not room:
-                flash("ไม่พบข้อมูลห้อง", "danger")
-                return redirect(url_for('dashboard'))
-
-            room_price = float(room['price_monthly'] or 0)
-
             # ดึงค่าเริ่มต้นมิเตอร์
             cursor.execute("""
                 SELECT u.*, t.price_monthly, u.electricity_start, u.water_start
@@ -1665,7 +1650,11 @@ def create_lease(unit_id):
             if not room:
                 flash("ไม่พบข้อมูลห้อง", "danger")
                 return redirect(url_for('dashboard'))
-
+            
+            elif room['meter_id'] is None or room['meter_water_id'] is None:
+                flash("ไม่พบข้อมูลมิเตอร์ (กรุณาผูกมิเตอร์ก่อนสร้างสัญญา)", "danger")
+                return redirect(url_for('dashboard'))
+            
             room_price = float(room['price_monthly'] or 0)
             electricity_start = float(room['electricity_start'] or 0)
             water_start = float(room['water_start'] or 0)
@@ -1777,6 +1766,13 @@ def create_lease(unit_id):
         WHERE u.unit_id=%s
     """, (unit_id,))
     room = cursor.fetchone()
+    if not room:
+        flash("ไม่พบข้อมูลห้อง", "danger")
+        return redirect(url_for('dashboard'))
+    elif room['meter_id'] is None or room['meter_water_id'] is None:
+        flash("ไม่พบข้อมูลมิเตอร์ (กรุณาผูกมิเตอร์ก่อนสร้างสัญญา)", "danger")
+        return redirect(url_for('dashboard'))
+    
     room_price = float(room['price_monthly'] or 0) if room else 0
 
     cursor.execute("""
@@ -1824,6 +1820,9 @@ def daily_booking(unit_id):
     room = cursor.fetchone()
     if not room:
         flash("ไม่พบข้อมูลห้อง", "danger")
+        return redirect(url_for('dashboard'))
+    elif room['meter_id'] is None or room['meter_water_id'] is None:
+        flash("ไม่พบข้อมูลมิเตอร์ (กรุณาผูกมิเตอร์ก่อนจองรายวัน)", "danger")
         return redirect(url_for('dashboard'))
 
     electricity_start = float(room['electricity_start'] or 0)
@@ -4560,8 +4559,8 @@ def update_settings():
 
     if request.method == 'POST':
         keys = [
-            'invoice_due_day', 'late_fee_per_day', 'vat_percent',
-            'receipt_page_limit', 'bill_reminder_days',
+            'invoice_due_day', 'late_fee_per_day', 'electricity_rate','water_rate',
+            'receipt_page_limit',
             'min_lease_months', 'min_stay_before_early_move',
             'auto_delete_contract_files','auto_generate_bill'
         ]
@@ -4795,7 +4794,7 @@ def create_invoice_move_out(contract_id):
         cursor.execute("""
             SELECT billing_period_end
             FROM invoices
-            WHERE contract_id=%s AND status='paid'
+            WHERE contract_id=%s AND status in ('paid','cancelled')
             ORDER BY billing_period_end DESC
             LIMIT 1
         """, (contract_id,))
@@ -4823,7 +4822,7 @@ def create_invoice_move_out(contract_id):
             FROM invoices
             WHERE unit_id=%s
             AND contract_id=%s
-            AND invoice_type='monthly'
+            AND invoice_type='monthly' or 'first'
             AND status NOT IN ('cancelled','void')
             ORDER BY billing_period_start DESC
             LIMIT 1
@@ -5277,6 +5276,55 @@ def manage_config():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/print_all_paid_receipts')
+def print_all_paid_receipts():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # 1. ดึงข้อมูลใบเสร็จที่ชำระแล้วในเดือนปัจจุบัน
+    cursor.execute("""
+        SELECT i.*, u.name AS room_name, u.building, u.floor,
+               t.fname AS tenant_fname, t.lname AS tenant_lname
+        FROM invoices i
+        JOIN unit u ON i.unit_id = u.unit_id
+        LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
+        WHERE i.status = 'paid'
+          AND MONTH(i.created_at) = MONTH(CURRENT_DATE())
+          AND YEAR(i.created_at) = YEAR(CURRENT_DATE())
+        ORDER BY u.name ASC
+    """)
+    receipts_list = cursor.fetchall()
+
+    # 2. Loop ดึงรายละเอียดลงในแต่ละใบ (ใช้ชื่อ Key ใหม่ป้องกัน TypeError)
+    for inv in receipts_list:
+        inv_id = inv['invoice_id']
+        inv['is_extra_bill'] = (inv['invoice_type'] == 'extra_bill')
+        inv['is_first_month'] = (inv['invoice_type'] == 'first')
+        
+        # รายการบริการ (เปลี่ยนชื่อเป็น bill_items)
+        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s AND type IN ('option','penalty','service')", (inv_id,))
+        inv['bill_items'] = cursor.fetchall()
+        
+        # ส่วนลด (เปลี่ยนชื่อเป็น bill_discount)
+        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s AND type = 'discount'", (inv_id,))
+        inv['bill_discount'] = cursor.fetchall()
+        
+        # มิเตอร์เก่า (เปลี่ยนชื่อเป็น bill_meter_adj)
+        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s AND type = 'meter_adjustment'", (inv_id,))
+        inv['bill_meter_adj'] = cursor.fetchall()
+
+    # ดึงค่าปรับต่อวัน
+    cursor.execute("SELECT setting_value FROM settings WHERE setting_key='late_fee_per_day'")
+    row = cursor.fetchone()
+    late_fee_per_day = float(row['setting_value']) if row else 100
+
+    cursor.close()
+    conn.close()
+
+    return render_template("print_all_receipts.html", 
+                           receipts=receipts_list, 
+                           late_fee_per_day=late_fee_per_day)
 
 # ---------------------- RUN APP ----------------------
 if __name__ == '__main__':

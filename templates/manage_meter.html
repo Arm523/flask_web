@@ -61,7 +61,8 @@
                                 <label>โมดูล *</label>
                                 <select id="electricity_module" name="electricity_module" class="form-select"
                                     onchange="loadParameters('elec')">
-                                    <option value="">-- เลือกยี่ห้อ --</option>
+                                    <option value="">-- เลือกโมดูล --</option>
+                                    <option value="ไม่มีโมดูล">ไม่มีโมดูล</option>
                                     {% for m in elec_modules %}
                                     <option value="{{ m }}">{{ m }}</option>
                                     {% endfor %}
@@ -138,10 +139,11 @@
                         <div class="col-md-6">
                             <h6 class="text-info fw-bold">มิเตอร์น้ำ</h6>
                             <div class="mb-2">
-                                <label>ยี่ห้อ *</label>
+                                <label>โมดูล *</label>
                                 <select id="water_module" name="water_module" class="form-select"
                                     onchange="loadParameters('water')">
-                                    <option value="">-- เลือกยี่ห้อ --</option>
+                                    <option value="">-- เลือกโมดูล --</option>
+                                    <option value="ไม่มีโมดูล">ไม่มีโมดูล</option>
                                     {% for m in water_modules %}
                                     <option value="{{ m }}">{{ m }}</option>
                                     {% endfor %}

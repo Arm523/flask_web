@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>พิมพ์ใบเสร็จทั้งหมด</title>
+    <style>
+        body {
+            font-family: "Sarabun", sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* ปุ่มพิมพ์ (ซ่อนตอนพิมพ์จริง) */
+        .no-print-zone {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .print-all-btn {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* การจัดหน้าใบเสร็จ */
+        .container {
+            max-width: 360px;
+            margin: 0 auto 30px auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #eee;
+        }
+
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 0;
+        }
+
+        table {
+            width: 100%;
+            border: 1px solid #3498db;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+
+        th,
+        td {
+            border: 1px solid #3498db;
+            padding: 4px;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background-color: #d8ecff;
+            text-align: left;
+            color: #003366;
+        }
+
+        .discount-table {
+            width: 100%;
+            border: 1px solid #27ae60;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .discount-table th,
+        .discount-table td {
+            border: 1px solid #27ae60;
+            padding: 4px 6px;
+        }
+
+        .discount-table th {
+            background-color: #c6f5d0;
+            color: #145a32;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .no-print-zone {
+                display: none !important;
+            }
+
+            .container {
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 auto !important;
+                page-break-after: always;
+                /* ขึ้นหน้าใหม่หลังจบแต่ละใบ */
+                break-after: page;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="no-print-zone">
+        <button class="print-all-btn" onclick="window.print()">🖨️ เริ่มพิมพ์ใบเสร็จทั้งหมด ({{ receipts|length }}
+            ใบ)</button>
+    </div>
+
+    {% for invoice in receipts %}
+    <div class="container">
+        <h2>ใบเสร็จรับเงิน</h2>
+        <p style="text-align: center; font-size: 0.8rem; margin-top: -10px;">เลขที่: #REC-{{ invoice.invoice_id }}</p>
+
+        <p><strong>ชื่อผู้เช่า:</strong>
+            {{ invoice.tenant_fname }} {{ invoice.tenant_lname or invoice.guest_fname }}
+        </p>
+        <p><strong>ห้อง:</strong> {{ invoice.room_name }} - ตึก {{ invoice.building }} ชั้น {{ invoice.floor }}</p>
+        <p><strong>ชําระเมื่อ:</strong> {{ invoice.payment_date.strftime('%d/%m/%Y %H:%M') if invoice.payment_date else
+            '-' }}</p>
+
+        {% if invoice.invoice_type != 'extra_bill' %}
+        <h4 style="margin-bottom: 3px;">ค่าเช่าห้อง / ค่าน้ำ-ไฟ:</h4>
+        <table>
+            <tr>
+                <th>รายการ</th>
+                <th style="text-align:center;">จำนวน</th>
+                <th style="text-align:right;">ราคา/หน่วย</th>
+                <th style="text-align:right;">รวม</th>
+            </tr>
+            {% if invoice.rent_amount and invoice.invoice_type in ['monthly','final','daily'] %}
+            <tr>
+                <td>ค่าเช่าห้อง</td>
+                <td style="text-align:center;">1</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.rent_amount) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.rent_amount) }}</td>
+            </tr>
+            {% endif %}
+            {% if invoice.premiums and invoice.invoice_type == 'first' %}
+            <tr>
+                <td>ค่าประกัน</td>
+                <td style="text-align:center;">1</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.premiums) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.premiums) }}</td>
+            </tr>
+            {% endif %}
+            {% if invoice.premiums and invoice.invoice_type == 'final' %}
+            <tr>
+                <td>คืนค่าประกัน</td>
+                <td style="text-align:center;">1</td>
+                <td style="text-align:right;"> - {{ "{:,.2f}".format(invoice.premiums) }}</td>
+                <td style="text-align:right;"> - {{ "{:,.2f}".format(invoice.premiums) }}</td>
+            </tr>
+            {% endif %}
+            {% if invoice.electricity_total > 0 or invoice.water_total > 0 %}
+            <tr>
+                <td>ค่าไฟฟ้า</td>
+                <td style="text-align:center;">{{ invoice.electricity_usage or 0 }} kWh</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.electricity_rate or 0) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.electricity_total or 0) }}</td>
+            </tr>
+            <tr>
+                <td>ค่าน้ำประปา</td>
+                <td style="text-align:center;">{{ invoice.water_usage or 0 }} m3</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.water_rate or 0) }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(invoice.water_total or 0) }}</td>
+            </tr>
+            {% endif %}
+        </table>
+        {% endif %}
+
+        {% if invoice.bill_items %}
+        <h5 style="margin-bottom: 5px;">บริการเพิ่มเติม:</h5>
+        <table>
+            {% for item in invoice.bill_items %}
+            <tr>
+                <td>{{ item.description }}</td>
+                <td style="text-align:center;">{{ item.quantity }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(item.total_price) }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+
+        {% if invoice.bill_discount %}
+        <p style="color: green; font-size: 0.8rem; margin-bottom: 5px;"><strong>ส่วนลด:</strong></p>
+        <table class="discount-table">
+            {% for ds in invoice.bill_discount %}
+            <tr>
+                <td>{{ ds.description }}</td>
+                <td style="text-align:right;">- {{ "{:,.2f}".format(ds.total_price) }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+
+        <h4 style="text-align: right; border-top: 1px solid #eee; padding-top: 10px;">
+            ยอดรวมทั้งสิ้น: {{ "{:,.2f}".format(invoice.total_amount) }} บาท
+        </h4>
+
+        <p style="text-align: center; font-size: 0.75rem; color: #666;">
+            ชำระโดย: {{ invoice.payment_method or 'เงินสด' }}<br>
+            ขอบคุณที่ใช้บริการ YourSystem
+        </p>
+    </div>
+    {% endfor %}
+
+</body>
+
+</html>

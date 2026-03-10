@@ -457,8 +457,8 @@
 
               <label>Word swap</label>
               <select id="word_swap">
-                <option value=False>No</option>
-                <option value=True>Yes</option>
+                <option value="false">No</option>
+                <option value="true">Yes</option>
               </select>
 
               <label>Data in DEC format (Separate by comma)</label>
@@ -508,8 +508,8 @@
 
             <label>Word swap</label>
             <select id="word_swap">
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
+              <option value="false">No</option>
+              <option value="true">Yes</option>
             </select>
 
             <label>Unit ID (0-255)</label>
@@ -647,7 +647,7 @@
         // เลือกดึง Port จาก ID ที่มีค่า (รองรับทั้ง tcp_port และ port)
         port: $("#tcp_port").val() || $("#port").val(),
         baudrate: $("#baudrate").val(),
-        word_swap: $("#word_swap").val(),
+        word_swap: $("#word_swap").val() === "true",
       };
 
       // ล้างค่าในช่องแสดงผลก่อนเริ่มอ่าน
@@ -759,7 +759,7 @@
         function_code: $("#function_code").val(),
         data_type: $("#data_type").val(),
         connType: $("#connType").val(),
-        word_swap: $("#word_swap").val() || undefined,
+        word_swap: $("#word_swap").val() === "true"  || undefined,
         parameters: $("#parameters").val(),
         count: $("#count").val(),
         gain: $("#gain").val(),

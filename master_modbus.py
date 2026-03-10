@@ -259,7 +259,6 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
             c_count = int(reg_cfg.get("count", 2))
             c_gain = float(reg_cfg.get("gain", 1))
             c_word_swap = reg_cfg.get("word_swap", True)
-            c_path = reg_cfg.get("path")
 
             # สำหรับ Serial/TCP
             c_port = serial_ports or pc_port

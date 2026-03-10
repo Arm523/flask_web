@@ -40,7 +40,7 @@ def save_config(path, data):
 def get_now(mocked=False):
     if mocked:
         # return datetime.now()
-        return datetime(2026, 4,2, 9, 0, 0)
+        return datetime(2026, 5,2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -455,6 +455,10 @@ def replace_placeholders(doc_path, data_dict, output_path):
 
 
 def update_late_penalty(cursor, invoice_id):
+    enable_penalty = get_setting('enable_late_penalty', 1)
+    if enable_penalty == 0:
+        print('ปิดระบบอยู่')
+        return 0
     """อัปเดต late_penalty และ overdue_days ของ invoice"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -969,7 +973,6 @@ def refresh_invoice_total(cursor, invoice_id):
         
     else: # 'normal' หรือ 'final'
         rent = float(inv['rent_amount'] or inv['contract_price'] or 0)
-
         elec_total = (inv['electricity_usage'] or 0) * elec_rate
         water_total = (inv['water_usage'] or 0) * water_rate
 
