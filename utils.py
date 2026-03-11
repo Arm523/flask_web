@@ -39,8 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=False):
     if mocked:
-        # return datetime.now()
-        return datetime(2026, 5,2, 9, 0, 0)
+        return datetime(2026, 5,6, 9, 0, 0)
     else:
         return datetime.now()
 

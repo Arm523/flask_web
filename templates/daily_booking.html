@@ -93,22 +93,25 @@
       <!-- วันที่เริ่ม -->
       <div class="mb-3 date-group">
         <label>วันที่เริ่ม</label>
-        <input type="text" id="display_start" class="form-control" placeholder="เลือกวันที่เริ่ม (dd/mm/yyyy)" readonly required>
-        <input type="date" id="start_date" name="start_date">
+        <input type="text" id="display_start" class="form-control" placeholder="เลือกวันที่เริ่ม (dd/mm/yyyy)" readonly
+          required>
+        <input type="date" id="start_date" name="start_date" required>
       </div>
 
       <!-- วันที่สิ้นสุด -->
       <div class="mb-3 date-group">
         <label>วันที่สิ้นสุด</label>
-        <input type="text" id="display_end" class="form-control" placeholder="เลือกวันที่สิ้นสุด (dd/mm/yyyy)" readonly required>
-        <input type="date" id="end_date" name="end_date">
+        <input type="text" id="display_end" class="form-control" placeholder="เลือกวันที่สิ้นสุด (dd/mm/yyyy)" readonly
+          required>
+        <input type="date" id="end_date" name="end_date" required>
       </div>
 
       <!-- วันที่ชำระเงิน -->
       <div class="mb-3 date-group">
         <label>กำหนดวันที่ชำระเงิน</label>
-        <input type="text" id="display_pay" class="form-control" placeholder="เลือกวันที่ชำระเงิน (dd/mm/yyyy)" readonly required>
-        <input type="date" id="due_date" name="due_date">
+        <input type="text" id="display_pay" class="form-control" placeholder="เลือกวันที่ชำระเงิน (dd/mm/yyyy)" readonly
+          required>
+        <input type="date" id="due_date" name="due_date" required>
       </div>
 
       <div class="mb-3">
@@ -123,20 +126,30 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-  // กำหนดวันปัจจุบันเป็น minimum
+  // 1. ตั้งค่าวันที่เริ่มต้น (Min Date) ให้เป็นวันนี้
   const today = new Date().toISOString().split("T")[0];
-  document.querySelectorAll('input[type="date"]').forEach(el => el.min = today);
+  document.querySelectorAll('input[type="date"]').forEach(el => {
+    el.min = today;
+  });
 
-  // เมื่อคลิก input text → เปิด date picker ที่ซ่อนอยู่
+  // 2. ฟังก์ชันจัดการ Date Pair (ช่อง Text ที่โชว์ กับ Input Date ที่ซ่อน)
   function setupDatePair(displayId, realId) {
     const display = document.getElementById(displayId);
     const real = document.getElementById(realId);
 
+    // คลิกที่ช่อง Text ให้เปิดปฏิทิน
     display.addEventListener("click", () => real.showPicker());
+
+    // เมื่อเลือกวันที่แล้ว ให้แปลงฟอร์แมตไปโชว์ในช่อง Text
     real.addEventListener("change", () => {
-      const [y, m, d] = real.value.split("-");
-      display.value = `${d}/${m}/${y}`;
+      if (real.value) {
+        const [y, m, d] = real.value.split("-");
+        display.value = `${d}/${m}/${y}`;
+      } else {
+        display.value = "";
+      }
     });
   }
 
@@ -144,9 +157,59 @@
   setupDatePair("display_end", "end_date");
   setupDatePair("display_pay", "due_date");
 
-  // บังคับให้ end_date >= start_date
+  // 3. Logic: วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม
   document.getElementById("start_date").addEventListener("change", e => {
-    document.getElementById("end_date").min = e.target.value;
+    const startVal = e.target.value;
+    const endInput = document.getElementById("end_date");
+    const endDisplay = document.getElementById("display_end");
+
+    endInput.min = startVal;
+
+    // ถ้าของเดิมที่เลือกไว้มันน้อยกว่าวันเริ่มใหม่ ให้ล้างค่าทิ้ง
+    if (endInput.value && endInput.value < startVal) {
+      endInput.value = "";
+      endDisplay.value = "";
+    }
+  });
+
+  // 4. *** ระบบตรวจสอบข้อมูลก่อนส่ง (Validation) ***
+  document.querySelector('form').addEventListener('submit', function (e) {
+    // ดึงค่าจาก input ต่างๆ
+    const fName = document.querySelector('input[name="guest_fname"]').value.trim();
+    const lName = document.querySelector('input[name="guest_lname"]').value.trim();
+    const phone = document.querySelector('input[name="guest_phone"]').value.trim();
+    const startDate = document.getElementById('start_date').value;
+    const endDate = document.getElementById('end_date').value;
+    const dueDate = document.getElementById('due_date').value;
+
+    // เช็คค่าว่าง (Null / Empty)
+    if (!fName || !lName || !phone || !startDate || !endDate || !dueDate) {
+      e.preventDefault(); // สั่งเบรก ไม่ให้ส่งฟอร์ม
+
+      Swal.fire({
+        icon: 'warning',
+        title: 'กรอกข้อมูลไม่ครบ',
+        text: 'กรุณากรอกชื่อ-นามสกุล และเลือกวันที่ให้ครบทุกช่องก่อนดำเนินการต่อ',
+        confirmButtonColor: '#2563eb',
+        confirmButtonText: 'ตกลง'
+      });
+      return;
+    }
+
+    // เช็คเบอร์โทรศัพท์เบื้องต้น (ต้องเป็นตัวเลขและยาว 9-10 หลัก)
+    const phoneRegex = /^[0-9]{9,10}$/;
+    if (!phoneRegex.test(phone)) {
+      e.preventDefault();
+      Swal.fire({
+        icon: 'error',
+        title: 'เบอร์โทรศัพท์ไม่ถูกต้อง',
+        text: 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลข 9-10 หลัก',
+        confirmButtonColor: '#2563eb'
+      });
+      return;
+    }
+
+    // ถ้าผ่านหมด จะปล่อยให้ Submit ไปที่ Server ตามปกติ
   });
 </script>
 {% endblock %}

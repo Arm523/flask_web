@@ -144,9 +144,7 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
 
     client = None
 
-    # 2. เตรียม Parameter ตามประเภท (Custom หรือ Profile)
     if model_name == "custom":
-        # ดึงค่าจากที่ User กรอกหน้าเว็บโดยตรง
         c_type = connType
         c_address = int(address)
         c_unit_id = int(unit_id)
@@ -156,10 +154,90 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
         c_gain = float(gain)
         c_word_swap = (word_swap == True or word_swap == 'True')
         
-        # สำหรับ Serial
         c_port = serial_ports
         c_baudrate = int(baudrate) if baudrate else 9600
         c_params = parameters if parameters else "8N1"
+
+        if c_type == "tcp":
+            client = ModbusTcpClient(ip_addr, port=tcp_port)
+        elif c_type == "serial":
+            parity = c_params[1]
+            stopbits = int(c_params[2])
+            bytesize = int(c_params[0])
+            client = ModbusSerialClient(
+                method="rtu", port=c_port, baudrate=c_baudrate,
+                parity=parity, stopbits=stopbits, bytesize=bytesize, timeout=2
+            )
+        
+        if client is None:
+            return "❌ Error: ไม่สามารถสร้าง Client ได้ (ตรวจสอบ Connection Type)"
+
+        # 4. เริ่มต้นอ่านค่าด้วย Lock
+        with modbus_lock:
+            try:
+                if not client.connect():
+                    print(f"❌ Cannot connect to {c_port or ip_addr}")
+                    return None
+
+                time.sleep(0.5)
+                
+                # เลือก Function Code ในการอ่าน
+                if c_function_code == 1:
+                    rr = client.read_coils(c_address, c_count, unit=c_unit_id)
+                elif c_function_code == 2:
+                    rr = client.read_discrete_inputs(c_address, c_count, unit=c_unit_id)
+                elif c_function_code == 3:
+                    rr = client.read_holding_registers(c_address, c_count, unit=c_unit_id)
+                elif c_function_code == 4:
+                    rr = client.read_input_registers(c_address, c_count, unit=c_unit_id)
+                else:
+                    return None
+
+                # ตรวจสอบ Error
+                error_check = decode_modbus_error(rr)
+                if not error_check["success"]:
+                    print(f"❌ Modbus Error: {error_check['message']}")
+                    return None
+
+                # แปลงผลลัพธ์
+                paddedHex = [hex(r).replace("0x", "").zfill(4) for r in rr.registers]
+                
+                if c_word_swap:
+                    if c_count == 2:
+                        paddedHex = [paddedHex[1], paddedHex[0]]
+                    elif c_count == 4:
+                        paddedHex = [paddedHex[1], paddedHex[0], paddedHex[3], paddedHex[2]]
+
+                # Decode ตาม Data Type
+                if c_data_type in ["int16", "uint16", "int32", "uint32", "float32", "float", "float64", "double"]:
+                    decoder = BinaryPayloadDecoder.fromRegisters(rr.registers, byteorder=Endian.Big, wordorder=Endian.Big)
+                    if c_data_type == "int16": value = decoder.decode_16bit_int()
+                    elif c_data_type == "uint16": value = decoder.decode_16bit_uint()
+                    elif c_data_type == "int32": value = decoder.decode_32bit_int()
+                    elif c_data_type == "uint32": value = decoder.decode_32bit_uint()
+                    elif c_data_type in ["float32", "float"]: value = decoder.decode_32bit_float()
+                    elif c_data_type in ["float64", "double"]: value = decoder.decode_64bit_float()
+                elif c_data_type == "bcd":
+                    words = [int(h, 16) for h in paddedHex]
+                    value = bcd_words_to_decimal(words) if c_count == 1 else bcd_words_to_string(words)
+
+                if value is not None:
+                    final_value = round(float(value) * c_gain, 3)
+                    print(f"✅ Successful Read: {final_value}")
+                    return final_value
+                
+                return None
+
+            except Exception as e:
+                print(f"❌ Modbus Exception: {e}")
+                return None
+            finally:
+                if client:
+                    time.sleep(0.5)
+                    client.close()
+                    print(f"🔌 Connection closed.")
+        
+
     else:
         # ดึงค่าจาก ใน JSON
         module_cfg = combined_meters.get(model_name)
@@ -168,7 +246,6 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
         
         c_type = connType or module_cfg.get("type")
 
-        # --- [กรณีเป็น API] ---
         if c_type == "api":
             try:
                 base_url = (api_base_url)
@@ -200,7 +277,6 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
                     print(f"📦 Total Logs Received: {len(logs)} rows")
                     if not logs: return "No data found"
                     
-                    # ตรวจสอบว่า(ดูจากว่ามีการส่งช่วงเวลามาไหม)
                     has_time = bool(start_t or end_t)
 
                     if not has_time:
@@ -244,7 +320,6 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
                 return f"❌ API Exception: {str(e)}"
     
         else:
-            # หา Register Config
             reg_cfg = module_cfg.get("read_register", {}).get(register_key) or \
                     module_cfg.get("config_register", {}).get(register_key)
             
@@ -254,12 +329,11 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
             c_type = connType or module_cfg.get("type")
             c_address = int(address or reg_cfg.get("address"))
             c_unit_id = int(unit_id)
-            c_function_code = int(function_code or 3) # Default to Read Holding if not specified
+            c_function_code = int(function_code or 3) 
             c_data_type = (data_type or reg_cfg.get("data_type")).lower()
             c_count = int(reg_cfg.get("count", 2))
             c_gain = float(reg_cfg.get("gain", 1))
             c_word_swap = reg_cfg.get("word_swap", True)
-
             # สำหรับ Serial/TCP
             c_port = serial_ports or pc_port
             c_baudrate = int(baudrate or module_cfg.get("baudrate", 9600))
@@ -278,6 +352,9 @@ def read_meter_tool(model_name=None, register_key=None, port=None, ip=None,
                 method="rtu", port=c_port, baudrate=c_baudrate,
                 parity=parity, stopbits=stopbits, bytesize=bytesize, timeout=2
             )
+        
+        if client is None:
+            return "❌ Error: ไม่สามารถสร้าง Client ได้ (ตรวจสอบ Connection Type)"
 
         # 4. เริ่มต้นอ่านค่าด้วย Lock
         with modbus_lock:
@@ -378,12 +455,91 @@ def write_meter_tool(model_name=None, register_key=None, port=None, ip=None,
         c_address = int(address)
         c_unit_id = int(unit_id)
         c_baudrate = int(baudrate) if baudrate else 9600
+        c_function_code = int(function_code) if function_code else 16
         c_params = parameters if parameters else "8N1"
         c_ip = ip or "192.168.137.20"
         c_port = int(port or 502)
-        
-        # สำหรับ Custom ส่วนใหญ่ส่งค่าดิบมาเป็นชุด
         words = [int(v) for v in data_dec] 
+
+        if c_type == "tcp":
+            client = ModbusTcpClient(c_address, port=c_port)
+        elif c_type == "serial":
+            parity = c_params[1]
+            stopbits = int(c_params[2])
+            bytesize = int(c_params[0])
+            client = ModbusSerialClient(
+                method="rtu", port=c_port, baudrate=c_baudrate,
+                parity=parity, stopbits=stopbits, bytesize=bytesize, timeout=2
+            )
+        
+        if client is None:
+            return "❌ Error: ไม่สามารถสร้าง Client ได้ (ตรวจสอบ Connection Type)"
+
+        # 4. เริ่มต้นอ่านค่าด้วย Lock
+        with modbus_lock:
+            try:
+                if not client.connect():
+                    print(f"❌ Cannot connect to {c_port or c_address}")
+                    return None
+
+                time.sleep(0.5)
+                
+                # เลือก Function Code ในการเขียน (Write Operations)
+                if c_function_code == 5:
+                    # เขียน Single Coil (ส่งค่าเดียว)
+                    rr = client.write_coil(c_address, words[0], unit=c_unit_id)
+                elif c_function_code == 6:
+                    # เขียน Single Holding Register
+                    rr = client.write_register(c_address, words[0], unit=c_unit_id)
+                elif c_function_code == 15:
+                    # เขียน Multiple Coils (ส่งเป็น list ของ boolean/bit)
+                    rr = client.write_coils(c_address, words, unit=c_unit_id)
+                elif c_function_code == 16:
+                    # เขียน Multiple Holding Registers (ส่งเป็น list ของ registers)
+                    rr = client.write_registers(c_address, words, unit=c_unit_id)
+                else:
+                    return "Function Code สำหรับการเขียนไม่ถูกต้อง"
+
+                error_check = decode_modbus_error(rr)
+                if not error_check["success"]:
+                    print(f"❌ Modbus Error: {error_check['message']}")
+                    return None
+
+                paddedHex = [hex(r).replace("0x", "").zfill(4) for r in rr.registers]
+                
+                if c_word_swap:
+                    if c_count == 2:
+                        paddedHex = [paddedHex[1], paddedHex[0]]
+                    elif c_count == 4:
+                        paddedHex = [paddedHex[1], paddedHex[0], paddedHex[3], paddedHex[2]]
+
+                if c_data_type in ["int16", "uint16", "int32", "uint32", "float32", "float", "float64", "double"]:
+                    decoder = BinaryPayloadDecoder.fromRegisters(rr.registers, byteorder=Endian.Big, wordorder=Endian.Big)
+                    if c_data_type == "int16": value = decoder.decode_16bit_int()
+                    elif c_data_type == "uint16": value = decoder.decode_16bit_uint()
+                    elif c_data_type == "int32": value = decoder.decode_32bit_int()
+                    elif c_data_type == "uint32": value = decoder.decode_32bit_uint()
+                    elif c_data_type in ["float32", "float"]: value = decoder.decode_32bit_float()
+                    elif c_data_type in ["float64", "double"]: value = decoder.decode_64bit_float()
+                elif c_data_type == "bcd":
+                    words = [int(h, 16) for h in paddedHex]
+                    value = bcd_words_to_decimal(words) if c_count == 1 else bcd_words_to_string(words)
+
+                if value is not None:
+                    final_value = round(float(value) * c_gain, 3)
+                    print(f"✅ Successful Read: {final_value}")
+                    return final_value
+                
+                return None
+
+            except Exception as e:
+                print(f"❌ Modbus Exception: {e}")
+                return None
+            finally:
+                if client:
+                    time.sleep(0.5)
+                    client.close()
+                    print(f"🔌 Connection closed.")
     else:
         # กรณีเลือกจาก Profile มิเตอร์
         module_cfg = combined_meters.get(model_name)

@@ -231,7 +231,7 @@
             {% endif %}
         </table>
 
-        {% if meter_adjustment %}
+        {% if meter_adjustment and not invoice.is_first_month and not invoice.is_extra_bill %}
         <h4 style="color: rgb(28, 102, 28); line-height: 1.2; border-bottom: 1px solid #ccc">รายการ มิเตอร์เก่าค่านํ้า /
             ค่าไฟ : </h4>
         <table>

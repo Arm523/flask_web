@@ -236,7 +236,11 @@
                             {% endif %}
                         </td>
 
-                        <td>{{ inv.payment_date.strftime('%d/%m/%Y') or '-' }}</td>
+                        <td>{% if inv.payment_date %}
+                            {{ inv.payment_date.strftime('%d/%m/%Y') }}
+                            {% else %}
+                            -
+                            {% endif %}</td>
 
                         <td>
                             <div class="action-grid">

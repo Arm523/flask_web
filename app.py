@@ -287,7 +287,6 @@ def dashboard():
         4: 'ปิดปรับปรุง', 5: 'รอการชำระ',
         6: 'ชําระบิลสุดท้าย/ตรวจสอบสภาพห้อง'
     }
-
     # ------------------ get filters ------------------
     number = request.args.get('number', '').strip()
     building = request.args.get('building', '').strip()
@@ -296,6 +295,10 @@ def dashboard():
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'min_stay_before_early_move'")
+    min_stay = cursor.fetchone()
+    min_stay_config = int(min_stay['setting_value']) if min_stay else 0
 
     # ------------------ fetch rooms based on filters ------------------
     base_query = "SELECT * FROM unit WHERE 1=1 and is_deleted=0"
@@ -328,9 +331,7 @@ def dashboard():
             rooms=rooms
         )
 
-    # ======================================================
     # 2) ดึงสัญญาล่าสุดของห้องที่แสดง (เฉพาะผลค้นหา)
-    # ======================================================
     unit_ids = [u['unit_id'] for u in units]
 
     cursor.execute(f"""
@@ -490,6 +491,7 @@ def dashboard():
             'contract_status': contract_status,
             'expired_contract': expired_contract,
             'contract_file': contract.get('contracts_file') if contract else None,
+            'contract_start': contract.get('contract_start') if contract else None,
             'contract_end': contract.get('contract_end') if contract else None,
             'pay_date': pay_date.isoformat() if isinstance(pay_date, date) else None,
             'guest_fname': daily.get('guest_fname') if daily else None,
@@ -508,6 +510,7 @@ def dashboard():
             'current_electricity_reading': curr_elec,
             'current_water_reading': curr_wat,
             'current_invoice': current_invoice,
+            'min_stay_config': min_stay_config,
             'i_status': current_invoice.get('status') if current_invoice else None,
             'i_type': current_invoice.get('invoice_type') if contract else None,
             'meter_saved': (
@@ -688,6 +691,54 @@ def cancel_move_out(unit_id):
         conn.rollback()
         flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
     
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('dashboard'))
+
+@app.route('/cancel_contract/<int:contract_id>', methods=['POST'])
+def cancel_contract(contract_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            UPDATE contracts
+            SET status = 7
+            WHERE contract_id = %s AND status = 1
+        """, (contract_id,))
+        
+        if cursor.rowcount == 0:
+            flash("ไม่พบสัญญาที่สามารถยกเลิกได้", "warning")
+        else:
+            cursor.execute("""
+                UPDATE invoices
+                SET status = 'cancelled'
+                WHERE contract_id = %s AND status = 'draft'
+            """, (contract_id,))
+
+            cursor.execute("""
+                UPDATE unit u
+                JOIN contracts c ON u.unit_id = c.room_id
+                SET u.status_id = 1
+                WHERE c.contract_id = %s
+            """, (contract_id,))
+
+            add_audit_log(
+            cursor, 
+            'CONTRACT', 
+            'Cancel Contract', 
+            f'ยกเลิกสัญญา ID : {contract_id}', 
+            session.get('user', {}).get('user_id')
+            )
+
+            conn.commit()
+            flash("ยกเลิกสัญญาและบิลที่เกี่ยวข้องเรียบร้อยแล้ว", "success")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
     finally:
         cursor.close()
         conn.close()
@@ -2656,7 +2707,6 @@ def delete_option(option_id):
 # ---------------------- MANAGE METER ----------------------
 @app.route('/manage_meter', methods=['GET', 'POST'])
 def manage_meter():
-    
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     user_id = session.get('user', {}).get('user_id')
@@ -2710,7 +2760,6 @@ def manage_meter():
                 elec_port,
                 elec_base_url,  
                 elec_api_token, 
-                request.form.get('note_elec') or None, 
                 request.form.get('electricity_status'),
                 request.form.get('elec_unit_key'), 
                 now, user_id
@@ -2722,7 +2771,7 @@ def manage_meter():
                     INSERT INTO meter (
                         serial_meter, slave_id, module, installdate, 
                         comport, ip, port, base_url, api_auth_token, 
-                        note, status, unit_key, created_at, created_by, 
+                        status, unit_key, created_at, created_by, 
                         unit_id, current_reading
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
                 """, elec_data + (unit_id,))
@@ -2758,7 +2807,7 @@ def manage_meter():
                         UPDATE meter SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
                             comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
-                            note=%s, status=%s, unit_key=%s, 
+                            status=%s, unit_key=%s, 
                             updated_at=%s, updated_by=%s, current_reading = 0.00 
                         WHERE id=%s
                     """, elec_data + (m_id,))
@@ -2772,7 +2821,7 @@ def manage_meter():
                         UPDATE meter SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
                             comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
-                            note=%s, status=%s, unit_key=%s, 
+                            status=%s, unit_key=%s, 
                             updated_at=%s, updated_by=%s 
                         WHERE id=%s
                     """, elec_data + (m_id,))
@@ -2794,7 +2843,6 @@ def manage_meter():
                 water_port,
                 water_base_url,  
                 water_api_token,
-                request.form.get('note_water') or None, 
                 request.form.get('water_status'),
                 request.form.get('water_unit_key'), 
                 now, user_id
@@ -2806,9 +2854,9 @@ def manage_meter():
                     INSERT INTO meter_water (
                         serial_meter, slave_id, module, installdate, 
                         comport, ip, port, base_url, api_auth_token, 
-                        note, status, unit_key, created_at, created_by, 
+                        status, unit_key, created_at, created_by, 
                         unit_id, current_reading
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
                 """, water_data + (unit_id,))
                 
                 mw_id = cursor.lastrowid
@@ -2841,7 +2889,7 @@ def manage_meter():
                         UPDATE meter_water SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
                             comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
-                            note=%s, status=%s, unit_key=%s, 
+                            status=%s, unit_key=%s, 
                             updated_at=%s, updated_by=%s, current_reading = 0.00 
                         WHERE id=%s
                     """, water_data + (mw_id,))
@@ -2854,7 +2902,7 @@ def manage_meter():
                         UPDATE meter_water SET 
                             serial_meter=%s, slave_id=%s, module=%s, installdate=%s, 
                             comport=%s, ip=%s, port=%s, base_url=%s, api_auth_token=%s, 
-                            note=%s, status=%s, unit_key=%s, 
+                            status=%s, unit_key=%s, 
                             updated_at=%s, updated_by=%s 
                         WHERE id=%s
                     """, water_data + (mw_id,))
@@ -2877,13 +2925,13 @@ def manage_meter():
     try:
         cursor.execute("""
             SELECT u.*, 
-                   m.serial_meter AS electricity_serial_meter, m.slave_id AS electricity_slave_id, m.module AS electricity_module,
+                   m.id AS mid, m.serial_meter AS electricity_serial_meter, m.slave_id AS electricity_slave_id, m.module AS electricity_module,
                    m.installdate AS electricity_installdate, m.comport AS electricity_comport, m.ip AS electricity_ip, 
-                   m.port AS electricity_port, m.note AS electricity_note, m.status AS electricity_status, m.unit_key AS elec_unit_key,
+                   m.port AS electricity_port, m.status AS electricity_status, m.unit_key AS elec_unit_key,
                    m.base_url AS elec_base_url, m.api_auth_token AS elec_api_token,
-                   mw.serial_meter AS water_serial, mw.slave_id AS water_slave_id, mw.module AS water_module,
+                   mw.id AS mwid, mw.serial_meter AS water_serial, mw.slave_id AS water_slave_id, mw.module AS water_module,
                    mw.installdate AS water_installdate, mw.comport AS water_comport, mw.ip AS water_ip, 
-                   mw.port AS water_port, mw.note AS water_note, mw.status AS water_status, mw.unit_key AS water_unit_key,
+                   mw.port AS water_port, mw.status AS water_status, mw.unit_key AS water_unit_key,
                    mw.base_url AS water_base_url, mw.api_auth_token AS water_api_token 
             FROM unit u
             LEFT JOIN meter m ON u.meter_id = m.id
@@ -3729,8 +3777,7 @@ def confirm_payment(invoice_id):
         WHERE invoice_id = %s and type = 'discount'
     """, (invoice_id,))
     discount = cursor.fetchall()
-
-
+    
     cursor.execute(
         "SELECT setting_value FROM settings WHERE setting_key='late_fee_per_day'")
     row = cursor.fetchone()
@@ -4240,6 +4287,7 @@ def print_receipt(invoice_id):
     
     invoice['is_extra_bill'] = (invoice['invoice_type'] == 'extra_bill')
     invoice['is_first_month'] = (invoice['invoice_type'] == 'first')
+    invoice['is_daily'] = (invoice['invoice_type'] == 'daily')
 
     if not invoice:
         flash("ไม่พบใบเสร็จ", "warning")
@@ -4635,6 +4683,7 @@ def print_invoice(invoice_id):
     
     invoice['is_extra_bill'] = (invoice['invoice_type'] == 'extra_bill')
     invoice['is_first_month'] = (invoice['invoice_type'] == 'first')
+    invoice['is_daily'] = (invoice['invoice_type'] == 'daily')
 
     if not invoice:
         flash("ไม่พบใบเสร็จ", "warning")
@@ -4758,7 +4807,7 @@ def notice_move_out(contract_id):
 def create_invoice_move_out(contract_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)   
-    today = datetime.today().date()
+    today = get_now().date() if get_now else date.today()
 
     try:
         # 1. ยกเลิก draft invoice ถ้ามี
@@ -4788,13 +4837,17 @@ def create_invoice_move_out(contract_id):
             flash("ไม่พบสัญญา", "warning")
             return redirect(url_for('dashboard'))
 
-        move_out_date = contract['notice_move_out_date']    
+        move_out_date = contract['notice_move_out_date']   
+
+        if today >= move_out_date:
+            flash("❌ ไม่สามารถสร้างบิลได้ เนื่องจากวันที่แจ้งย้ายออกไม่ถูกต้อง", "danger")
+            return redirect(url_for('dashboard'))
 
         # 3. ดึง invoice ล่าสุดที่ชำระแล้ว
         cursor.execute("""
             SELECT billing_period_end
             FROM invoices
-            WHERE contract_id=%s AND status in ('paid','cancelled')
+            WHERE contract_id=%s AND status in ('paid','overdue')
             ORDER BY billing_period_end DESC
             LIMIT 1
         """, (contract_id,))
@@ -4853,7 +4906,6 @@ def create_invoice_move_out(contract_id):
         total_amount = rent + unpaid_amount + penalty - reimburse
 
         # 7. สร้าง final invoice
-        # หมายเหตุ: แก้ไขค่าคงที่ 0 ในพารามิเตอร์สุดท้ายให้ตรงกับโครงสร้าง TABLE ของคุณ
         cursor.execute("""
             INSERT INTO invoices (
                 unit_id, tenant_id, contract_id,

@@ -657,6 +657,11 @@
                             *กรุณาตรวจสอบเอกสารสัญญาพร้อมการเซ็นสัญญา เเละ จัดเตรียมเอกสารให้เรียบร้อย
                             ก่อนอัพโหลด(สามารถอัพโหลดไฟล์เป็นรูปภาพ 1ไฟล์)*
                         </p>
+
+                        <a href="javascript:void(0);" onclick="confirmCancelContract('{{ room.contract_id }}')"
+                            class="btn btn-sm btn-danger mt-2">
+                            ❌ ยกเลิกสัญญา
+                        </a>
                         {% endif %}
 
                         {% if (room.contract_id or room.has_daily_booking) and room.status_id in [2,3,5,6,7] %}
@@ -689,7 +694,8 @@
                             class="mt-2 p-3 rounded shadow-sm border">
                             <label class="form-label fw-bold text-primary">📢 แจ้งย้ายออกวันที่:</label>
                             <input type="text" id="notice_date" name="notice_date" class="form-control"
-                                placeholder="เลือกวันที่แจ้งย้ายออก" required>
+                                data-start-date="{{ room.contract_start if room.contract_start else '' }}"
+                                data-min-stay="{{ room.min_stay_config }}" placeholder="เลือกวันที่แจ้งย้ายออก" required>
                             <button type="submit"
                                 class="btn btn-sm btn-warning w-100 mt-2">บันทึกการแจ้งย้ายออก</button>
                         </form>
@@ -698,7 +704,8 @@
                             class="mt-2 p-3 rounded shadow-sm border">
                             <label class="form-label fw-bold text-primary">📆 แก้ไขวันที่แจ้งย้ายออก:</label>
                             <input type="text" id="notice_date" name="notice_date" class="form-control"
-                                value="{{ room.notice_move_out_date }}" required>
+                                data-start-date="{{ room.contract_start if room.contract_start else '' }}"
+                                data-min-stay="{{ room.min_stay_config }}" placeholder="เลือกวันที่แจ้งย้ายออก" required>
                             <button type="submit"
                                 class="btn btn-sm btn-warning w-100 mt-2">อัปเดตวันที่แจ้งย้ายออก</button>
                         </form>
@@ -1112,6 +1119,26 @@
             .catch(err => console.error("Error loading Donut Stats:", err));
     }
 
+    function confirmCancelContract(contractId) {
+        Swal.fire({
+            title: 'ยืนยันการยกเลิกสัญญา?',
+            text: "บิลที่มีจะถูกยกเลิก และสถานะห้องจะถูกปรับปรุงอัตโนมัติ",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'ใช่, ยกเลิกสัญญา!',
+            cancelButtonText: 'กลับไป'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/cancel_contract/${contractId}`;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        })
+    }
+
     function fetchMeter(type) {
         const roomId = document.getElementById('modal_unit_id').value;
         const fd = new FormData();
@@ -1216,9 +1243,6 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         const now = new Date();
-        const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        const lastDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-
         const dataElement = document.getElementById('flash-data');
         if (dataElement) {
             const messages = JSON.parse(dataElement.getAttribute('data-messages') || '[]');
@@ -1234,16 +1258,6 @@
         }
         // [A] Setup Filter ให้เสร็จก่อนเพื่อให้มี Default Value
         setupYearFilters();
-
-        // [B] ตั้งค่าเครื่องมืออื่นๆ
-        flatpickr("#notice_date", {
-            dateFormat: "d-m-Y",
-            minDate: firstDayNextMonth, // ล็อกวันเริ่มต้นที่วันที่ 1 ของเดือนหน้า
-            maxDate: lastDayNextMonth,   // ล็อกวันสุดท้ายที่วันสิ้นเดือนของเดือนหน้า
-            allowInput: false,            // แนะนำให้ใส่เพิ่มเพื่อป้องกันคนพิมพ์เองมั่วๆ
-            placeholder: "กรุณาเลือกวันที่" // ใส่ placeholder แทนเพื่อให้รู้ว่าต้องคลิก
-        });
-        flatpickr("#startDate, #endDate", { dateFormat: "d-m-Y", locale: "th" });
 
         // [C] สร้าง Chart Objects รอไว้ (สำคัญ: ต้องสร้างก่อนโหลด Data)
         statusPieChart = new Chart(document.getElementById("statusPieChart"), {
@@ -1294,6 +1308,31 @@
         loadDonutAndStats();
     });
 
+    document.querySelectorAll('input[id="notice_date"]').forEach(input => {
+        const startDateStr = input.getAttribute('data-start-date'); 
+        const minMonths = parseInt(input.getAttribute('data-min-stay')) || 0;
+        const today = new Date();
+
+        const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        let minAllowedDate = nextMonth;
+
+        if (startDateStr && startDateStr !== 'None' && startDateStr !== '') {
+            const startDate = new Date(startDateStr);
+            if (!isNaN(startDate.getTime())) {
+                const limitDate = new Date(startDate);
+                limitDate.setMonth(limitDate.getMonth() + minMonths); // 5 + 3 = 8 (สิงหาคม)
+
+                if (limitDate > nextMonth) {
+                    minAllowedDate = limitDate;
+                }
+            }
+        }
+        flatpickr(input, {
+            dateFormat: "d-m-Y",
+            minDate: minAllowedDate, 
+            locale: "th"
+        });
+    });
 
 </script>
 

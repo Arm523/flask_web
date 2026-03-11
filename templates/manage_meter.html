@@ -56,7 +56,7 @@
 
                     <div class="row">
                         <div class="col-md-6 border-end">
-                            <h6 class="text-primary fw-bold">มิเตอร์ไฟฟ้า</h6>
+                            <h6 class="text-primary fw-bold">มิเตอร์ไฟฟ้า <span class="badge bg-primary" id="display_elec_id"></span></h6>
                             <div class="mb-2">
                                 <label>โมดูล *</label>
                                 <select id="electricity_module" name="electricity_module" class="form-select"
@@ -75,7 +75,8 @@
                             <div class="mb-2"><label>Serial *</label><input type="text" name="electricity_serial_meter"
                                     class="form-control" required></div>
                             <div class="mb-2"><label>Slave ID *</label><input type="number" name="electricity_slave_id"
-                                    class="form-control" required></div>
+                                    class="form-control" placeholder="กรอก Serial (หากไม่มี Slave ID ให้ใส่ 0)"
+                                    required></div>
                             <div class="mb-2"><label>Installdate *</label><input type="text" name="installdate_elec"
                                     class="form-control datepicker"></div>
 
@@ -84,6 +85,7 @@
                                 <select name="electricity_comport" class="form-select"
                                     onchange="toggleIP(this, 'elec')">
                                     {% for p in ports %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+                                    <option value="none">-- ไม่มี COM Port --</option>
                                 </select>
                             </div>
                             <div id="elec_tcp" style="display:none;">
@@ -137,7 +139,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <h6 class="text-info fw-bold">มิเตอร์น้ำ</h6>
+                            <h6 class="text-info fw-bold">มิเตอร์น้ำ <span class="badge bg-info" id="display_water_id"></span></h6>
                             <div class="mb-2">
                                 <label>โมดูล *</label>
                                 <select id="water_module" name="water_module" class="form-select"
@@ -156,7 +158,8 @@
                             <div class="mb-2"><label>Serial *</label><input type="text" name="water_serial"
                                     class="form-control" required></div>
                             <div class="mb-2"><label>Slave ID *</label><input type="number" name="water_slave_id"
-                                    class="form-control" required></div>
+                                    class="form-control" placeholder="กรอก Serial (หากไม่มี Slave ID ให้ใส่ 0)"
+                                    required></div>
                             <div class="mb-2"><label>Installdate *</label><input type="text" name="installdate_water"
                                     class="form-control datepicker"></div>
 
@@ -164,6 +167,7 @@
                                 <label>COM Port</label>
                                 <select name="water_comport" class="form-select" onchange="toggleIP(this, 'water')">
                                     {% for p in ports %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+                                    <option value="none">-- ไม่มี COM Port --</option>
                                 </select>
                             </div>
                             <div id="water_tcp" style="display:none;">
@@ -252,12 +256,14 @@
         form.reset();
         document.getElementById('modalTitle').innerText = 'จัดการห้อง ' + unit.name;
         document.getElementById('m_unit_id').value = unit.unit_id;
+        document.getElementById('display_elec_id').innerText = 'ID: ' + unit.mid;
+        document.getElementById('display_water_id').innerText = 'ID: ' + unit.mwid;
 
         // ไฟฟ้า
         form.elements['electricity_module'].value = unit.electricity_module || '';
         loadParameters('elec', unit.elec_unit_key);
         form.elements['electricity_serial_meter'].value = unit.electricity_serial_meter || '';
-        form.elements['electricity_slave_id'].value = unit.electricity_slave_id || '';
+        form.elements['electricity_slave_id'].value = (unit.electricity_slave_id !== null && unit.electricity_slave_id !== undefined) ? unit.electricity_slave_id : 0;
         form.elements['electricity_comport'].value = unit.electricity_comport || 'COM1';
         form.elements['electricity_ip'].value = unit.electricity_ip || '';
         form.elements['electricity_port'].value = unit.electricity_port || '';
@@ -269,7 +275,7 @@
         form.elements['water_module'].value = unit.water_module || '';
         loadParameters('water', unit.water_unit_key);
         form.elements['water_serial'].value = unit.water_serial || '';
-        form.elements['water_slave_id'].value = unit.water_slave_id || '';
+        form.elements['water_slave_id'].value = (unit.water_slave_id !== null && unit.water_slave_id !== undefined) ? unit.water_slave_id : 0;
         form.elements['water_comport'].value = unit.water_comport || 'COM1';
         form.elements['water_ip'].value = unit.water_ip || '';
         form.elements['water_port'].value = unit.water_port || '';
@@ -322,6 +328,42 @@
     function checkAndSave() {
         const form = document.getElementById('meterForm');
         const fd = new FormData(form);
+
+        const elecSerial = form.elements['electricity_serial_meter'].value.trim();
+        const elecDate = form.elements['installdate_elec'].value.trim();
+        const elecSlave = form.elements['electricity_slave_id'].value.trim();
+
+        if (elecSerial === "") {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอก **Serial** มิเตอร์ไฟฟ้า', 'warning');
+            return;
+        }
+        if (elecDate === "") {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาระบุ **วันที่ติดตั้ง** มิเตอร์ไฟฟ้า', 'warning');
+            return;
+        }
+        if (elecSlave === "") {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอก **Slave ID** ไฟฟ้า (ถ้าไม่มีใส่ 0)', 'warning');
+            return;
+        }
+
+        // --- 2. ตรวจสอบข้อมูลมิเตอร์น้ำ ---
+        // หมายเหตุ: ใน HTML ของคุณใช้ name="water_serial" ไม่ใช่ "water_serial_meter"
+        const waterSerial = form.elements['water_serial'].value.trim();
+        const waterDate = form.elements['installdate_water'].value.trim();
+        const waterSlave = form.elements['water_slave_id'].value.trim();
+
+        if (waterSerial === "") {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอก **Serial** มิเตอร์น้ำ', 'warning');
+            return;
+        }
+        if (waterDate === "") {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาระบุ **วันที่ติดตั้ง** มิเตอร์น้ำ', 'warning');
+            return;
+        }
+        if (waterSlave === "") {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอก **Slave ID** น้ำ (ถ้าไม่มีใส่ 0)', 'warning');
+            return;
+        }
 
         Swal.fire({
             title: 'ยืนยันการบันทึก?',

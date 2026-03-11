@@ -168,12 +168,12 @@
                 <td style="text-align:right;">{{ "{:,.2f}".format(invoice.premiums) }}</td>
             </tr>
             {% endif %}
-            {% if invoice.premiums and invoice.invoice_type == 'final' %}
+            {% if invoice.reimburse and invoice.invoice_type == 'final' %}
             <tr>
                 <td>คืนค่าประกัน</td>
                 <td style="text-align:center;">1</td>
-                <td style="text-align:right;"> - {{ "{:,.2f}".format(invoice.premiums) }}</td>
-                <td style="text-align:right;"> - {{ "{:,.2f}".format(invoice.premiums) }}</td>
+                <td style="text-align:right;"> - {{ "{:,.2f}".format(invoice.reimburse) }}</td>
+                <td style="text-align:right;"> - {{ "{:,.2f}".format(invoice.reimburse) }}</td>
             </tr>
             {% endif %}
             {% if invoice.electricity_total > 0 or invoice.water_total > 0 %}
@@ -230,7 +230,7 @@
         </table>
         {% endif %}
 
-        {% if meter_adjustment %}
+        {% if meter_adjustment and not invoice.is_daily and not invoice.is_first_month and not invoice.is_extra_bill %}
         <p style="color: rgb(26, 35, 163); line-height: 0.2;"><strong>มิเตอร์เก่า:</strong></p>
         <table>
             <thead>
