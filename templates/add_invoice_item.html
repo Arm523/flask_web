@@ -117,8 +117,8 @@
       <button type="submit" class="btn btn-primary">
         <i class="bi bi-save"></i> บันทึกรายการ
       </button>
-      <a href="javascript:history.back()"  class="btn btn-secondary">
-        <i class="bi bi-arrow-left-circle"></i> กลับ Pending Invoices
+      <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+        <i class="bi bi-house-door"></i> กลับ Dashboard
       </a>
     </div>
   </form>
@@ -176,31 +176,32 @@
 
 <script>
   function confirmCancelInvoice(invoiceId) {
-        Swal.fire({
-          title: "ยืนยันการลบรายการ?",
-          text: "คุณต้องการยกเลิกบิลใบนี้ใช่หรือไม่? (การกระทำนี้ย้อนกลับไม่ได้)",
-          icon: "warning",
-          showCancelButton: true,
-          confirmButtonColor: "#d33",
-          confirmButtonText: "ใช่, ยกเลิกเลย",
-          cancelButtonText: "ปิด",
-        }).then((result) => {
-          if (result.isConfirmed) {
-            fetch(`/delete_invoice_item/${invoiceId}`, { method: "POST" })
-              .then((res) => res.json())
-              .then((data) => {
-                if (data.status === "success") {
-                  Swal.fire("สำเร็จ!", data.message, "success").then(() =>
-                    location.reload(),
-                  ); // รีโหลดหน้าเพื่อดูสถานะใหม่
-                } else {
-                  Swal.fire("ล้มเหลว", data.message, "error");
-                }
-              });
-          }
-        });
+    Swal.fire({
+      title: "ยืนยันการลบรายการ?",
+      text: "คุณต้องการยกเลิกบิลใบนี้ใช่หรือไม่? (การกระทำนี้ย้อนกลับไม่ได้)",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      confirmButtonText: "ใช่, ยกเลิกเลย",
+      cancelButtonText: "ปิด",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        fetch(`/delete_invoice_item/${invoiceId}`, { method: "POST" })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.status === "success") {
+              Swal.fire("สำเร็จ!", data.message, "success").then(() =>
+                location.reload(),
+              ); // รีโหลดหน้าเพื่อดูสถานะใหม่
+            } else {
+              Swal.fire("ล้มเหลว", data.message, "error");
+            }
+          });
       }
+    });
+  }
 </script>
 
 </body>
+
 </html>

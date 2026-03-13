@@ -79,7 +79,7 @@
 
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="page-title m-0">📄 สัญญาเช่าที่อัพโหลดแล้ว</h2>
+        <h2 class="page-title m-0">📄 สัญญาเช่า</h2>
         <span class="badge bg-secondary rounded-pill">ทั้งหมด {{ leases|length }} รายการ</span>
     </div>
 
@@ -142,6 +142,12 @@
                             <span class="status-badge bg-info bg-opacity-10 text-info">
                                 {{ status_map[lease.status] }}
                             </span>
+
+                            {% if lease.renew_count is not none %}
+                            <span class="status-badge bg-secondary bg-opacity-10 text-info">
+                                มีการต่อสัญญา {{ lease.renew_count or '-'}} ครั้ง
+                            </span>
+                            {% endif %}
                         </div>
                     </div>
 

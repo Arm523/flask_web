@@ -214,9 +214,10 @@
 
                         <td>{{ inv.issue_date.strftime('%d/%m/%Y') or '-' }}</td>
 
-                        <td>{{ inv.billing_period_start.strftime('%d/%m/%Y') or '-' }}</td>
+                        <td>{{ inv.billing_period_start.strftime('%d/%m/%Y') if inv.billing_period_start else '-' }}
+                        </td>
 
-                        <td>{{ inv.billing_period_end.strftime('%d/%m/%Y') or '-' }}</td>
+                        <td>{{ inv.billing_period_end.strftime('%d/%m/%Y') if inv.billing_period_end else '-' }}</td>
                         <td>{{ inv.due_date.strftime('%d/%m/%Y') or '-' }}</td>
 
                         <td>{{ "%.2f"|format(inv.total_amount + (inv.penalty_amount or 0)) }} ฿</td>
@@ -415,7 +416,42 @@
                 cancelButtonText: 'ยกเลิก'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = "/cancel_daily_booking/" + id;
+                    // แสดง Loading ระหว่างรอ Server ตอบกลับ
+                    Swal.showLoading();
+
+                    fetch("/cancel_daily_booking/" + id, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === "success") {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'สำเร็จ!',
+                                    text: data.message,
+                                    confirmButtonColor: '#4f46e5'
+                                }).then(() => {
+                                    // โหลดข้อมูลในตารางใหม่ หรือรีโหลดหน้า
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'เกิดข้อผิดพลาด',
+                                    text: data.message
+                                });
+                            }
+                        })
+                        .catch(error => {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'ข้อผิดพลาดระบบ',
+                                text: 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้'
+                            });
+                        });
                 }
             })
         }

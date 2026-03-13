@@ -39,7 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=False):
     if mocked:
-        return datetime(2026, 5,6, 9, 0, 0)
+        return datetime(2026, 8, 2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -208,6 +208,12 @@ def mark_contracts_expiring(today, cursor):
         """, (option_total, invoice_id))
 
         # 1.5 อัปเดตสถานะห้องเป็น 6 (ตรวจสอบห้อง เครียร์บิลทั้งหมด)
+        cursor.execute("""
+            UPDATE unit 
+            SET status_id = 6 
+            WHERE unit_id = %s
+        """, (contract['room_id'],))
+
         print(f"✅ บิลสุดท้ายสร้างเสร็จ (ID: {invoice_id}) สำหรับห้อง {contract['room_id']} (รวม Options: {option_total} บาท)")
 
     # --- STEP 2 & 3: ปักธงสถานะสัญญาและรายวัน (คงเดิม) ---
@@ -251,6 +257,71 @@ def mark_invoices_overdue(mocked_date=None):
     finally:
         cursor.close()
         conn.close()
+
+
+def cleanup_expired_contracts(mocked_date, contracts_folder_path):
+    # กำหนดวันที่ปัจจุบัน
+    current_date = mocked_date or date.today()
+    
+    conn = get_db_connection()
+    if not conn:
+        print("❌ เชื่อมต่อ DB ไม่สำเร็จ")
+        return
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        enable_delete_contract = get_setting('auto_delete_contract_files', 1)
+        if enable_delete_contract == 0:
+            print('ปิดระบบอยู่')
+            return 0
+        
+        retention_limit = current_date - timedelta(days=730)
+        
+        query = """
+            SELECT contract_id, contracts_file 
+            FROM contracts 
+            WHERE status IN (5,6) 
+              AND contract_end <= %s
+              AND contracts_file IS NOT NULL 
+              AND contracts_file <> ''
+        """
+        cursor.execute(query, (retention_limit,))
+        expired_contracts = cursor.fetchall()
+
+        if not expired_contracts:
+            print("✅ No files to cleanup.")
+            return
+
+        for contract in expired_contracts:
+            c_id = contract['contract_id']
+            file_name = contract['contracts_file']
+            
+            file_path = os.path.join(contracts_folder_path, file_name)
+            
+            try:
+                # 1. ลบไฟล์จริงออกจาก Disk
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    print(f"🗑️ [File] Deleted: {file_name}")
+                else:
+                    print(f"⚠️ [File] Already gone: {file_name}")
+
+                # 2. ล้างชื่อไฟล์ใน Database (เปลี่ยนเป็น NULL หรือค่าว่าง)
+                # เราไม่ลบแถว (Record) ทิ้ง เพื่อเก็บประวัติสัญญาไว้
+                update_query = "UPDATE contracts SET contracts_file = NULL WHERE contract_id = %s"
+                cursor.execute(update_query, (c_id,))
+                conn.commit()
+                print(f"✅ [DB] Cleared filename for ID: {c_id}")
+                
+            except Exception as e:
+                conn.rollback()
+                print(f"❌ Error processing ID {c_id}: {str(e)}")
+
+    except Exception as ex:
+        print(f"🔥 Critical Error: {str(ex)}")
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 
 def allowed_file(filename):
@@ -319,26 +390,6 @@ def auto_generate_all_invoices(mocked_date=None):
 
     # 3) AUTO MONTHLY BILL
     generate_monthly_invoices_if_due(mocked_date=today)
-
-
-def calculate_prorated_rent(monthly_price, target_date):
-    """
-    คำนวณค่าเช่าตามจำนวนวันจริงในเดือนนั้นๆ
-    """
-    if not monthly_price:
-        return 0
-        
-    # หาจำนวนวันทั้งหมดในเดือนนั้น (เช่น 28, 30, 31)
-    _, total_days_in_month = calendar.monthrange(target_date.year, target_date.month)
-    
-    # หาราคาต่อวัน
-    price_per_day = monthly_price / total_days_in_month
-    
-    # คำนวณตามจำนวนวันที่อยู่จริง (นับถึงวันที่ย้ายออก)
-    stayed_days = target_date.day
-    prorated_amount = price_per_day * stayed_days
-    
-    return round(prorated_amount, 2)
 
 
 def prepare_placeholder_data(contract, business, options=None, settings=None):
@@ -463,7 +514,6 @@ def update_late_penalty(cursor, invoice_id):
     cursor = conn.cursor(dictionary=True)
     today = get_now(mocked=True).date()
     try:
-        # แก้ไขจุดที่ 1: เพิ่มช่องว่างหน้า FROM และเช็คชื่อคอลัมน์
         cursor.execute(
             "SELECT due_date, total_amount, late_penalty, overdue_days, status, invoice_type "
             "FROM invoices WHERE invoice_id=%s",
@@ -577,7 +627,6 @@ def create_monthly_invoice(cursor, unit_id, billing_month, created_by):
             print("ไม่มีสัญญาเช่าปัจจุบัน")
             return None
     
-
         contract_id = contract['contract_id']
         tenant_id = contract['tenant_id']
         rent_amount = contract['price']

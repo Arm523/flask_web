@@ -114,6 +114,25 @@
                 display: none;
             }
         }
+
+        .discount-table {
+            width: 100%;
+            border: 1px solid #255a39;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+
+        .discount-table th,
+        .discount-table td {
+            border: 1px solid #171d19;
+            padding: 4px 6px;
+            text-align: left;
+        }
+
+        .discount-table th {
+            background-color: #7acc80;
+        }
     </style>
 </head>
 
@@ -142,7 +161,7 @@
                 <th style="text-align:right;">ราคา/วัน</th>
                 <th style="text-align:right;">รวม</th>
             </tr>
-            
+
             {% if invoice.invoice_type == 'daily' %}
             <tr>
                 <td>ค่าเช่าห้อง</td>
@@ -190,6 +209,7 @@
                     <th>รายการ</th>
                     <th style="text-align:center;">จำนวน</th>
                     <th style="text-align:right;">ราคา/หน่วย</th>
+                    <th style="text-align:right;">รวม</th>
                 </tr>
             </thead>
             <tbody>
@@ -198,6 +218,7 @@
                     <td>{{ discount.description }}</td>
                     <td style="text-align:center;">{{ "%.0f"|format(discount.quantity or 1) }}</td>
                     <td style="text-align:right;">{{ "{:,.2f}".format(discount.unit_price or 0) }}</td>
+                    <td style="text-align:right;">{{ "{:,.2f}".format(discount.total_price or 0) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -273,11 +294,22 @@
                     <div class="form-text text-danger">* กรุณาตรวจสอบความถูกต้องของสลิปก่อนยืนยัน</div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100 py-2 fs-5">✔ ยืนยันการชำระเงิน</button>
+                <button type="submit" id="confirmBtn" class="btn btn-primary w-100 py-2 fs-5">✔ ยืนยันการชำระเงิน</button>
             </form>
     </div>
 
     <script>
+        document.querySelector('form').onsubmit = function () {
+            const btn = document.getElementById('confirmBtn');
+            if (!this.checkValidity()) return true; // ถ้ากรอกข้อมูลไม่ครบ ให้เบราว์เซอร์แจ้งเตือนตามปกติ
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> กำลังอัปโหลดข้อมูล...';
+            }
+            return true; // ส่งไฟล์ต้นฉบับทันที
+        };
+
         function updatePaymentUI() {
             const method = document.getElementById('payment_method').value;
             const detailsBox = document.getElementById('payment_details_box');

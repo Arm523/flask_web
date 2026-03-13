@@ -96,8 +96,10 @@
   <h2>
     ใบเเจ้งหนี้ {% if invoice.invoice_type == 'daily' %}
     <span class="badge-type badge-daily">รายวัน</span>
-    {% else %}
+    {% elif invoice.invoice_type == 'monthly' %}
     <span class="badge-type badge-monthly">รายเดือน</span>
+    {% else %}
+    <span class="badge-type badge-monthly">บิลพิเศษ</span>
     {% endif %}
   </h2>
 
@@ -107,8 +109,9 @@
   </p>
   <p>
     <strong>ชื่อผู้เช่า:</strong>
-    {% if invoice.invoice_type == 'daily' %} {{ invoice.guest_fname }} {{
-    invoice.guest_lname }} {% else %} {{ invoice.tenant_fname }} {{
+    {% if invoice.invoice_type == 'daily' or invoice.invoice_type == 'extra_bill' %} {{ invoice.guest_fname }} {{
+    invoice.guest_lname }} {% elif invoice.invoice_type == 'monthly' or invoice.invoice_type == 'extra_bill' %} {{
+    invoice.tenant_fname }} {{
     invoice.tenant_lname }} {% endif %}
   </p>
   <p>
@@ -138,7 +141,7 @@
     <small>*จะมีการปรับตามวันต่อวัน ที่เลยการชําระ</small>
   </p>
 
-  {% if invoice.invoice_type in ['first','monthly','final','extra_bill'] %}
+  {% if invoice.invoice_type in ['first','monthly','final'] %}
   <!-- รายเดือน -->
   <h3><strong>รายละเอียดการชำระเงิน</strong></h3>
   <table>
@@ -172,8 +175,23 @@
           {{ "{:,.2f}".format(invoice.reimburse) }}
         </td>
       </tr>
-      {% endif %} {% if not invoice.is_first_month %} {% if items %} {% for
-      item in items %}
+      {% endif %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if not invoice.is_first_month %}
+  {% if items %}
+  <p><strong>บริการเสริม / ค่าปรับ:</strong></p>
+  <table>
+    <tr>
+      <th>รายการ</th>
+      <th>จำนวน</th>
+      <th>ราคา</th>
+      <th style="text-align: right">ราคารวม</th>
+    </tr>
+    {% for item in items %}
+    <tbody>
       <tr>
         <td>{{ item.description }}</td>
         <td style="text-align: center">
@@ -182,10 +200,15 @@
         <td style="text-align: right">
           {{ "{:,.2f}".format(item.unit_price or 0) }}
         </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(item.total_price or 0) }}
+        </td>
       </tr>
-      {% endfor %} {% endif %} {% endif %}
     </tbody>
+    {% endfor %}
   </table>
+  {% endif %}
+
   {% if meter_adjustment and not invoice.is_first_month and not invoice.is_extra_bill and not invoice.is_daily %}
   <p><strong>รายการ มิเตอร์เก่าค่านํ้า / ค่าไฟ : </strong></p>
   <table>
@@ -263,7 +286,7 @@
   </table>
   {% endif %} {% elif invoice.invoice_type == 'daily' %}
   <!-- รายวัน -->
-  <p><strong>รายละเอียดการชำระเงิน (รายวัน)</strong></p>
+  <p><strong>รายละเอียดการชำระเงิน (รายวัน):</strong></p>
   <table>
     <tr>
       <th>รายการ</th>
@@ -285,6 +308,36 @@
       </tr>
     </tbody>
   </table>
+
+  {% if items %}
+  <p><strong>บริการเสริม / ค่าปรับ:</strong></p>
+  <table>
+    <tr>
+      <th>รายการ</th>
+      <th>จำนวน</th>
+      <th>ราคา</th>
+      <th style="text-align: right">ราคารวม</th>
+    </tr>
+    {% for item in items %}
+    <tbody>
+      <tr>
+        <td>{{ item.description }}</td>
+        <td style="text-align: center">
+          {{ "%.0f"|format(item.quantity or 1) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(item.unit_price or 0) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(item.total_price or 0) }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  {% endfor %}
+
+  {% endif %}
+
   {% if invoice.overdue_days > 0 %}
   <p><strong>ค่าปรับค้างชําระ (ชําระเกินวันที่กําหนด)</strong></p>
   <table>
@@ -309,6 +362,7 @@
         <th>รายการ</th>
         <th style="text-align: center">จำนวน</th>
         <th style="text-align: right">ราคา/หน่วย</th>
+        <th style="text-align: right">ราคารวม</th>
       </tr>
     </thead>
     <tbody>
@@ -320,6 +374,9 @@
         </td>
         <td style="text-align: right">
           {{ "{:,.2f}".format(discount.unit_price or 0) }}
+        </td>
+        <td style="text-align: right">
+          {{ "{:,.2f}".format(discount.total_price or 0) }}
         </td>
       </tr>
       {% endfor %}

@@ -491,6 +491,15 @@
                         </span>
                     </p>
 
+                    {% if room.status_id == 7 %}
+                    <div class="mt-2 p-1 border border-warning rounded bg-white mb-2">
+                        <small class="text-danger fw-bold d-b lock text-center"
+                            style="font-size: 0.75rem; line-height: 1.2;">
+                            ⚠️ ระบบจะไม่สร้างบิลอัตโนมัติในสถานะนี้ <br>(เเนะนําเเจ้งย้ายออกก่อนล่วงหน้าอย่างน้อย 1 เดือน)
+                        </small>
+                    </div>
+                    {% endif %}
+
                     {% set has_alerts =
                     not (room.meter_id or room.meter_water_id) or
                     room.has_pending_bill or
@@ -551,7 +560,8 @@
                     </div>
                     {% endif %}
 
-                    {% if (room.i_status == 'draft' or room.meter_saved == 0) and room.status_id in [2,5,6] %}
+                    {% if (room.i_status == 'draft' or room.meter_saved == 0) and room.status_id in [2,5,6] and
+                    (room.latest_daily_invoice_status == 'draft' or room.meter_saved == 0) %}
                     <button class="btn btn-success btn-sm w-50 mb-1 mt-2 d-flex justify-content-center"
                         onclick="openMeterModal('{{ room.unit_id }}', '{{ room.number }}', '{{ room.previous_electricity_reading or 0 }}', '{{ room.previous_water_reading or 0 }}', '{{ room.current_electricity_reading }}', '{{ room.current_water_reading }}')">
                         ⚡💧 บันทึกค่าน้ำ-ไฟ
@@ -570,7 +580,7 @@
                     </a>
                     {% endif %}
 
-                    {% if room.contract_status == 4 and room.i_status != 'paid' %}
+                    {% if room.contract_status == 4 and not room.status_id == 6 %}
                     <a href="{{ url_for('renew_contracts', contract_id=room.contract_id) }}"
                         class="btn btn-warning btn-sm mt-1">
                         ต่อสัญญา
@@ -671,6 +681,10 @@
                                 'ไม่มีสัญญา')
                                 }}</span></p>
 
+                        {% if room.has_daily_booking %}
+
+                        {% endif %}
+
                         {% if room.status_id == 6 %}
                         <form id="checkout-form-{{ room.id }}"
                             action="{{ url_for('confirm_checkout', unit_id=room.id) }}" method="POST">
@@ -695,7 +709,8 @@
                             <label class="form-label fw-bold text-primary">📢 แจ้งย้ายออกวันที่:</label>
                             <input type="text" id="notice_date" name="notice_date" class="form-control"
                                 data-start-date="{{ room.contract_start if room.contract_start else '' }}"
-                                data-min-stay="{{ room.min_stay_config }}" placeholder="เลือกวันที่แจ้งย้ายออก" required>
+                                data-min-stay="{{ room.min_stay_config }}" placeholder="เลือกวันที่แจ้งย้ายออก"
+                                required>
                             <button type="submit"
                                 class="btn btn-sm btn-warning w-100 mt-2">บันทึกการแจ้งย้ายออก</button>
                         </form>
@@ -705,7 +720,8 @@
                             <label class="form-label fw-bold text-primary">📆 แก้ไขวันที่แจ้งย้ายออก:</label>
                             <input type="text" id="notice_date" name="notice_date" class="form-control"
                                 data-start-date="{{ room.contract_start if room.contract_start else '' }}"
-                                data-min-stay="{{ room.min_stay_config }}" placeholder="เลือกวันที่แจ้งย้ายออก" required>
+                                data-min-stay="{{ room.min_stay_config }}" placeholder="เลือกวันที่แจ้งย้ายออก"
+                                required>
                             <button type="submit"
                                 class="btn btn-sm btn-warning w-100 mt-2">อัปเดตวันที่แจ้งย้ายออก</button>
                         </form>
@@ -1308,10 +1324,12 @@
         loadDonutAndStats();
     });
 
+    // Mockup สำหรับการตั้งค่าวันที่แจ้งย้ายออก (Notice Move-Out Date)
+    const serverToday = new Date("{{ today.strftime('%Y-%m-%d') }}");
     document.querySelectorAll('input[id="notice_date"]').forEach(input => {
-        const startDateStr = input.getAttribute('data-start-date'); 
+        const startDateStr = input.getAttribute('data-start-date');
         const minMonths = parseInt(input.getAttribute('data-min-stay')) || 0;
-        const today = new Date();
+        const today = serverToday;
 
         const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
         let minAllowedDate = nextMonth;
@@ -1329,7 +1347,7 @@
         }
         flatpickr(input, {
             dateFormat: "d-m-Y",
-            minDate: minAllowedDate, 
+            minDate: minAllowedDate,
             locale: "th"
         });
     });

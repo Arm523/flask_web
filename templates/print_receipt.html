@@ -263,6 +263,7 @@
                     <th>รายการ</th>
                     <th style="text-align:center;">จำนวน</th>
                     <th style="text-align:right;">ราคา/หน่วย</th>
+                    <th style="text-align:right;">รวม</th>
                 </tr>
             </thead>
             <tbody>
@@ -271,6 +272,7 @@
                     <td>{{ discount.description }}</td>
                     <td style="text-align:center;">{{ "%.0f"|format(discount.quantity or 1) }}</td>
                     <td style="text-align:right;">{{ "{:,.2f}".format(discount.unit_price or 0) }}</td>
+                    <td style="text-align:right;">{{ "{:,.2f}".format(discount.total_price or 0) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

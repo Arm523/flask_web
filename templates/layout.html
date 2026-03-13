@@ -444,6 +444,14 @@
         <span class="nav-text">Tool Meter</span>
       </a>
       {% endif %}
+
+      {% if session['role'] in ['admin', 'manager'] %}
+      <a href="/download_manual" class="nav-link {% if '/download_manual' in request.path %}active{% endif %}">
+        <i class="bi bi-download"></i>
+        <span class="nav-text">โหลดคู่มือ manual</span>
+      </a>
+      {% endif %}
+
     </ul>
   </div>
 

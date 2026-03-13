@@ -220,9 +220,9 @@
 
             <td>{{ inv.issue_date.strftime('%d/%m/%Y') or '-' }}</td>
 
-            <td>{{ inv.billing_period_start.strftime('%d/%m/%Y') or '-' }}</td>
-
-            <td>{{ inv.billing_period_end.strftime('%d/%m/%Y') or '-' }}</td>
+            <td>{{ inv.billing_period_start.strftime('%d/%m/%Y') if inv.billing_period_start else '-' }}</td>
+            
+            <td>{{ inv.billing_period_end.strftime('%d/%m/%Y') if inv.billing_period_end else '-' }}</td>
 
             <td>{{ inv.due_date.strftime('%d/%m/%Y') or '-' }}</td>
             <td>
