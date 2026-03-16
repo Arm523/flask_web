@@ -93,6 +93,14 @@
                                 value="{{ biz.name }}" required disabled>
                         </div>
                     </div>
+                    <div class="col-md-12">
+                        <label class="form-label small text-muted">ชื่อเจ้าของหอพัก / ผู้มีอำนาจลงนาม</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                            <input type="text" name="owner_name" class="form-control biz-input"
+                                value="{{ biz.owner_name or '' }}" placeholder="เช่น นายสมชาย ใจดี" required disabled>
+                        </div>
+                    </div>
                     <div class="col-md-5">
                         <label class="form-label small text-muted">เลขผู้เสียภาษี</label>
                         <div class="input-group">

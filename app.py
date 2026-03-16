@@ -155,7 +155,7 @@ def login():
             SELECT u.*, r.r_name 
             FROM user u 
             JOIN role r ON u.role_id = r.role_id 
-            WHERE u.username = %s
+            WHERE u.username = %s AND u.is_deleted = 0
         """
         cursor.execute(query, (username,))
         user = cursor.fetchone()
@@ -177,7 +177,7 @@ def login():
             flash('เข้าสู่ระบบสำเร็จ', 'success')
             return redirect(url_for('dashboard'))
         else:
-            flash('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'danger')
+            flash('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือบัญชีถูกระงับ', 'danger')
             return render_template('login.html')
 
     return render_template('login.html')
@@ -2242,6 +2242,7 @@ def business():
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
+        owner_name = request.form.get('owner_name')
         business_name = request.form.get('business_name')
         tax_id = request.form.get('tax_id')
         address = request.form.get('address')
@@ -2254,13 +2255,13 @@ def business():
 
         update_query = """
             UPDATE business
-            SET name=%s, tax_id=%s, address=%s, tel=%s, email=%s , bank_name=%s,bank_account_no=%s,account_name=%s,promptpay_id=%s
+            SET name=%s, tax_id=%s, address=%s, tel=%s, email=%s , bank_name=%s,bank_account_no=%s,account_name=%s,promptpay_id=%s, owner_name=%s
             WHERE id=1
         """
         try:
             cursor.execute(update_query, (business_name,
                            tax_id, address, phone, email, bank_name, 
-                           bank_account_no, account_name, promptpay_id ))
+                           bank_account_no, account_name, promptpay_id, owner_name ))
             conn.commit()
             flash('บันทึกข้อมูลสำเร็จ!', 'success')
         except Exception as e:
@@ -2281,7 +2282,7 @@ def business():
         business_data = {
             'name': '', 'tax_id': '', 'address': '', 'tel': '', 
             'email': '', 'bank_name': '', 'bank_account_no': '', 
-            'account_name': '', 'promptpay_id': ''
+            'account_name': '', 'promptpay_id': '', 'owner_name': ''
         }
 
     return render_template('business.html', biz=business_data)
@@ -3634,7 +3635,7 @@ def remove_user_file(file_type, user_id):
 
 @app.route("/delete_user/<int:user_id>")
 def delete_user(user_id):
-
+    current_user_id = session['user']['user_id']
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -3656,7 +3657,6 @@ def delete_user(user_id):
             )
             conn.commit()
             
-            # --- ถ้าทำงานมาถึงตรงนี้ แปลว่าลบจาก DB สำเร็จ (ไม่มีคนดึง FK ไว้) ---
             # ตามไปลบไฟล์ใน Server
             for key in ['profile_img', 'id_card_file']:
                 if user_files[key]:
@@ -3664,6 +3664,11 @@ def delete_user(user_id):
                     path = os.path.join(folder, user_files[key])
                     if os.path.exists(path):
                         os.remove(path)
+
+            if user_id == current_user_id:
+                session.clear() 
+                flash("บัญชีของคุณถูกลบเรียบร้อยแล้ว ระบบได้ทำการออกจากระบบอัตโนมัติ", "success")
+                return redirect(url_for('login')) 
             
             flash(f'ลบผู้ใช้งาน ID: {user_id} และไฟล์ทั้งหมดเรียบร้อยแล้ว', 'success')
 
@@ -3679,6 +3684,11 @@ def delete_user(user_id):
                     session.get('user', {}).get('user_id')
                 )
                 conn.commit()
+                if user_id == current_user_id:
+                    session.clear() 
+                    flash("บัญชีของคุณถูกลบเรียบร้อยแล้ว ระบบได้ทำการออกจากระบบอัตโนมัติ", "success")
+                    return redirect(url_for('login')) 
+                
                 flash(f'User นี้มีข้อมูลผูกไว้กับระบบอื่น จึงเปลี่ยนเป็น "ปิดการใช้งาน" แทนการลบถาวร', 'info')
             else:
                 # Error อื่นๆ ที่ไม่ใช่ FK
@@ -5380,8 +5390,6 @@ def download_manual():
         filename, 
         as_attachment=True  # บังคับให้ Browser ดาวน์โหลดแทนการพยายามเปิดอ่าน
     )
-
-
 
 # ---------------------- RUN APP ----------------------
 if __name__ == '__main__':

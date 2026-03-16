@@ -1324,8 +1324,10 @@
         loadDonutAndStats();
     });
 
-    // Mockup สำหรับการตั้งค่าวันที่แจ้งย้ายออก (Notice Move-Out Date)
-    const serverToday = new Date("{{ today.strftime('%Y-%m-%d') }}");
+    const serverToday = new Date("{{ today.strftime('%Y-%m-%d') if today else '' }}");
+    if (isNaN(serverToday.getTime())) {
+        console.error("Invalid Date from server, using client date instead.");
+    }
     document.querySelectorAll('input[id="notice_date"]').forEach(input => {
         const startDateStr = input.getAttribute('data-start-date');
         const minMonths = parseInt(input.getAttribute('data-min-stay')) || 0;
