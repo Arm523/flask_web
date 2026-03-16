@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from functools import wraps
 from datetime import datetime, date, timedelta
 import os
+from dotenv import load_dotenv
 import re
 from werkzeug.utils import secure_filename
 from docx import Document
@@ -40,12 +41,12 @@ UPLOAD_ID_CARD_TENANTS = os.path.join(BASE_DIR, 'uploads', 'id_card_tenants')
 PATHS = [UPLOAD_ID_CARD, EXPENSE_UPLOAD_PATH, INCOME_UPLOAD_PATH, UPLOAD_PROFILE, UPLOAD_ID_CARD_TENANTS, CONTRACTS_FOLDER, UPLOAD_ID_CARD_TENANTS]
 for path in PATHS:
     os.makedirs(path, exist_ok=True)
-    
+
+load_dotenv()    
+
 app = Flask(__name__)
 app.register_blueprint(api)
-app.secret_key = 'your-super-secret-key-that-never-changes' 
-#ในการใช้งานจริง (Production) เราจะไม่เขียนรหัสไว้ใน Code ตรงๆ แต่จะดึงมาจากไฟล์ .env แทน เช่น 
-# app.secret_key = os.getenv("SECRET_KEY", "default_key_for_dev")
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15) # ตั้งเวลาที่ต้องการ
 app.config['SESSION_REFRESH_EACH_REQUEST'] = True 
 

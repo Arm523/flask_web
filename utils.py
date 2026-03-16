@@ -65,10 +65,10 @@ def generate_slip_filename(file, prefix, ref_id):
 def get_db_connection():
     try:
         conn = mysql.connector.connect(
-            host='192.168.137.20',
-            user='admin',
-            password='1234',
-            database='apartment',
+            host=os.getenv('DB_HOST'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD'),
+            database=os.getenv('DB_NAME')
         )
         return conn
     except Error as e:
