@@ -104,7 +104,6 @@ endblock %} {% block content %}
                 src="{{ url_for('static', filename='profile_user/' + user.profile_img) }}?v={{ range(1, 9999) | random }}"
                 id="profile-preview" class="preview-img mb-3">
               {% else %}
-              {# ถ้าไม่มีรูป ให้เช็คเพศเพื่อแสดงรูป Default เหมือนใน Layout #}
               {% if user.gender == 'female' %}
               <img src="{{ url_for('static', filename='profile_user/default-female.png') }}" id="profile-preview"
                 class="preview-img mb-3">
@@ -139,11 +138,27 @@ endblock %} {% block content %}
               </div>
               <div class="col-md-4">
                 <label class="form-label">สิทธิ์การใช้งาน</label>
+                {% set current_user_role = session['role'] %}
+
+                {% if current_user_role == 'admin' %}
                 <select name="role_id" class="form-select" required>
                   <option value="1" {% if user.role_id|string=='1' %}selected{% endif %}>Admin (ผู้ดูแลระบบ)</option>
                   <option value="2" {% if user.role_id|string=='2' %}selected{% endif %}>Manager (ผู้จัดการ)</option>
                   <option value="3" {% if user.role_id|string=='3' %}selected{% endif %}>Staff (พนักงาน)</option>
                 </select>
+                {% elif current_user_role == 'manager' and not is_target_admin %}
+                <select name="role_id" class="form-select" required>
+                  <option value="2" {% if user.role_id|string=='2' %}selected{% endif %}>Manager (ผู้จัดการ)</option>
+                  <option value="3" {% if user.role_id|string=='3' %}selected{% endif %}>Staff (พนักงาน)</option>
+                </select>
+
+                {% else %}
+                <input type="hidden" name="role_id" value="{{ user.role_id }}">
+                <input type="text" class="form-control"
+                  value="{% if user.role_id|string=='1' %}Admin{% elif user.role_id|string=='2' %}Manager{% else %}Staff{% endif %}"
+                  readonly>
+                <small class="text-danger">* คุณไม่มีสิทธิ์เปลี่ยนระดับสิทธิ์นี้</small>
+                {% endif %}
               </div>
               <div class="col-md-4">
                 <label class="form-label">อีเมล</label>
