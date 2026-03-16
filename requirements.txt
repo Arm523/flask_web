@@ -5,7 +5,7 @@ beautifulsoup4
 python-dateutil
 APScheduler 
 num2words
-pymodbus
+pymodbus==2.5.3
 pyserial
 requests
 gunicorn

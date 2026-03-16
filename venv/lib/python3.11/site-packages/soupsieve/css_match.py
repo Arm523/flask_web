@@ -258,7 +258,7 @@ class _DocumentNav:
         """Get parent."""
 
         parent = el.parent if el is not None else None
-        if no_iframe and parent is not None and self.is_iframe(parent):
+        if no_iframe and parent is not None and self.is_iframe(parent):  # pragma: no cover
             parent = None
         return parent
 
@@ -447,9 +447,18 @@ class Inputs:
     def validate_week(year: int, week: int) -> bool:
         """Validate week."""
 
-        max_week = datetime.strptime(f"{12}-{31}-{year}", "%m-%d-%Y").isocalendar()[1]
-        if max_week == 1:
-            max_week = 53
+        # Validate an ISO week number for `year`.
+        #
+        # Per ISO 8601 rules, the last ISO week of a year is the week
+        # containing Dec 28. Using Dec 28 guarantees we obtain the
+        # correct ISO week-number for the final week of `year`, even in
+        # years where Dec 31 falls in ISO week 01 of the following year.
+        #
+        # Example: if Dec 31 is a Thursday the year's last ISO week will
+        # be week 53; if Dec 31 is a Monday and that week is counted as
+        # week 1 of the next year, Dec 28 still belongs to the final
+        # week of the current ISO year and yields the correct max week.
+        max_week = datetime(year, 12, 28).isocalendar()[1]
         return 1 <= week <= max_week
 
     @staticmethod
@@ -1250,7 +1259,7 @@ class CSSMatch(_DocumentNav):
         # Use cached meta language.
         if found_lang is None and self.cached_meta_lang:
             for cache in self.cached_meta_lang:
-                if root is cache[0]:
+                if root is not None and cast(str, root) is cache[0]:
                     found_lang = cache[1]
 
         # If we couldn't find a language, and the document is HTML, look to meta to determine language.
