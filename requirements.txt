@@ -9,3 +9,4 @@ pymodbus
 pyserial
 requests
 gunicorn
+python-dotenv
