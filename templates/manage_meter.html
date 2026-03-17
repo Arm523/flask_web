@@ -70,7 +70,8 @@
                             </div>
                             <div class="mb-3">
                                 <label class="fw-bold text-success">ค่าที่อ่านหลัก (Key)</label>
-                                <select id="elec_unit_key" name="elec_unit_key" class="form-select"></select>
+                                <select id="elec_unit_key" name="elec_unit_key" class="form-select">
+                                </select>
                             </div>
                             <div class="mb-2"><label>Serial *</label><input type="text" name="electricity_serial_meter"
                                     class="form-control" required></div>
@@ -153,7 +154,8 @@
                             </div>
                             <div class="mb-3">
                                 <label class="fw-bold text-info">ค่าที่อ่านหลัก (Key)</label>
-                                <select id="water_unit_key" name="water_unit_key" class="form-select"></select>
+                                <select id="water_unit_key" name="water_unit_key" class="form-select">
+                                </select>
                             </div>
                             <div class="mb-2"><label>Serial *</label><input type="text" name="water_serial"
                                     class="form-control" required></div>
@@ -256,8 +258,8 @@
         form.reset();
         document.getElementById('modalTitle').innerText = 'จัดการห้อง ' + unit.name;
         document.getElementById('m_unit_id').value = unit.unit_id;
-        document.getElementById('display_elec_id').innerText = 'ID: ' + unit.mid;
-        document.getElementById('display_water_id').innerText = 'ID: ' + unit.mwid;
+        document.getElementById('display_elec_id').innerText = 'ID: ' + (unit.mid || '-');
+        document.getElementById('display_water_id').innerText = 'ID: ' + (unit.mwid || '-');
 
         // ไฟฟ้า
         form.elements['electricity_module'].value = unit.electricity_module || '';

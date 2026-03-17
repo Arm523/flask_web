@@ -162,18 +162,15 @@
                                 <select name="role_id" class="form-select" required>
                                     <option value="" selected disabled>-- เลือกสิทธิ์การใช้งาน --</option>
 
-                                    {# ถ้าเป็น Admin ให้เลือกได้ทุกอย่าง #}
                                     {% if session['role'] == 'admin' %}
                                     <option value="1">Admin (ผู้ดูแลระบบ)</option>
                                     <option value="2">Manager (ผู้จัดการ)</option>
                                     <option value="3">Staff (พนักงาน)</option>
 
-                                    {# ถ้าเป็น Manager ให้เลือกได้แค่ Manager และ Staff #}
                                     {% elif session['role'] == 'manager' %}
                                     <option value="2">Manager (ผู้จัดการ)</option>
                                     <option value="3">Staff (พนักงาน)</option>
 
-                                    {# ถ้าเป็น Staff ให้เลือกได้แค่ Staff เท่านั้น #}
                                     {% else %}
                                     <option value="3" selected>Staff (พนักงาน)</option>
                                     {% endif %}

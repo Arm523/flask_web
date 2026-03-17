@@ -122,7 +122,7 @@ def role_required(allowed_roles):
     return decorator
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(job_read_meters_task, 'cron', hour=0, minute=0, id='read_meter_hourly')
+scheduler.add_job(job_read_meters_task, 'cron', hour=16, minute=23, id='read_meter_hourly')
 scheduler.add_job(job_invoices_task, 'cron', hour=0, minute=0, id='create_invoices')
 
 scheduler.start()
@@ -2727,9 +2727,7 @@ def manage_meter():
     except Exception as e:
         print(f"JSON Load Error: {e}")
 
-    # ---------------------------------------------------------
     # PART A: จัดการการบันทึกข้อมูล (POST)
-    # ---------------------------------------------------------
     if request.method == 'POST':
         try:
             if session.get('role') not in  ['admin', 'manager']:
@@ -2748,23 +2746,23 @@ def manage_meter():
             elec_api_token = request.form.get('elec_api_token')
             water_base_url = request.form.get('water_base_url')
             water_api_token = request.form.get('water_api_token')
-
+            
             # --- จัดการไฟฟ้า ---
             cursor.execute("SELECT id, serial_meter FROM meter WHERE unit_id=%s LIMIT 1", (unit_id,))
             m_exists = cursor.fetchone()
 
             elec_data = (
-                request.form.get('electricity_serial_meter'), 
-                request.form.get('electricity_slave_id'),
+                request.form.get('electricity_serial_meter') or None, 
+                request.form.get('electricity_slave_id') or None,
                 request.form.get('electricity_module'), 
                 datetime.strptime(request.form.get('installdate_elec'), '%d/%m/%Y').strftime('%Y-%m-%d') if request.form.get('installdate_elec') else None,
-                request.form.get('electricity_comport'), 
-                request.form.get('electricity_ip'),
+                request.form.get('electricity_comport')or None, 
+                request.form.get('electricity_ip')or None,
                 elec_port,
                 elec_base_url,  
                 elec_api_token, 
-                request.form.get('electricity_status'),
-                request.form.get('elec_unit_key'), 
+                request.form.get('electricity_status')or None,
+                request.form.get('elec_unit_key')or None, 
                 now, user_id
             )
 
@@ -2776,7 +2774,7 @@ def manage_meter():
                         comport, ip, port, base_url, api_auth_token, 
                         status, unit_key, created_at, created_by, 
                         unit_id, current_reading
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.00)
                 """, elec_data + (unit_id,))
                 
                 m_id = cursor.lastrowid
@@ -2837,17 +2835,17 @@ def manage_meter():
             mw_exists = cursor.fetchone()
             
             water_data = (
-                request.form.get('water_serial'), 
-                request.form.get('water_slave_id'),
+                request.form.get('water_serial') or None, 
+                request.form.get('water_slave_id') or None,
                 request.form.get('water_module'),
                 datetime.strptime(request.form.get('installdate_water'), '%d/%m/%Y').strftime('%Y-%m-%d') if request.form.get('installdate_water') else None,
-                request.form.get('water_comport'), 
-                request.form.get('water_ip'), 
+                request.form.get('water_comport') or None, 
+                request.form.get('water_ip') or None, 
                 water_port,
                 water_base_url,  
                 water_api_token,
-                request.form.get('water_status'),
-                request.form.get('water_unit_key'), 
+                request.form.get('water_status') or None,
+                request.form.get('water_unit_key') or None, 
                 now, user_id
             )
 

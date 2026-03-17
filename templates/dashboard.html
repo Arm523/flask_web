@@ -439,7 +439,7 @@
                     </div>
 
                     <button id="syncBtn" class="btn btn-primary">
-                        🔄 อ่านค่ามิเตอร์ล่าสุดลงทุกบิล Draft
+                        🔄 ดึงข้อมูลประวัติที่อ่านล่าสุด ลงทุกบิล Draft
                     </button>
                 </div>
             </div>
@@ -560,7 +560,7 @@
                     </div>
                     {% endif %}
 
-                    {% if (room.i_status == 'draft' or room.meter_saved == 0) and room.status_id in [2,5,6] and
+                    {% if (room.i_status == 'draft' or room.meter_saved == 0) and room.status_id in [2,5,6] or
                     (room.latest_daily_invoice_status == 'draft' or room.meter_saved == 0) %}
                     <button class="btn btn-success btn-sm w-50 mb-1 mt-2 d-flex justify-content-center"
                         onclick="openMeterModal('{{ room.unit_id }}', '{{ room.number }}', '{{ room.previous_electricity_reading or 0 }}', '{{ room.previous_water_reading or 0 }}', '{{ room.current_electricity_reading }}', '{{ room.current_water_reading }}')">
@@ -685,7 +685,7 @@
 
                         {% endif %}
 
-                        {% if room.status_id == 6 %}
+                        {% if room.status_id == 6 or room.has_daily_booking%}
                         <form id="checkout-form-{{ room.id }}"
                             action="{{ url_for('confirm_checkout', unit_id=room.id) }}" method="POST">
                             <button type="button" class="btn btn-success w-100"
