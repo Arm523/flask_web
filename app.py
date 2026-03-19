@@ -3807,7 +3807,7 @@ def confirm_payment(invoice_id):
     
             file.save(os.path.join(INCOME_UPLOAD_PATH, slip_filename))
             
-        if invoice['contract_status'] in [2, 3] and invoice['status_id'] != 6 and invoice['invoice_type'] != 'extra_bill':
+        if invoice['contract_status'] == 2 and invoice['status_id'] != 6 and invoice['invoice_type'] != 'extra_bill':
             cursor.execute("""
                 UPDATE invoices
                 SET status = 'paid', payment_date = NOW(), payment_method = %s, payee = %s, slip_file = %s
@@ -3820,6 +3820,30 @@ def confirm_payment(invoice_id):
                 SET u.status_id = 2
                 WHERE i.invoice_id = %s
             """, (invoice_id,))
+
+            cursor.execute("""
+                UPDATE contracts c
+                JOIN invoices i ON c.contract_id = i.contract_id
+                SET c.status = 3
+                WHERE i.invoice_id = %s
+            """, (invoice_id,))
+
+            record_transaction(
+                cursor, 
+                amount=invoice['total_amount'],
+                t_type='income',
+                category='ค่าเช่ารายเดือน',
+                ref_invoice_id=invoice_id,
+                note=f"รับชำระค่าเช่าห้อง {invoice['room_name']}",
+                created_by=payee_id
+            )
+
+        elif invoice['contract_status'] == 3 and (invoice['status_id'] != 6 or invoice['status_id'] == 7) and invoice['invoice_type'] != 'extra_bill':
+            cursor.execute("""
+                UPDATE invoices
+                SET status = 'paid', payment_date = NOW(), payment_method = %s, payee = %s, slip_file = %s
+                WHERE invoice_id = %s
+            """, (payment_method, payee_id, slip_filename, invoice_id))
 
             cursor.execute("""
                 UPDATE contracts c
