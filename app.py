@@ -128,7 +128,7 @@ def start_scheduled_jobs():
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         
         scheduler = BackgroundScheduler()
-        scheduler.add_job(job_read_meters_task, 'cron', hour=16, minute=59, id='read_meter_hourly')
+        scheduler.add_job(job_read_meters_task, 'cron', hour=0, minute=0, id='read_meter_hourly')
         scheduler.add_job(job_invoices_task, 'cron', hour=0, minute=0, id='create_invoices')
         scheduler.start()
         
