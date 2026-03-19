@@ -612,7 +612,7 @@ def create_monthly_invoice(cursor, unit_id, billing_month, created_by):
     """
     try:
         cursor.execute("""
-            SELECT c.contract_id, c.tenant_id, c.price, c.contract_start, c.contract_end, c.billing_day,
+            SELECT c.contract_id, c.tenant_id, c.price, c.contract_start, c.contract_end,
                 c.electricity_start, c.water_start, c.status
             FROM contracts c
             JOIN unit u ON c.room_id = u.unit_id  
@@ -793,8 +793,7 @@ def generate_monthly_invoices_if_due(mocked_date=None):
         cursor.execute("""
             SELECT 
                 c.contract_id, c.room_id AS unit_id, c.tenant_id, c.price,
-                c.contract_start, c.contract_end,
-                c.billing_day
+                c.contract_start, c.contract_end
             FROM contracts c
             WHERE c.status IN (2, 3)
         """)
@@ -864,7 +863,7 @@ def generate_monthly_invoices_if_due(mocked_date=None):
                 None
             )
 
-            print(f"🧾 create_monthly_invoice() return = {invoice_id}")
+            print(f"🧾 () return = {invoice_id}")
 
             if not invoice_id:
                 print("❌ ERROR → create_monthly_invoice ไม่คืน invoice_id\n")
