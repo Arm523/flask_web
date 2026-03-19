@@ -43,7 +43,7 @@ def get_now(mocked=False):
     else:
         return datetime.now()
 
-today = get_now(mocked=True).date()
+today = get_now(mocked=False).date()
 
 def generate_slip_filename(file, prefix, ref_id):
     """

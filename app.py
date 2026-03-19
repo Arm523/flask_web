@@ -21,7 +21,7 @@ from api import api
 
 from werkzeug.security import check_password_hash,generate_password_hash
 
-today = get_now(mocked=True).date()
+today = get_now(mocked=False).date()
 
 scheduler = BackgroundScheduler()
 
