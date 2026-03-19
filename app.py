@@ -18,7 +18,7 @@ import json
 from master_modbus import read_meter_tool, write_meter_tool, read_meter_unit_read
 from apscheduler.schedulers.background import BackgroundScheduler
 from api import api
-
+import fcntl
 from werkzeug.security import check_password_hash,generate_password_hash
 
 today = get_now(mocked=False).date()
@@ -121,11 +121,24 @@ def role_required(allowed_roles):
         return decorated_function
     return decorator
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(job_read_meters_task, 'cron', hour=16, minute=23, id='read_meter_hourly')
-scheduler.add_job(job_invoices_task, 'cron', hour=0, minute=0, id='create_invoices')
+lock_file = open(".scheduler.lock", "wb")
 
-scheduler.start()
+def start_scheduled_jobs():
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(job_read_meters_task, 'cron', hour=16, minute=59, id='read_meter_hourly')
+        scheduler.add_job(job_invoices_task, 'cron', hour=0, minute=0, id='create_invoices')
+        scheduler.start()
+        
+        print("✅ [MASTER] Scheduler started successfully on this worker.")
+        
+    except IOError:
+        # 4. ถ้าจองไม่สำเร็จ (Slave Workers) ให้ข้ามไป ไม่ต้องรัน Scheduler
+        print("❌ [SLAVE] Scheduler is already running on another worker. Skipping...")
+
+start_scheduled_jobs()
 
 # สร้างโฟลเดอร์นี้ถ้ายังไม่มี
 if not os.path.exists(UPLOAD_FOLDER):
