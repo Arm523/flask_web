@@ -8,5 +8,4 @@ num2words
 pymodbus==2.5.3
 pyserial
 requests
-gunicorn
 python-dotenv
