@@ -3505,11 +3505,29 @@ def user_settings():
 
 @app.route("/edit_user/<int:user_id>", methods=["GET", "POST"])
 def edit_user(user_id):
+    current_user_id = session['user']['user_id']
+    current_role_id = int(session['user']['role_id'])
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    cursor.execute("SELECT * FROM user WHERE user_id = %s", (user_id,))
+    user_data = cursor.fetchone()
+
+    if not user_data:
+        flash('ไม่พบผู้ใช้งานนี้ในระบบ', 'danger')
+        return redirect(url_for('user_settings'))
+
+    target_role_id = int(user_data['role_id'])
+
+    if current_role_id == 3 and current_user_id != user_id:
+        flash('พนักงาน (Staff) มีสิทธิ์แก้ไขได้เฉพาะข้อมูลของตนเองเท่านั้น', 'warning')
+        return redirect(url_for('user_settings'))
+
+    if current_role_id == 2 and target_role_id == 1:
+        flash('Manager ไม่สามารถแก้ไขข้อมูลของ Admin ได้', 'danger')
+        return redirect(url_for('user_settings'))
+
     if request.method == 'POST':
-        # รับค่าและตัดช่องว่าง
         fname = request.form.get('fname', '').strip()
         lname = request.form.get('lname', '').strip()
         email = request.form.get('email', '').strip()
@@ -3648,16 +3666,29 @@ def remove_user_file(file_type, user_id):
 @app.route("/delete_user/<int:user_id>")
 def delete_user(user_id):
     current_user_id = session['user']['user_id']
+    current_role_id = int(session['user']['role_id'])
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     try:
-        cursor.execute("SELECT profile_img, id_card_file FROM user WHERE user_id = %s", (user_id,))
+        cursor.execute("SELECT profile_img, id_card_file, role_id FROM user WHERE user_id = %s", (user_id,))
         user_files = cursor.fetchone()
 
         if not user_files:
             flash('ไม่พบผู้ใช้งานนี้ในระบบ', 'danger')
             return redirect(url_for('user_settings'))
+
+        target_role_id = int(user_files['role_id'])
+
+        if current_role_id == 3:
+            if current_user_id != user_id:
+                flash('พนักงาน (Staff) มีสิทธิ์ลบได้เฉพาะบัญชีของตนเองเท่านั้น', 'warning')
+                return redirect(url_for('user_settings'))
+
+        elif current_role_id == 2:
+            if target_role_id == 1: 
+                flash('Manager ไม่สามารถลบ Admin ได้', 'danger')
+                return redirect(url_for('user_settings'))
 
         # 2. ลองสั่ง DELETE เลย
         try:
@@ -4310,14 +4341,16 @@ def print_receipt(invoice_id):
 
     cursor.execute("""
         SELECT i.*, 
-            u.name AS room_name, u.building, u.floor,
+            u.name AS room_name, u.building, u.floor, ty.price_daily,
             t.fname AS tenant_fname, t.lname AS tenant_lname
         FROM invoices i
-        JOIN unit u ON i.unit_id = u.unit_id
+        LEFT JOIN unit u ON i.unit_id = u.unit_id
+        LEFT JOIN type ty ON u.type_unit_id = ty.type_id
         LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
         WHERE i.invoice_id = %s
     """, (invoice_id,))
     invoice = cursor.fetchone()
+    
 
     display_start = invoice['billing_period_start']
     display_end =  invoice['billing_period_end']
@@ -4702,7 +4735,6 @@ def update_settings():
 
 @app.route('/print_invoice/<int:invoice_id>')
 def print_invoice(invoice_id):
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -5366,54 +5398,6 @@ def manage_config():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/print_all_paid_receipts')
-def print_all_paid_receipts():
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    # 1. ดึงข้อมูลใบเสร็จที่ชำระแล้วในเดือนปัจจุบัน
-    cursor.execute("""
-        SELECT i.*, u.name AS room_name, u.building, u.floor,
-               t.fname AS tenant_fname, t.lname AS tenant_lname
-        FROM invoices i
-        JOIN unit u ON i.unit_id = u.unit_id
-        LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
-        WHERE i.status = 'paid'
-          AND MONTH(i.created_at) = MONTH(CURRENT_DATE())
-          AND YEAR(i.created_at) = YEAR(CURRENT_DATE())
-        ORDER BY u.name ASC
-    """)
-    receipts_list = cursor.fetchall()
-
-    # 2. Loop ดึงรายละเอียดลงในแต่ละใบ (ใช้ชื่อ Key ใหม่ป้องกัน TypeError)
-    for inv in receipts_list:
-        inv_id = inv['invoice_id']
-        inv['is_extra_bill'] = (inv['invoice_type'] == 'extra_bill')
-        inv['is_first_month'] = (inv['invoice_type'] == 'first')
-        
-        # รายการบริการ (เปลี่ยนชื่อเป็น bill_items)
-        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s AND type IN ('option','penalty','service')", (inv_id,))
-        inv['bill_items'] = cursor.fetchall()
-        
-        # ส่วนลด (เปลี่ยนชื่อเป็น bill_discount)
-        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s AND type = 'discount'", (inv_id,))
-        inv['bill_discount'] = cursor.fetchall()
-        
-        # มิเตอร์เก่า (เปลี่ยนชื่อเป็น bill_meter_adj)
-        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s AND type = 'meter_adjustment'", (inv_id,))
-        inv['bill_meter_adj'] = cursor.fetchall()
-
-    # ดึงค่าปรับต่อวัน
-    cursor.execute("SELECT setting_value FROM settings WHERE setting_key='late_fee_per_day'")
-    row = cursor.fetchone()
-    late_fee_per_day = float(row['setting_value']) if row else 100
-
-    cursor.close()
-    conn.close()
-
-    return render_template("print_all_receipts.html", 
-                           receipts=receipts_list, 
-                           late_fee_per_day=late_fee_per_day)
 
 @app.route('/download_manual')
 @role_required(['admin', 'manager'])

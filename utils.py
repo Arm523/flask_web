@@ -39,7 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=False):
     if mocked:
-        return datetime(2026, 12, 24, 9, 0, 0)
+        return datetime(2026, 3, 24, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -512,7 +512,7 @@ def update_late_penalty(cursor, invoice_id):
     """อัปเดต late_penalty และ overdue_days ของ invoice"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    today = get_now(mocked=True).date()
+    today = get_now(mocked=False).date()
     try:
         cursor.execute(
             "SELECT due_date, total_amount, late_penalty, overdue_days, status, invoice_type "

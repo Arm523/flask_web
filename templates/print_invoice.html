@@ -141,9 +141,11 @@
     <small>*จะมีการปรับตามวันต่อวัน ที่เลยการชําระ</small>
   </p>
 
-  {% if invoice.invoice_type in ['first','monthly','final'] %}
+  {% if invoice.invoice_type in ['first','monthly','final','extra_bill'] %}
   <!-- รายเดือน -->
   <h3><strong>รายละเอียดการชำระเงิน</strong></h3>
+
+  {% if invoice.invoice_type != 'extra_bill' %}
   <table>
     <tr>
       <th>รายการ</th>
@@ -284,7 +286,9 @@
       </tr>
     </tbody>
   </table>
-  {% endif %} {% elif invoice.invoice_type == 'daily' %}
+  {% endif %} {% endif %} 
+    
+  {% elif invoice.invoice_type == 'daily' %}
   <!-- รายวัน -->
   <p><strong>รายละเอียดการชำระเงิน (รายวัน):</strong></p>
   <table>
