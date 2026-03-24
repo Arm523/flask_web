@@ -37,9 +37,9 @@ def save_config(path, data):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
-def get_now(mocked=False):
+def get_now(mocked=True):
     if mocked:
-        return datetime(2026, 3, 24, 9, 0, 0)
+        return datetime(2026, 4, 2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -630,7 +630,7 @@ def create_monthly_invoice(cursor, unit_id, billing_month, created_by):
         contract_id = contract['contract_id']
         tenant_id = contract['tenant_id']
         rent_amount = contract['price']
-        billing_day = contract['billing_day'] or 1
+        billing_day =  1
 
         # 2. ดึงค่า settings
         cursor.execute("""
@@ -830,7 +830,7 @@ def generate_monthly_invoices_if_due(mocked_date=None):
                 continue
 
             # 2.2) คำนวณวันออกบิล
-            billing_day = c['billing_day'] or 1
+            billing_day = 1
             print(f"📅 billing_day = {billing_day}")
 
             next_billing_date = calculate_next_billing_date(

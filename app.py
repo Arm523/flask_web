@@ -21,7 +21,7 @@ from api import api
 import fcntl
 from werkzeug.security import check_password_hash,generate_password_hash
 
-today = get_now(mocked=False).date()
+today = get_now(mocked=True).date()
 
 scheduler = BackgroundScheduler()
 
@@ -191,7 +191,7 @@ def login():
             flash('เข้าสู่ระบบสำเร็จ', 'success')
             return redirect(url_for('dashboard'))
         else:
-            flash('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือบัญชีถูกระงับ', 'danger')
+            flash('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'danger')
             return render_template('login.html')
 
     return render_template('login.html')
@@ -505,6 +505,7 @@ def dashboard():
             'contract_id': contract['contract_id'] if contract else None,
             'contract_status': contract_status,
             'expired_contract': expired_contract,
+            'amount': contract.get('amount') if contract else None,
             'contract_file': contract.get('contracts_file') if contract else None,
             'contract_start': contract.get('contract_start') if contract else None,
             'contract_end': contract.get('contract_end') if contract else None,

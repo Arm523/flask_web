@@ -561,7 +561,7 @@
                     {% endif %}
 
                     {% if (room.i_status == 'draft' or room.meter_saved == 0) and room.status_id in [2,5,6] or
-                    (room.latest_daily_invoice_status == 'draft' or room.meter_saved == 0) %}
+                    (room.latest_daily_invoice_status == 'draft' and room.meter_saved == 0) %}
                     <button class="btn btn-success btn-sm w-50 mb-1 mt-2 d-flex justify-content-center"
                         onclick="openMeterModal('{{ room.unit_id }}', '{{ room.number }}', '{{ room.previous_electricity_reading or 0 }}', '{{ room.previous_water_reading or 0 }}', '{{ room.current_electricity_reading }}', '{{ room.current_water_reading }}')">
                         ⚡💧 บันทึกค่าน้ำ-ไฟ
@@ -610,7 +610,7 @@
                     <p class="small text-muted mt-2">👤
                         {{ room.guest_fname ~ ' ' ~ room.guest_lname if room.guest_fname else (room.tenant_name or
                         '-')
-                        }}
+                        }} | จํานวนผู้อาศัย: {{ room.amount if room.tenant_name else ( 1 or '-') }} คน
                     </p>
 
                     <button class="btn btn-outline-primary btn-sm w-100" type="button" data-bs-toggle="collapse"
