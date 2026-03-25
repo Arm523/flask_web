@@ -105,5 +105,49 @@
         },
         "config_register": {},
         "path": "/123/log"
+    },
+    "ss": {
+        "type": "serial",
+        "read_register": {
+            "current": {
+                "address": 57872,
+                "count": 2,
+                "data_type": "bcd",
+                "gain": 0.001,
+                "word_swap": false
+            },
+            "total_kWh": {
+                "address": 16384,
+                "count": 2,
+                "data_type": "float32",
+                "gain": 1,
+                "word_swap": false
+            },
+            "voltage": {
+                "address": 57616,
+                "count": 2,
+                "data_type": "bcd",
+                "gain": 0.01,
+                "word_swap": false
+            }
+        },
+        "config_register": {
+            "Voltage": {
+                "address": 8192,
+                "count": 2,
+                "data_type": "float32",
+                "gain": 1,
+                "word_swap": false
+            },
+            "baud": {
+                "address": 12,
+                "count": 1,
+                "data_type": "int16",
+                "gain": 1,
+                "word_swap": false
+            }
+        },
+        "baudrate": 9600,
+        "parameters": "8N1"
     }
 }

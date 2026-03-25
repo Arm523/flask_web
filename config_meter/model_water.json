@@ -62,5 +62,35 @@
         },
         "config_register": {},
         "path": "/234/log"
+    },
+    "DD1111_WATER": {
+        "type": "serial",
+        "read_register": {
+            "total_m3": {
+                "address": 4352,
+                "count": 2,
+                "data_type": "bcd",
+                "gain": 0.01,
+                "word_swap": false
+            }
+        },
+        "config_register": {
+            "meter_no": {
+                "address": 61440,
+                "count": 3,
+                "data_type": "bcd",
+                "gain": 1,
+                "word_swap": false
+            },
+            "total_m3": {
+                "address": 61504,
+                "count": 1,
+                "data_type": "int16",
+                "gain": 1,
+                "word_swap": false
+            }
+        },
+        "baudrate": 1200,
+        "parameters": "8N1"
     }
 }

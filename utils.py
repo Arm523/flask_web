@@ -39,7 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=True):
     if mocked:
-        return datetime(2026, 4, 2, 9, 0, 0)
+        return datetime(2026, 4, 8, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -220,8 +220,8 @@ def mark_contracts_expiring(today, cursor):
     cursor.execute("UPDATE contracts SET status = 4 WHERE status IN (2, 3) AND contract_end <= DATE_ADD(%s, INTERVAL 30 DAY)", (today,))
     
     cursor.execute("""
-        UPDATE unit u JOIN (SELECT unit_id, MAX(billing_period_end) as latest_end FROM invoices WHERE invoice_type='daily' AND status='paid' GROUP BY unit_id) i ON i.unit_id = u.unit_id
-        SET u.status_id = 6 WHERE i.latest_end <= %s AND u.status_id = 2
+        UPDATE unit u JOIN (SELECT unit_id, MAX(billing_period_end) as latest_end FROM invoices WHERE invoice_type='daily' GROUP BY unit_id) i ON i.unit_id = u.unit_id
+        SET u.status_id = 6 WHERE i.latest_end <= %s AND u.status_id IN (2,7)
     """, (today,))
 
     print("✅ เสร็จสิ้นการรันระบบบำรุงรักษาประจำวัน")
@@ -765,7 +765,13 @@ def create_monthly_invoice(cursor, unit_id, billing_month, created_by):
             created_by,          
             invoice_id
         ))
-
+        add_audit_log(
+            cursor, 
+            'INVOICE', 
+            'CREATE', 
+            f'สร้างบิลเดือน {billing_month.month} ห้อง ID: {unit_id}', 
+            None
+        )
         print("สร้าง invoice draft สำเร็จ ID:", invoice_id)
         return invoice_id
 
@@ -855,30 +861,23 @@ def generate_monthly_invoices_if_due(mocked_date=None):
                 created_by=None
             )
 
-            add_audit_log(
-                cursor, 
-                'INVOICE', 
-                'CREATE', 
-                f'สร้างบิลเดือน {today.month}/{today.year} สำหรับห้อง ID: {c["unit_id"]}', 
-                None
-            )
-
             print(f"🧾 () return = {invoice_id}")
 
-            if not invoice_id:
-                print("❌ ERROR → create_monthly_invoice ไม่คืน invoice_id\n")
-                conn.rollback()
-                continue
-
-            conn.commit()
-            created_count += 1
-            print(f"✅ สร้างบิลสำเร็จ ID {invoice_id}\n")
+            if invoice_id:
+                conn.commit()  # บันทึกผลสำเร็จของห้องนี้
+                created_count += 1
+                print(f"✅ ห้อง {current_unit_id}: สร้างบิลสำเร็จ (ID: {invoice_id})\n")
+            else:
+                conn.rollback() 
+                print(f"⏭️ ห้อง {current_unit_id}: ไม่มีการสร้างบิล (เงื่อนไขไม่ครบ หรือเป็นบิล Final)\n")
 
         print(f"🎉 รวมสร้างบิลใหม่ทั้งหมด = {created_count} ใบ\n")
+        return created_count
 
     except Exception as e:
         conn.rollback()
         print("❌ ERROR generate_monthly_invoices_if_due:", e)
+        return 0
     finally:
         cursor.close()
         conn.close()

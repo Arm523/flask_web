@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from utils import get_db_connection, get_now
+from utils import get_db_connection, get_now, auto_read_all_systems
 from datetime import date, datetime
 
 
@@ -252,3 +252,11 @@ def get_finance_data():
         cursor.close()
         conn.close()
 
+@api.route('/api/run_manual_read', methods=['POST'])
+def run_manual_read():
+    try:
+        # เรียกฟังก์ชันที่คุณส่งมา
+        auto_read_all_systems()
+        return jsonify({"status": "success", "message": "เริ่มอ่านมิเตอร์ทุกระบบเรียบร้อยแล้ว"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

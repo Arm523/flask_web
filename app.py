@@ -2144,6 +2144,99 @@ def update_daily_invoice():
     
     return redirect(request.referrer)
 
+@app.route('/daily_notice/<int:invoice_id>', methods=['POST']) # แก้เป็น methods
+def update_daily_notice(invoice_id):
+    conn = get_db_connection()
+    # แนะนำให้ใช้ dictionary=True จะได้ไม่งงเรื่อง Tuple ครับ
+    cursor = conn.cursor(dictionary=True)
+    
+    # 1. ดึงข้อมูล unit_id
+    cursor.execute("SELECT unit_id FROM invoices WHERE invoice_id = %s", (invoice_id,))
+    row = cursor.fetchone()
+    
+    if not row:
+        cursor.close()
+        conn.close()
+        flash("ไม่พบข้อมูลบิลหลัก", "danger")
+        return redirect(url_for('dashboard'))
+
+    # เก็บ ID ไว้ในตัวแปรที่ใช้ง่ายๆ
+    target_unit_id = row['unit_id']
+
+    try:
+        # 2. อัปเดตสถานะห้อง
+        cursor.execute("""
+            UPDATE unit SET status_id = 7 WHERE unit_id = %s
+        """, (target_unit_id,))
+
+        # 3. บันทึก Log (ใช้ชื่อตัวแปรที่ถูกต้อง)
+        add_audit_log(
+            cursor, 
+            'UNIT', 
+            'Notice to Moveout', 
+            f'เเจ้งย้ายออกก่อนกําหนด(รายวัน) ห้อง ID : {target_unit_id}', 
+            session.get('user', {}).get('user_id')
+        )
+        
+        conn.commit()
+        flash(f"เเจ้งย้ายออกห้อง {target_unit_id} สำเร็จ!", "success")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
+
+    # 4. ต้องมี return เสมอ
+    return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/cancel_daily_notice/<int:invoice_id>', methods=['POST'])
+def cancel_daily_notice(invoice_id):
+    conn = get_db_connection()
+    # ใช้ dictionary=True เพื่อดึงข้อมูลออกมาเป็นชื่อคอลัมน์ (อ่านง่ายกว่า)
+    cursor = conn.cursor(dictionary=True)
+    
+    # 1. หา unit_id จากเลขบิลที่ส่งมา
+    cursor.execute("SELECT unit_id FROM invoices WHERE invoice_id = %s", (invoice_id,))
+    row = cursor.fetchone()
+    
+    if not row:
+        cursor.close()
+        conn.close()
+        flash("ไม่พบข้อมูลบิลหลัก", "danger")
+        return redirect(request.referrer or url_for('dashboard'))
+
+    target_unit_id = row['unit_id']
+
+    try:
+        # 2. อัปเดตสถานะห้องกลับเป็น 2 (สถานะปกติ/ว่าง)
+        cursor.execute("""
+            UPDATE unit SET status_id = 2 WHERE unit_id = %s
+        """, (target_unit_id,))
+
+        # 3. บันทึก Log การยกเลิก
+        add_audit_log(
+            cursor, 
+            'UNIT', 
+            'Cancel Notice to Moveout', 
+            f'ยกเลิกการแจ้งย้ายออก(รายวัน) ห้อง ID : {target_unit_id} กลับเป็นสถานะปกติ', 
+            session.get('user', {}).get('user_id')
+        )
+        
+        conn.commit()
+        flash(f"ยกเลิกการแจ้งย้ายออกห้อง {target_unit_id} เรียบร้อยแล้ว", "success")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"เกิดข้อผิดพลาด: {str(e)}", "danger")
+    finally:
+        cursor.close()
+        conn.close()
+
+    # กลับไปหน้าเดิมที่กดมา
+    return redirect(request.referrer or url_for('dashboard'))
+
 # --------------------- Checkout -----------------------------
 @app.route('/confirm_checkout/<int:unit_id>', methods=['POST'])
 def confirm_checkout(unit_id):
@@ -4083,8 +4176,8 @@ def confirm_daily_payment(invoice_id):
                 WHERE invoice_id=%s
             """, (payment_method, slip_filename, invoice_id))
 
-            # 2. อัปเดตสถานะห้องเป็น 'มีผู้เช่า' (occupied = 2)
-            cursor.execute("UPDATE unit SET status_id=2 WHERE unit_id=%s", (invoice['unit_id'],))
+            if invoice['invoice_type'] == 'daily':
+                cursor.execute("UPDATE unit SET status_id=2 WHERE unit_id=%s", (invoice['unit_id'],))
 
             # 3. บันทึกบัญชีรายรับ
             record_transaction(
@@ -5239,7 +5332,7 @@ def tool_meter():
         SELECT u.name AS room_name, m.serial_meter
         FROM meter m
         LEFT JOIN unit u ON m.unit_id = u.unit_id
-        WHERE m.serial_meter IS NOT NULL
+        WHERE m.serial_meter IS NOT NULL and u.is_deleted = 0
     """)
     meters = cursor.fetchall()
     cursor.close()

@@ -136,9 +136,9 @@
                         <td class="text-center">
                             <small class="badge bg-secondary opacity-75">{{ log.source | capitalize }}</small>
                         </td>
-                        <td class="text-center">{{ '#' + log.invoice_id|string if log.invoice_id else 'ไม่มีบิล' }}</td>
+                        <td class="text-center">{{ '#' + log.invoice_id|string if log.invoice_id else '-' }}</td>
                         <td class="text-end fw-bold">{{ "{:,.2f}".format(log.current_reading or 0) }}</td>
-                        <td class="ps-3">{{ log.username or 'System' }} <small class="text-muted">(UID :{{ log.created_by }})</small></td>
+                        <td class="ps-3">{{ log.username or 'System' }} <small class="text-muted">(UID : {{ log.created_by or '-' }})</small></td>
                     </tr>
                     {% else %}
                     <tr>

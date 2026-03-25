@@ -438,9 +438,20 @@
                         </div>
                     </div>
 
-                    <button id="syncBtn" class="btn btn-primary">
-                        🔄 ดึงข้อมูลประวัติที่อ่านล่าสุด ลงทุกบิล Draft
-                    </button>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button id="syncBtn" class="btn btn-primary btn-sm">
+                            🔄 ดึงข้อมูลประวัติที่อ่านล่าสุด ลงทุกบิล Draft
+                        </button>
+
+                        <button id="readAllBtn" class="btn btn-warning btn-sm">
+                            ⏲️ อ่านมิเตอร์ทุกระบบทันที
+                        </button>
+
+                        <span id="readStatus" class="ms-2" style="display:none;">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            กำลังอ่านค่าจาก มิเตอร์..
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -491,11 +502,12 @@
                         </span>
                     </p>
 
-                    {% if room.status_id == 7 %}
+                    {% if room.status_id == 7 and not room.has_daily_booking %}
                     <div class="mt-2 p-1 border border-warning rounded bg-white mb-2">
                         <small class="text-danger fw-bold d-b lock text-center"
                             style="font-size: 0.75rem; line-height: 1.2;">
-                            ⚠️ ระบบจะไม่สร้างบิลอัตโนมัติในสถานะนี้ <br>(เเนะนําเเจ้งย้ายออกก่อนล่วงหน้าอย่างน้อย 1 เดือน)
+                            ⚠️ ระบบจะไม่สร้างบิลอัตโนมัติในสถานะนี้ <br>(เเนะนําเเจ้งย้ายออกก่อนล่วงหน้าอย่างน้อย 1
+                            เดือน)
                         </small>
                     </div>
                     {% endif %}
@@ -610,7 +622,7 @@
                     <p class="small text-muted mt-2">👤
                         {{ room.guest_fname ~ ' ' ~ room.guest_lname if room.guest_fname else (room.tenant_name or
                         '-')
-                        }} | จํานวนผู้อาศัย: {{ room.amount if room.tenant_name else ( 1 or '-') }} คน
+                        }} | จํานวนผู้อาศัย: {{ room.amount if room.amount else ('-') }} คน
                     </p>
 
                     <button class="btn btn-outline-primary btn-sm w-100" type="button" data-bs-toggle="collapse"
@@ -685,7 +697,7 @@
 
                         {% endif %}
 
-                        {% if room.status_id == 6 or room.has_daily_booking%}
+                        {% if room.status_id == 6 %}
                         <form id="checkout-form-{{ room.id }}"
                             action="{{ url_for('confirm_checkout', unit_id=room.id) }}" method="POST">
                             <button type="button" class="btn btn-success w-100"
@@ -695,8 +707,34 @@
                         </form>
                         {% endif %}
 
+                        {% if room.has_daily_booking and room.status_id == 2 %}
+                        <form id="notice-form-{{ room.invoice_id }}"
+                            action="{{ url_for('update_daily_notice', invoice_id=room.invoice_id) }}" method="POST"
+                            style="display: none;"></form>
+                        <button type="button" class="btn btn-warning btn-sm"
+                            onclick="confirmDailyNotice('{{ room.invoice_id }}', '{{ room.number }}')">
+                            แจ้งย้ายออก
+                        </button>
+                        {% elif room.has_daily_booking and room.status_id == 7 %}
+                        <form id="cancel-form-{{ room.invoice_id }}"
+                            action="{{ url_for('cancel_daily_notice', invoice_id=room.invoice_id) }}" method="POST"
+                            style="display: none;"></form>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                            onclick="confirmCancelDailyNotice('{{ room.invoice_id }}', '{{ room.number }}')">
+                            ยกเลิกเเจ้งย้ายออก
+                        </button>
+
+                        <form id="checkout-form-{{ room.id }}"
+                            action="{{ url_for('confirm_checkout', unit_id=room.id) }}" method="POST">
+                            <button type="button" class="btn btn-success w-50 mt-2"
+                                onclick="confirmCheckout('{{ room.id }}', '{{ room.name }}')">
+                                <i class="bi bi-box-arrow-left"></i> ยืนยัน Checkout (ห้องนี้)
+                            </button>
+                        </form>
+                        {% endif %}
+
                         {% if room.status_id == 5 and room.has_daily_booking %}
-                        <button type="button" class="btn btn-outline-danger btn-sm"
+                        <button type="button" class="btn btn-danger btn-sm"
                             onclick="confirmCancelBooking('{{ room.invoice_id}}')">
                             <i class="bi bi-x-circle"></i> ยกเลิกการจอง
                         </button>
@@ -848,6 +886,44 @@
             if (result.isConfirmed) {
                 // ค้นหาฟอร์มด้วย ID ที่ระบุไว้ และสั่งส่งข้อมูล
                 document.getElementById(`checkout-form-${roomId}`).submit();
+            }
+        });
+    }
+
+    function confirmDailyNotice(invId, roomName) {
+        Swal.fire({
+            title: 'ยืนยันการแจ้งย้ายออก?',
+            html: `คุณกำลังจะทำเรื่องแจ้งย้ายออกล่วงหน้าสำหรับ <b>ห้อง ${roomName}</b><br>ระบบจะเปลี่ยนสถานะห้องเป็น "แจ้งย้ายออก"`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#f39c12', // สีส้ม Warning
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ยืนยันแจ้งย้าย',
+            cancelButtonText: 'ยกเลิก',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // สั่ง Submit ฟอร์มแจ้งย้าย
+                document.getElementById(`notice-form-${invId}`).submit();
+            }
+        });
+    }
+
+    function confirmCancelDailyNotice(invId, roomName) {
+        Swal.fire({
+            title: 'ยกเลิกการแจ้งย้ายออก?',
+            html: `คุณต้องการดึงสถานะ <b>ห้อง ${roomName}</b> กลับมาเป็นปกติ<br>สถานะห้องจะกลับเป็น สถานะเดิม`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'ยืนยันยกเลิก',
+            cancelButtonText: 'ปิดหน้าต่าง',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // สั่ง Submit ฟอร์มยกเลิก
+                document.getElementById(`cancel-form-${invId}`).submit();
             }
         });
     }
@@ -1197,6 +1273,58 @@
             });
     }
 
+    document.getElementById('readAllBtn').addEventListener('click', function () {
+        const btn = this; // เก็บตัวแปรปุ่มไว้
+
+        Swal.fire({
+            title: 'เริ่มอ่านมิเตอร์ทุกเครื่อง?',
+            text: "ระบบจะทำการอ่านค่าจาก มิเตอร์ ทุกตัว (อาจใช้เวลาสักครู่)",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ใช่, เริ่มอ่านเลย!',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // ปิดปุ่มทันทีกันพลาด
+                btn.disabled = true;
+
+                Swal.fire({
+                    title: 'กำลังสื่อสารกับมิเตอร์...',
+                    text: 'กรุณารอสักครู่ ระบบกำลังดึงค่าจากอุปกรณ์',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
+                fetch('/api/run_manual_read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                    .then(response => {
+                        // เช็คสถานะ Timeout จาก Gunicorn/Nginx
+                        if (response.status === 504) throw new Error('เซิร์ฟเวอร์ใช้เวลาอ่านมิเตอร์นานเกินไป (Timeout)');
+                        if (!response.ok) return response.json().then(err => { throw new Error(err.message || 'Error'); });
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 'success') {
+                            Swal.fire('สำเร็จ!', data.message, 'success').then(() => { location.reload(); });
+                        } else {
+                            Swal.fire('เกิดข้อผิดพลาด', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+                    })
+                    .finally(() => {
+                        btn.disabled = false; // เปิดปุ่มคืน
+                    });
+            }
+        });
+    });
+
     document.getElementById('syncBtn').addEventListener('click', function () {
         Swal.fire({
             title: 'ดึงค่ามิเตอร์ล่าสุด?',
@@ -1255,6 +1383,8 @@
             }
         });
     });
+
+
 
     document.addEventListener("DOMContentLoaded", function () {
         const now = new Date();
