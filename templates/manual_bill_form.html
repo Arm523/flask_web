@@ -109,13 +109,13 @@
                                 <div class="col-md-3">
                                     <label class="small text-muted">เลขไฟเก่า (Prev)</label>
                                     <input type="number" name="prev_elec" id="prev_elec" class="form-control"
-                                        step="0.01" oninput="calculateElec()">
+                                        step="0.01" oninput="calculateElec()" required>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="small text-muted text-primary fw-bold">เลขไฟใหม่ (Curr)</label>
                                     <input type="number" name="curr_elec" id="curr_elec"
                                         class="form-control border-primary shadow-sm" step="0.01"
-                                        oninput="calculateElec()">
+                                        oninput="calculateElec()" required>
                                 </div>
                                 <div class="col-md-2 text-center border-end border-start">
                                     <label class="small text-muted">จำนวนหน่วย</label>
@@ -137,13 +137,13 @@
                                 <div class="col-md-3">
                                     <label class="small text-muted">เลขน้ำเก่า (Prev)</label>
                                     <input type="number" name="prev_water" id="prev_water" class="form-control"
-                                        step="0.01" oninput="calculateWater()">
+                                        step="0.01" oninput="calculateWater()" required>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="small text-muted text-info fw-bold">เลขน้ำใหม่ (Curr)</label>
                                     <input type="number" name="curr_water" id="curr_water"
                                         class="form-control border-info shadow-sm" step="0.01"
-                                        oninput="calculateWater()">
+                                        oninput="calculateWater()" required>
                                 </div>
                                 <div class="col-md-2 text-center border-end border-start">
                                     <label class="small text-muted">จำนวนหน่วย</label>
@@ -172,7 +172,7 @@
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="small text-muted mb-1">ประเภท</label>
-                                                <select class="form-select border-0 bg-light"
+                                                <select name="item_type[]" class="form-select border-0 bg-light"
                                                     style="pointer-events: none;">
                                                     <option value="option" selected>ส่วนเสริมตามสัญญา</option>
                                                 </select>
@@ -251,13 +251,92 @@
         const lastWater = "{{ last_bill.current_water_reading if last_bill else '' }}";
 
         document.addEventListener('DOMContentLoaded', function () {
-            flatpickr(".date-picker", {
-                dateFormat: "Y-m-d", // ฟอร์แมตที่จะส่งเข้า DB (YYYY-MM-DD)
-                altInput: true,      // ตัวที่โชว์ให้คนเห็น
-                altFormat: "d/m/Y",  // ฟอร์แมตที่คนเห็น
+            const today = new Date();
+            const defaultStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+            const defaultEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+
+            // 1. ตัวเลือกวันเริ่ม Billing (ล็อคเฉพาะวันที่ 1)
+            const startPicker = flatpickr("#billing_start", {
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "d/m/Y",
                 locale: "th",
-                allowInput: true
+                defaultDate: defaultStart,
+                minDate: defaultStart,
+                enable: [
+                    function (date) { return date.getDate() === 1; }
+                ],
+                onChange: function (selectedDates, dateStr) {
+                    if (selectedDates.length > 0) {
+                        const selDate = selectedDates[0];
+                        const lastDay = new Date(selDate.getFullYear(), selDate.getMonth() + 1, 0);
+
+                        if (document.getElementById('invoice_type').value === 'monthly') {
+                            // 1.1 เซ็ตวันสิ้นสุดบิลเป็นวันสิ้นเดือนนั้นๆ อัตโนมัติ
+                            endPicker.setDate(lastDay);
+
+                            // 1.2 ล็อค Due Date ให้อยู่ภายในเดือนที่เลือกเท่านั้น
+                            duePicker.set('minDate', dateStr); // ห้ามจ่ายก่อนวันเริ่มบิล
+                            duePicker.set('maxDate', lastDay); // ห้ามจ่ายเกินสิ้นเดือนนั้น
+                            duePicker.setDate(lastDay);       // ค่าเริ่มต้นเป็นวันสิ้นเดือน (ยอดนิยม)
+                        }
+                    }
+                }
             });
+
+            // 2. ตัวเลือกวันสิ้นสุด Billing (ล็อคตามวันเริ่ม)
+            const endPicker = flatpickr("#billing_end", {
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "d/m/Y",
+                locale: "th",
+                defaultDate: defaultEnd,
+                clickOpens: false
+            });
+
+            // 3. ตัวเลือกกำหนดชำระ (Due Date)
+            const duePicker = flatpickr("input[name='due_date']", {
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "d/m/Y",
+                locale: "th",
+                defaultDate: defaultEnd,
+                minDate: defaultStart,
+                maxDate: defaultEnd
+            });
+
+            // --- Logic เมื่อเปลี่ยนประเภทบิล ---
+            document.getElementById('invoice_type').addEventListener('change', function () {
+                if (this.value === 'final') {
+                    startPicker.set('enable', [function () { return true; }]);
+                    startPicker.set('minDate', today);
+                    startPicker.setDate(today);
+
+                    endPicker.set('clickOpens', true);
+                    endPicker.set('minDate', today);
+                    endPicker.setDate(today);
+
+                    duePicker.set('minDate', today);
+                    duePicker.set('maxDate', null); // บิลสุดท้ายยืดหยุ่นวันจ่ายได้
+
+                    document.getElementById('deposit_area').style.display = 'block';
+                } else {
+                    startPicker.set('enable', [function (date) { return date.getDate() === 1; }]);
+                    startPicker.set('minDate', defaultStart);
+                    startPicker.setDate(defaultStart);
+
+                    endPicker.set('clickOpens', false);
+                    endPicker.setDate(defaultEnd);
+
+                    duePicker.set('minDate', defaultStart);
+                    duePicker.set('maxDate', defaultEnd);
+                    duePicker.setDate(defaultEnd);
+
+                    document.getElementById('deposit_area').style.display = 'none';
+                }
+                updateGrandTotal();
+            });
+
             updateGrandTotal();
         });
 
@@ -274,8 +353,9 @@
                 </div>
                 <div class="col-md-3">
                     <label class="small text-muted mb-1">ประเภท</label>
-                    <select class="form-select border-0 bg-light" style="pointer-events: none;">
+                    <select name="item_type[]" class="form-select border-0 bg-light">
                         <option value="service" selected>ค่าบริการ/ซ่อมแซม</option>
+                        <option value="penalty" selected>ค่าปรับ</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -292,10 +372,29 @@
         }
 
         function updateGrandTotal() {
+            const prevElec = parseFloat(document.querySelector('input[name="prev_elec"]').value) || 0;
+            const currElec = parseFloat(document.querySelector('input[name="curr_elec"]').value) || 0;
+            const prevWater = parseFloat(document.querySelector('input[name="prev_water"]').value) || 0;
+            const currWater = parseFloat(document.querySelector('input[name="curr_water"]').value) || 0;
             const rent = parseFloat(document.getElementsByName('rent_amount')[0].value) || 0;
             const eTotal = parseFloat(document.getElementById('e_total').value) || 0;
             const wTotal = parseFloat(document.getElementById('w_total').value) || 0;
 
+            if (currElec < prevElec) {
+                document.querySelector('input[name="curr_elec"]').classList.add('is-invalid');
+                return; // หยุดการคำนวณ
+            } else {
+                document.querySelector('input[name="curr_elec"]').classList.remove('is-invalid');
+            }
+
+            // ตรวจสอบน้ำ
+            if (currWater < prevWater) {
+                document.querySelector('input[name="curr_water"]').classList.add('is-invalid');
+                return; // หยุดการคำนวณ
+            } else {
+                document.querySelector('input[name="curr_water"]').classList.remove('is-invalid');
+            }
+            
             let itemsSum = 0;
             document.querySelectorAll('.item-price').forEach(input => {
                 itemsSum += parseFloat(input.value) || 0;

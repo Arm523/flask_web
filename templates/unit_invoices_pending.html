@@ -22,8 +22,8 @@
 
     .container {
       max-width: 95% !important;
-      max-height: 450px; 
-      overflow-y: auto; 
+      max-height: 450px;
+      overflow-y: auto;
     }
 
     .page-box {
@@ -98,7 +98,7 @@
       /* แชร์กันคนละครึ่งในแถวที่ 2 */
     }
   </style>
-  
+
 </head>
 
 <body>
@@ -221,7 +221,7 @@
             <td>{{ inv.issue_date.strftime('%d/%m/%Y') or '-' }}</td>
 
             <td>{{ inv.billing_period_start.strftime('%d/%m/%Y') if inv.billing_period_start else '-' }}</td>
-            
+
             <td>{{ inv.billing_period_end.strftime('%d/%m/%Y') if inv.billing_period_end else '-' }}</td>
 
             <td>{{ inv.due_date.strftime('%d/%m/%Y') or '-' }}</td>
@@ -331,12 +331,12 @@
                   <div class="col-6">
                     <label class="form-label small">ครั้งก่อน</label>
                     <input type="number" class="form-control form-control-sm" name="prev_elec" id="edit_prev_elec"
-                      step="0.01" />
+                      step="0.01" required min="0" />
                   </div>
                   <div class="col-6">
                     <label class="form-label small">ครั้งหลัง</label>
                     <input type="number" class="form-control form-control-sm" name="curr_elec" id="edit_curr_elec"
-                      step="0.01" />
+                      step="0.01" required min="0" />
                   </div>
                 </div>
               </div>
@@ -347,12 +347,12 @@
                   <div class="col-6">
                     <label class="form-label small">ครั้งก่อน</label>
                     <input type="number" class="form-control form-control-sm" name="prev_water" id="edit_prev_water"
-                      step="0.01" />
+                      step="0.01" required min="0" />
                   </div>
                   <div class="col-6">
                     <label class="form-label small">ครั้งหลัง</label>
                     <input type="number" class="form-control form-control-sm" name="curr_water" id="edit_curr_water"
-                      step="0.01" />
+                      step="0.01" required min="0" />
                   </div>
                 </div>
               </div>
@@ -461,6 +461,56 @@
       var myModal = new bootstrap.Modal(modalElement);
       myModal.show();
     }
+
+    // --- ระบบตรวจสอบความถูกต้องก่อนบันทึก ---
+    document.querySelector('#editInvoiceModal form').addEventListener('submit', function (e) {
+      let errorMsg = "";
+      
+      const isExtraBill = document.getElementById('extra_fields_group').style.display === 'none';
+      const dueDate = document.getElementById('edit_due_date').value;
+      const prevElec = parseFloat(document.getElementById('edit_prev_elec').value);
+      const currElec = parseFloat(document.getElementById('edit_curr_elec').value);
+      const prevWater = parseFloat(document.getElementById('edit_prev_water').value);
+      const currWater = parseFloat(document.getElementById('edit_curr_water').value);
+
+      if (!dueDate) {
+        errorMsg += "• กรุณาระบุวันกำหนดจ่าย<br>";
+      }
+
+      if (!isExtraBill) {
+        const startDate = document.getElementById('edit_start_date').value;
+        const endDate = document.getElementById('edit_end_date').value;
+
+        if (!startDate || !endDate) {
+          errorMsg += "• กรุณาระบุรอบบิลให้ครบถ้วน<br>";
+        }
+
+        // ตรวจสอบมิเตอร์ไฟฟ้า
+        if (isNaN(currElec) || isNaN(prevElec)) {
+          errorMsg += "• กรุณากรอกเลขมิเตอร์ไฟฟ้าให้ครบ<br>";
+        } else if (currElec < prevElec) {
+          errorMsg += "• ⚡ ค่าไฟฟ้าครั้งหลังต้องไม่น้อยกว่าครั้งก่อน<br>";
+        }
+
+        // ตรวจสอบมิเตอร์น้ำ
+        if (isNaN(currWater) || isNaN(prevWater)) {
+          errorMsg += "• กรุณากรอกเลขมิเตอร์น้ำให้ครบ<br>";
+        } else if (currWater < prevWater) {
+          errorMsg += "• 💧 ค่าน้ำครั้งหลังต้องไม่น้อยกว่าครั้งก่อน<br>";
+        }
+      }
+
+      // 4. แสดงผลการตรวจสอบ ถ้ามี Error ให้หยุดส่งฟอร์ม
+      if (errorMsg !== "") {
+        e.preventDefault();
+        Swal.fire({
+          icon: 'warning',
+          title: 'ข้อมูลไม่ถูกต้อง',
+          html: `<div class="text-start">${errorMsg}</div>`,
+          confirmButtonColor: '#4f46e5'
+        });
+      }
+    });
 
     function confirmCancelInvoice(invoiceId) {
       Swal.fire({

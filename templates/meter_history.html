@@ -1,0 +1,145 @@
+{% extends "layout.html" %}
+{% block content %}
+<title>Meter Change History - ประวัติการเปลี่ยนมิเตอร์</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
+
+<style>
+    .glass-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        border: none;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    .table-modern thead th {
+        background-color: #f8f9fa;
+        color: #64748b;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.5px;
+        border: none;
+        padding: 15px;
+    }
+    .table-modern tbody tr {
+        transition: all 0.2s;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .table-modern tbody tr:hover {
+        background-color: rgba(13, 110, 253, 0.03);
+    }
+    .status-badge {
+        padding: 5px 12px;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="card glass-card p-3 mb-4">
+        <form action="/meter_history" method="GET" id="filterForm" class="row g-3 align-items-center">
+            <div class="col-auto">
+                <h4 class="mb-0 fw-bold text-dark">
+                    <i class="bi bi-clock-history text-primary me-2"></i> Meter History
+                </h4>
+            </div>
+            
+            <div class="col-auto ms-md-auto">
+                <div class="d-flex gap-2">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white">จาก</span>
+                        <input type="text" name="start_date" id="startDate" class="form-control bg-white" 
+                               value="{{ start_date or '' }}" placeholder="วว/ดด/ปปปป" readonly>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white">ถึง</span>
+                        <input type="text" name="end_date" id="endDate" class="form-control bg-white" 
+                               value="{{ end_date or '' }}" placeholder="วว/ดด/ปปปป" readonly>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-light border" onclick="clearFilter()">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <button type="submit" class="btn btn-sm btn-primary px-3">ค้นหา</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card glass-card overflow-hidden">
+        <div class="card-header bg-white py-3 border-0">
+            <h6 class="mb-0 fw-bold">
+                รายการประวัติ 
+                <small class="text-muted fw-normal ms-2">
+                    {% if start_date and end_date %}
+                        (ข้อมูลช่วงวันที่ {{ start_date }} ถึง {{ end_date }})
+                    {% else %}
+                        (แสดงล่าสุด 20 รายการ)
+                    {% endif %}
+                </small>
+            </h6>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-modern align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">วันที่เปลี่ยน</th>
+                        <th>ห้อง</th>
+                        <th>ประเภท</th>
+                        <th>S/N ตัวเก่า</th>
+                        <th class="text-end">หน่วยสุดท้าย</th>
+                        <th class="text-end">หน่วยค้างจ่าย</th>
+                        <th class="text-center">สถานะบิล</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in history %}
+                    <tr>
+                        <td class="ps-4">{{ row.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="fw-bold text-primary">ห้อง {{ row.unit_name }}</td>
+                        <td>
+                            {% if row.type == 'elec' %}
+                                <span class="text-warning"><i class="bi bi-lightning-charge-fill"></i> ไฟฟ้า</span>
+                            {% else %}
+                                <span class="text-info"><i class="bi bi-droplet-fill"></i> น้ำประปา</span>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ row.old_serial }}</code></td>
+                        <td class="text-end">{{ "{:,.2f}".format(row.final_reading) }}</td>
+                        <td class="text-end text-danger fw-bold">+ {{ "{:,.2f}".format(row.pending_units) }}</td>
+                        <td class="text-center">
+                            {% if row.is_billed %}
+                                <span class="status-badge bg-success-subtle text-success border border-success">ออกบิลแล้ว</span>
+                            {% else %}
+                                <span class="status-badge bg-warning-subtle text-warning border border-warning">รอเคลียร์ยอด</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">ไม่พบข้อมูลประวัติในช่วงนี้</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const dateConfig = {
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d/m/Y",
+        locale: "th"
+    };
+    flatpickr("#startDate", dateConfig);
+    flatpickr("#endDate", dateConfig);
+
+    function clearFilter() {
+        window.location.href = "/meter_history";
+    }
+</script>
+{% endblock %}

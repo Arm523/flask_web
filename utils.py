@@ -39,7 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=True):
     if mocked:
-        return datetime(2026, 4, 8, 9, 0, 0)
+        return datetime(2026, 7, 3, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -866,10 +866,10 @@ def generate_monthly_invoices_if_due(mocked_date=None):
             if invoice_id:
                 conn.commit()  # บันทึกผลสำเร็จของห้องนี้
                 created_count += 1
-                print(f"✅ ห้อง {current_unit_id}: สร้างบิลสำเร็จ (ID: {invoice_id})\n")
+                print(f"✅ ห้อง {c['unit_id']}: สร้างบิลสำเร็จ (ID: {invoice_id})\n")
             else:
                 conn.rollback() 
-                print(f"⏭️ ห้อง {current_unit_id}: ไม่มีการสร้างบิล (เงื่อนไขไม่ครบ หรือเป็นบิล Final)\n")
+                print(f"⏭️ ห้อง {c['unit_id']}: ไม่มีการสร้างบิล (เงื่อนไขไม่ครบ หรือเป็นบิล Final)\n")
 
         print(f"🎉 รวมสร้างบิลใหม่ทั้งหมด = {created_count} ใบ\n")
         return created_count
@@ -997,11 +997,10 @@ def refresh_invoice_total(cursor, invoice_id):
     # เตรียมค่าตัวเลข
     premiums = float(inv['premiums'] or 0)
     reimburse = float(inv['reimburse'] or 0)
-    # รวมค่าปรับจากทั้งตารางหลัก (late_penalty) และรายการย่อย (penalty_sum)
     penalty = float(sums['penalty_sum'] or 0) + float(inv['late_penalty'] or 0)
     discount = float(sums['discount_sum'] or 0)
     service_charge = float(sums['service_option_sum'] or 0)
-    meter_adjustment = float(sums['meter_adjustment_sum'] or 0) # ดึงยอดค้างจากการเปลี่ยนมิเตอร์มาเตรียมไว้
+    meter_adjustment = float(sums['meter_adjustment_sum'] or 0) 
 
     # --- [Logic แยกตามประเภทบิล] ---
     if inv['invoice_type'] == 'first':

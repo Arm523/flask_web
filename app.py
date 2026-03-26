@@ -99,6 +99,7 @@ def check_session_timeout():
     
     if request.endpoint not in allowed_endpoints:
         if 'user' not in session:
+            flash("Session ของคุณหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่อีกครั้ง", "warning")
             return redirect(url_for('login'))
 
 def role_required(allowed_roles):
@@ -204,7 +205,6 @@ def logout():
 
 @app.route('/add_user', methods=['GET', 'POST'])
 def add_user():
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -212,7 +212,6 @@ def add_user():
     roles = cursor.fetchall()
 
     if request.method == 'POST':
-        # รับข้อมูลจากฟอร์ม
         username = request.form['username'].strip()
         password = request.form['password'].strip()
         fname = request.form['fname'].strip()
@@ -1192,6 +1191,47 @@ def meter_analysis():
                            active_meters=active_meters,
                            logs=recent_logs)
 
+@app.route('/meter_history')
+def meter_history():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    # 1. ตั้งต้น Query (เว้นวรรคท้ายสตริงเสมอเพื่อป้องกันคำติดกัน)
+    query = """
+        SELECT mh.*, u.name 
+        FROM meter_history mh
+        JOIN unit u ON mh.unit_id = u.unit_id 
+    """
+    params = []
+
+    # 2. ตรวจสอบเงื่อนไขวันที่
+    if start_date and end_date:
+        query += " WHERE mh.created_at BETWEEN %s AND %s " # เว้นวรรคหน้า-หลัง
+        params = [f"{start_date} 00:00:00", f"{end_date} 23:59:59"]
+    
+    # 3. ใส่ Order By และ Limit (แยกออกมาจาก if-else เพื่อความเป๊ะ)
+    query += " ORDER BY mh.created_at DESC "
+    
+    if not (start_date and end_date):
+        query += " LIMIT 20 "
+
+    try:
+        cursor.execute(query, params)
+        history = cursor.fetchall()
+    finally:
+        # 4. ปิด Connection เสมอเพื่อป้องกัน Error ในระยะยาว
+        cursor.close()
+        conn.close()
+
+    return render_template('meter_history.html', 
+                           history=history, 
+                           start_date=start_date, 
+                           end_date=end_date)
+
+
 # ---------------------- RENEW -----------------------
 @app.route('/contracts_renew/<int:contract_id>', methods=['GET', 'POST'])
 def renew_contracts(contract_id):
@@ -1580,8 +1620,25 @@ def manual_create_bill(contract_id):
         # --- ส่วนที่ 2: ถ้ามีการส่งข้อมูลมา (POST) ---
         if request.method == 'POST':
             inv_type = request.form.get('invoice_type')
-            b_start = request.form.get('billing_start')
-            b_end = request.form.get('billing_end')
+            b_start = request.form.get('billing_start') # 'YYYY-MM-DD'
+            b_end = request.form.get('billing_end')     # 'YYYY-MM-DD'
+            due_date = request.form.get('due_date')
+
+            if inv_type == 'monthly':
+                # แปลงวันที่เพื่อเอาปีและเดือนมาเช็ค
+                check_date = datetime.strptime(b_end, '%Y-%m-%d')
+                cursor.execute("""
+                    SELECT invoice_id FROM invoices 
+                    WHERE contract_id = %s 
+                    AND invoice_type = 'monthly'
+                    AND MONTH(billing_period_end) = %s 
+                    AND YEAR(billing_period_end) = %s
+                    AND status IN ('paid','overdue')
+                """, (contract_id, check_date.month, check_date.year))
+                
+                if cursor.fetchone():
+                    flash("สัญญานี้มีการสร้างบิลของเดือนนี้ไปแล้ว ไม่สามารถสร้างซ้ำได้", "warning")
+                    return redirect(url_for('unit_pending', contract_id=contract_id))
             
             def f(val): return float(val) if val else 0.0
             
@@ -1592,6 +1649,13 @@ def manual_create_bill(contract_id):
             p_w = f(request.form.get('prev_water'))
             c_w = f(request.form.get('curr_water'))
             w_total = f(request.form.get('w_total'))
+
+            if c_e < p_e or c_w < p_w:
+                flash("ข้อมูลมิเตอร์ไม่ถูกต้อง: ค่าปัจจุบันห้ามน้อยกว่าค่าก่อนหน้า", "warning")
+                return redirect(url_for('unit_pending', contract_id=contract_id))
+
+            e_use = c_e - p_e
+            w_use = c_w - p_w
             
             rent = f(request.form.get('rent_amount'))
             others = f(request.form.get('other_charges'))
@@ -1599,34 +1663,66 @@ def manual_create_bill(contract_id):
             # รับรายการ Invoice Items (ทั้งที่แก้จาก Option เดิม และที่เพิ่มใหม่)
             item_names = request.form.getlist('item_name[]')
             item_amounts = request.form.getlist('item_amount[]')
+            item_types = request.form.getlist('item_type[]')
             items_total = sum(f(amt) for amt in item_amounts)
             
             # Logic คืนประกัน
-            reimburse = f(request.form.get('reimburse'))
+            reimburse = f(request.form.get('deposit_refund'))
+            others = 0.0
 
-            if inv_type == 'first':
-                # คำนวณยอดสุทธิ: ค่าเช่า + ไฟ + น้ำ + อื่นๆ + รายการเสริม + (คืนประกัน)
-                total_amount = rent + e_total + w_total + others + items_total - reimburse
-
-            else:
-                total_amount = rent + e_total + w_total + others + items_total
+            total_amount = rent + e_total + w_total + items_total - (reimburse if inv_type == 'final' else 0)
 
             # 2.1 บันทึกลงตาราง invoices
             sql_inv = """
                 INSERT INTO invoices (
                     unit_id, tenant_id, contract_id, invoice_type, 
                     billing_period_start, billing_period_end, issue_date, due_date,
-                    rent_amount, previous_electricity_reading, current_electricity_reading, 
-                    electricity_total, previous_water_reading, current_water_reading, 
-                    water_total, other_charges, reimburse, total_amount, status,meter_saved,created_at,premiums
-                ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft',1,NOW(),0)
+                    rent_amount, previous_electricity_reading, current_electricity_reading, electricity_usage,
+                    electricity_total, previous_water_reading, current_water_reading, water_usage,
+                    water_total, other_charges, reimburse, total_amount, 
+                    status, meter_saved, created_at, premiums
+                ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft', 1, NOW(), 0)
             """
             cursor.execute(sql_inv, (
-                contract['room_id'],contract['tenant_id'],contract_id,inv_type,                     
-                b_start,b_end,b_end,rent,p_e,c_e,e_total,p_w,                           
-                c_w,w_total,others,reimburse,total_amount                  
+                contract['room_id'], contract['tenant_id'], contract_id, inv_type,
+                b_start, b_end, due_date, # ใช้ due_date จากหน้าเว็บ
+                rent, p_e, c_e, e_use, e_total, 
+                p_w, c_w, w_use, w_total, 
+                others, reimburse, total_amount
             ))
             invoice_id = cursor.lastrowid
+            # 2.2 บันทึกลงตาราง invoice_items (วนลูปจากที่ส่งมาจากหน้าเว็บ)
+            sql_item = """
+                INSERT INTO invoice_items 
+                (invoice_id, description, unit_price, quantity, total_price, option_id, type) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+
+            if item_names:
+                for name, amt, i_type in zip(item_names, item_amounts, item_types):
+                    if name.strip():  # บันทึกเฉพาะรายการที่มีชื่อเท่านั้น
+                        price = float(amt) if amt else 0.0
+                        
+                        # คำสั่ง SQL ที่คุณเตรียมไว้
+                        sql_item = """
+                            INSERT INTO invoice_items 
+                            (invoice_id, description, unit_price, quantity, total_price, option_id, type) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """
+                        
+                        # รันคำสั่ง INSERT
+                        # หมายเหตุ: option_id ให้ใส่เป็น None (หรือ NULL) ไปก่อนสำหรับรายการ Manual
+                        cursor.execute(sql_item, (
+                            invoice_id, 
+                            name, 
+                            price, 
+                            1, 
+                            price, 
+                            None, 
+                            i_type
+                        ))
+            
+            refresh_invoice_total(cursor,invoice_id)
 
             add_audit_log(
                 cursor, 
@@ -1636,22 +1732,7 @@ def manual_create_bill(contract_id):
                 session.get('user', {}).get('user_id')
             )
 
-            # 2.2 บันทึกลงตาราง invoice_items (วนลูปจากที่ส่งมาจากหน้าเว็บ)
-            sql_item = """
-                INSERT INTO invoice_items 
-                (invoice_id, description, unit_price, quantity, total_price, option_id, type) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-
-            if item_names:
-                for name, amt in zip(item_names, item_amounts):
-                    if name.strip():
-                        price = float(amt) if amt else 0.0
-                        # บันทึกเป็น service ตามโจทย์
-                        cursor.execute(sql_item, (
-                            invoice_id, name, price, 1, price, None, 'service'
-                        ))
-            
+            flash("สร้างบิลมือสําเร็จ", "success")
             conn.commit()
             return redirect(url_for('unit_pending', contract_id=contract_id))
 
@@ -4016,12 +4097,6 @@ def confirm_payment(invoice_id):
                 type='income'
                 total_amount = invoice['total_amount']
                 t_note=f"ค่าบริการเพิ่มเติม ห้อง {invoice['room_name']}"
-
-            cursor.execute("""
-                UPDATE unit
-                SET status_id = 6
-                WHERE unit_id = %s
-            """, (invoice['unit_id'],))
             
             record_transaction(
                 cursor, 

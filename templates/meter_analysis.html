@@ -44,6 +44,12 @@
                     <input type="number" name="year" class="form-control" value="{{ year }}" min="2000" max="2100"
                         style="width: 100px;" />
                     <button type="submit" class="btn btn-primary">ค้นหาปี</button>
+                    <a href="/meter_history"
+                        class="btn btn-outline-dark ms-2 shadow-sm d-inline-flex align-items-center"
+                        style="border-radius: 8px; border-style: dashed; font-weight: 500; transition: all 0.3s;">
+                        <i class="bi bi-clock-history me-2 text-primary"></i>
+                        ประวัติการเปลี่ยนมิเตอร์
+                    </a>
                 </div>
             </div>
         </form>
@@ -138,7 +144,8 @@
                         </td>
                         <td class="text-center">{{ '#' + log.invoice_id|string if log.invoice_id else '-' }}</td>
                         <td class="text-end fw-bold">{{ "{:,.2f}".format(log.current_reading or 0) }}</td>
-                        <td class="ps-3">{{ log.username or 'System' }} <small class="text-muted">(UID : {{ log.created_by or '-' }})</small></td>
+                        <td class="ps-3">{{ log.username or 'System' }} <small class="text-muted">(UID : {{
+                                log.created_by or '-' }})</small></td>
                     </tr>
                     {% else %}
                     <tr>
