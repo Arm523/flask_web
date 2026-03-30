@@ -39,7 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=True):
     if mocked:
-        return datetime(2026, 7, 3, 9, 0, 0)
+        return datetime(2026, 10, 2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -512,7 +512,7 @@ def update_late_penalty(cursor, invoice_id):
     """อัปเดต late_penalty และ overdue_days ของ invoice"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    today = get_now(mocked=False).date()
+    today = get_now(mocked=True).date()
     try:
         cursor.execute(
             "SELECT due_date, total_amount, late_penalty, overdue_days, status, invoice_type "
@@ -1085,7 +1085,6 @@ def auto_read_all_systems():
         # อ่านทั้ง 2 ระบบ (electricity และ water)
         for m_type in ['electricity', 'water']:
             table = 'meter' if m_type == 'electricity' else 'meter_water'
-            reg_key = 'total_kWh' if m_type == 'electricity' else 'total_m3'
             is_water = (m_type == 'water')
 
             query = f"""
@@ -1097,18 +1096,30 @@ def auto_read_all_systems():
             meters = cursor.fetchall()
 
             for m in meters:
+                val = None
+                reg_key = m['unit_key']
+                max_retries = 3
                 # 2. อ่านค่าจาก Hardware
-                val = read_meter_unit_read(
-                    model_name=m['module'],
-                    register_key=reg_key,
-                    serial_ports=m['comport'],
-                    ip=m['ip'],
-                    port=m['port'],
-                    slave_id=m['slave_id'], # แก้จาก unit_id เป็น slave_id ตามโครงสร้างฟังก์ชันคุณ
-                    is_water=is_water,
-                    api_base_url=m['base_url'], 
-                    api_token=m['api_auth_token']
-                )
+                for attempt in range(1, max_retries + 1):
+                    val = read_meter_unit_read(
+                        model_name=m['module'],
+                        register_key=reg_key,
+                        serial_ports=m['comport'],
+                        ip=m['ip'],
+                        port=m['port'],
+                        slave_id=m['slave_id'], # แก้จาก unit_id เป็น slave_id ตามโครงสร้างฟังก์ชันคุณ
+                        is_water=is_water,
+                        api_base_url=m['base_url'], 
+                        api_token=m['api_auth_token']
+                    )
+
+                    if val is not None and not isinstance(val, str):
+                        break 
+                    
+                    # ถ้ายังอ่านไม่ได้ และยังไม่ครบจำนวนครั้ง ให้รอ 2 วินาทีแล้วลองใหม่
+                    if attempt < max_retries:
+                        print(f"⚠️ [{m_type}] ห้อง {m['unit_id']}: อ่านพลาดครั้งที่ {attempt} กำลังลองใหม่...")
+                        time.sleep(2)
 
                 if val is not None and not isinstance(val, str):
                     # ฟังก์ชันนี้จะ UPDATE current_reading และ INSERT ลง meter_reading ให้เอง
@@ -1126,7 +1137,18 @@ def auto_read_all_systems():
                         # ถ้าเข้าฟังก์ชัน log แต่บันทึกไม่สำเร็จ จะเห็นสาเหตุตรงนี้
                         print(f"❌ [{m_type}] ห้อง {m['unit_id']}: บันทึกไม่สำเร็จเพราะ {msg}")
                 else:
-                    print(f"[{m_type}] ห้อง {m['unit_id']}: อ่านค่าล้มเหลว")
+                    success, msg = log_meter_reading(
+                        cursor, 
+                        unit_id=m['unit_id'], 
+                        meter_type=m_type, 
+                        reading_value=None, 
+                        source='auto',
+                        created_by=None
+                    )
+                    if success:
+                        print(f"⚠️ [{m_type}] ห้อง {m['unit_id']}: อ่านพลาด (Retry ครบแล้ว) บันทึก NULL ลงประวัติเรียบร้อย")
+                    else:
+                        print(f"❌ [{m_type}] ห้อง {m['unit_id']}: พยายามบันทึก NULL แต่ DB พัง -> {msg}")
 
         conn.commit() # ยืนยันการบันทึกทั้งหมด
     except Exception as e:
