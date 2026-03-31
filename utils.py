@@ -1,5 +1,5 @@
 from flask import current_app
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 from docx import Document
 import mysql.connector
 from mysql.connector import Error
@@ -39,7 +39,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=True):
     if mocked:
-        return datetime(2026, 10, 2, 9, 0, 0)
+        return datetime(2026, 12, 10, 9, 0, 0)
     else:
         return datetime.now()
 

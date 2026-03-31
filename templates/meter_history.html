@@ -5,6 +5,19 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+{% with messages = get_flashed_messages(with_categories=true) %} {% if
+messages %} {% for category, message in messages %}
+<script>
+    Swal.fire({
+        icon: "{{ category }}",
+        title: "แจ้งเตือน",
+        text: "{{ message }}",
+        confirmButtonText: "ตกลง",
+    });
+</script>
+{% endfor %} {% endif %} {% endwith %}
 
 <style>
     .glass-card {
@@ -13,6 +26,7 @@
         border: none;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
+
     .table-modern thead th {
         background-color: #f8f9fa;
         color: #64748b;
@@ -22,13 +36,16 @@
         border: none;
         padding: 15px;
     }
+
     .table-modern tbody tr {
         transition: all 0.2s;
         border-bottom: 1px solid #f1f5f9;
     }
+
     .table-modern tbody tr:hover {
         background-color: rgba(13, 110, 253, 0.03);
     }
+
     .status-badge {
         padding: 5px 12px;
         border-radius: 50px;
@@ -45,18 +62,18 @@
                     <i class="bi bi-clock-history text-primary me-2"></i> Meter History
                 </h4>
             </div>
-            
+
             <div class="col-auto ms-md-auto">
                 <div class="d-flex gap-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white">จาก</span>
-                        <input type="text" name="start_date" id="startDate" class="form-control bg-white" 
-                               value="{{ start_date or '' }}" placeholder="วว/ดด/ปปปป" readonly>
+                        <input type="text" name="start_date" id="startDate" class="form-control bg-white"
+                            value="{{ start_date or '' }}" placeholder="วว/ดด/ปปปป" readonly>
                     </div>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white">ถึง</span>
-                        <input type="text" name="end_date" id="endDate" class="form-control bg-white" 
-                               value="{{ end_date or '' }}" placeholder="วว/ดด/ปปปป" readonly>
+                        <input type="text" name="end_date" id="endDate" class="form-control bg-white"
+                            value="{{ end_date or '' }}" placeholder="วว/ดด/ปปปป" readonly>
                     </div>
                     <button type="button" class="btn btn-sm btn-light border" onclick="clearFilter()">
                         <i class="bi bi-arrow-counterclockwise"></i>
@@ -70,17 +87,17 @@
     <div class="card glass-card overflow-hidden">
         <div class="card-header bg-white py-3 border-0">
             <h6 class="mb-0 fw-bold">
-                รายการประวัติ 
+                รายการประวัติ
                 <small class="text-muted fw-normal ms-2">
                     {% if start_date and end_date %}
-                        (ข้อมูลช่วงวันที่ {{ start_date }} ถึง {{ end_date }})
+                    (ข้อมูลช่วงวันที่ {{ start_date }} ถึง {{ end_date }})
                     {% else %}
-                        (แสดงล่าสุด 20 รายการ)
+                    (แสดงล่าสุด 20 รายการ)
                     {% endif %}
                 </small>
             </h6>
         </div>
-        
+
         <div class="table-responsive">
             <table class="table table-modern align-middle mb-0">
                 <thead>
@@ -92,18 +109,19 @@
                         <th class="text-end">หน่วยสุดท้าย</th>
                         <th class="text-end">หน่วยค้างจ่าย</th>
                         <th class="text-center">สถานะบิล</th>
+                        <th class="text-center">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in history %}
                     <tr>
                         <td class="ps-4">{{ row.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="fw-bold text-primary">ห้อง {{ row.unit_name }}</td>
+                        <td class="fw-bold text-primary">ห้อง {{ row.name }}</td>
                         <td>
                             {% if row.type == 'elec' %}
-                                <span class="text-warning"><i class="bi bi-lightning-charge-fill"></i> ไฟฟ้า</span>
+                            <span class="text-warning"><i class="bi bi-lightning-charge-fill"></i> ไฟฟ้า</span>
                             {% else %}
-                                <span class="text-info"><i class="bi bi-droplet-fill"></i> น้ำประปา</span>
+                            <span class="text-info"><i class="bi bi-droplet-fill"></i> น้ำประปา</span>
                             {% endif %}
                         </td>
                         <td><code>{{ row.old_serial }}</code></td>
@@ -111,10 +129,20 @@
                         <td class="text-end text-danger fw-bold">+ {{ "{:,.2f}".format(row.pending_units) }}</td>
                         <td class="text-center">
                             {% if row.is_billed %}
-                                <span class="status-badge bg-success-subtle text-success border border-success">ออกบิลแล้ว</span>
+                            <span
+                                class="status-badge bg-success-subtle text-success border border-success">ออกบิลแล้ว</span>
                             {% else %}
-                                <span class="status-badge bg-warning-subtle text-warning border border-warning">รอเคลียร์ยอด</span>
+                            <span
+                                class="status-badge bg-warning-subtle text-warning border border-warning">รอเคลียร์ยอด</span>
                             {% endif %}
+                        </td>
+                        <td>
+                            <form action="{{ url_for('meter_history') }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="history_id" value="{{ row.id }}">
+                                <button type="button" class="btn btn-danger btn-sm" onclick="confirmDelete(this.form)">
+                                    <i class="fas fa-trash"></i> ลบ
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% else %}
@@ -140,6 +168,23 @@
 
     function clearFilter() {
         window.location.href = "/meter_history";
+    }
+
+    function confirmDelete(form) {
+        Swal.fire({
+            title: 'ยืนยันการลบ?',
+            text: "ข้อมูลมิเตอร์นี้จะหายไปอย่างถาวร!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ใช่, ลบเลย!',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                form.submit(); // ถ้ากดยืนยัน ให้ส่งฟอร์มไปที่ Backend
+            }
+        })
     }
 </script>
 {% endblock %}

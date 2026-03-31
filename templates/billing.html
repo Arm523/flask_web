@@ -8,6 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
         body {
@@ -115,6 +116,22 @@
 </head>
 
 <body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            {% for category, message in messages %}
+            Swal.fire({
+                icon: "{{ 'success' if category == 'success' else 'error' if category == 'danger' else 'warning' if category == 'warning' else 'info' }}",
+                title: "{{ 'สำเร็จ' if category == 'success' else 'เกิดข้อผิดพลาด' if category == 'danger' else 'แจ้งเตือน' }}",
+                text: "{{ message }}",
+                confirmButtonColor: '#3498db',
+            });
+            {% endfor %}
+        });
+    </script>
+    {% endif %}
+    {% endwith %}
 
     <div class="container-fluid py-4 d-flex flex-column" style="height: 100%;">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -134,26 +151,35 @@
         </div>
 
         <div class="filter-card">
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-muted">ค้นหาเลขห้อง, ชื่อ หรือรายการ</label>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">ค้นหาเลขห้องหรือชื่อ</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-0"><i class="bi bi-search"></i></span>
                         <input type="text" id="liveSearch" class="form-control border-0 bg-light"
-                            placeholder="พิมพ์สิ่งที่ต้องการค้นหา...">
+                            placeholder="เลขห้อง, ชื่อ...">
                     </div>
                 </div>
-                <div class="col-md-3">
+
+                <div class="col-md-2">
                     <label class="form-label small fw-bold text-muted">ตั้งแต่วันที่</label>
                     <input type="date" id="startDate" class="form-control border-0 bg-light">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small fw-bold text-muted">ถึงวันที่</label>
                     <input type="date" id="endDate" class="form-control border-0 bg-light">
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button onclick="clearFilters()"
-                        class="btn btn-light border w-100 btn-action text-muted">ล้างการกรอง</button>
+
+                <div class="col-md-5 d-flex gap-2">
+                    <button onclick="clearFilters()" class="btn btn-light border btn-action text-muted"
+                        title="ล้างการกรอง">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+
+                    <button onclick="printBulkInvoices()" class="btn btn-warning fw-bold btn-action">
+                        <i class="bi bi-printer"></i>พิมพ์บิลตามช่วงวัน
+                    </button>
+
                 </div>
             </div>
         </div>
@@ -227,17 +253,6 @@
                                     {% endif %}
 
                                     {% if inv.type == 'income' %}
-                                    {% if inv.status != 'paid' and inv.status != 'cancelled' %}
-                                    <a href="/confirm_payment/{{ inv.id }}"
-                                        class="btn btn-success btn-sm btn-action px-3">จ่ายเงิน</a>
-                                    {% endif %}
-
-                                    {% if inv.status != 'paid' and inv.status != 'cancelled' and inv.invoice_type ==
-                                    'daily' %}
-                                    <a href="/confirm_daily_payment/{{ inv.id }}"
-                                        class="btn btn-success btn-sm btn-action px-3">จ่ายเงิน</a>
-                                    {% endif %}
-
                                     {% if inv.status != 'cancelled' %}
                                     <button onclick="confirmCancel('{{ inv.id }}')"
                                         class="btn btn-outline-danger btn-sm border" title="ยกเลิกบิล">
@@ -364,7 +379,23 @@
             const rows = document.querySelectorAll('.invoice-row');
             rows.forEach(row => row.style.display = "");
         }
+
+        function printBulkInvoices() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            const room = document.getElementById('liveSearch').value;
+
+            if (!start || !end) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือก "ช่วงวันที่" ที่ต้องการพิมพ์บิล', 'info');
+                return;
+            }
+
+            // เปิดหน้าพิมพ์ใน Tab ใหม่ พร้อมส่ง Parameter ไป
+            const url = `/print_all_invoices?start_date=${start}&end_date=${end}&room_name=${encodeURIComponent(room)}`;
+            window.location.href = url;
+        }
     </script>
 </body>
+
 
 </html>

@@ -133,7 +133,7 @@
 
                 <!-- หัวข้อ -->
                 <h4 class="fw-bold mb-3">
-                    💰 บิล รายวัน {{ invoices[0].invoice_id if invoices else '' }} – ห้อง {{ invoices[0].unit_name if
+                    💰 บิล รายวัน ห้อง {{ invoices[0].unit_name if
                     invoices else '' }}
                 </h4>
 
@@ -164,7 +164,7 @@
 
                 <div class="text-end layout-top-back mt-2">
                     {% if invoices %}
-                    <a href="/create_invoice_daily_extra/{{ invoices[0].invoice_id }}"
+                    <a href="/create_invoice_daily_extra/{{ main_invoice_id }}"
                         class="btn btn-success fw-bold px-4 shadow-sm" style="border-radius: 10px">
                         สร้างบิลเพิ่มเติม (Extra Bill)
                     </a>
@@ -255,8 +255,11 @@
                         <td>
                             <div class="action-grid">
                                 {% if inv.status in ["draft", "overdue"] %}
+
+                                {% if inv.invoice_type != "extra_bill" %}
                                 <a href="/add_invoice_item/{{ inv.invoice_id }}"
                                     class="btn btn-info btn-sm text-white">เพิ่มรายการ</a>
+                                {% endif %}
 
                                 {% if (inv.current_electricity_reading is not none and
                                 inv.current_water_reading is not none) or inv.invoice_type ==
@@ -428,7 +431,7 @@
                     // แสดง Loading ระหว่างรอ Server ตอบกลับ
                     Swal.showLoading();
 
-                    fetch("/cancel_daily_booking/" + id, {
+                    fetch("/cancel_invoice/" + id, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'

@@ -837,6 +837,12 @@ def daily_pending(invoice_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    cursor.execute("SELECT parent_invoice_id FROM invoices WHERE invoice_id = %s", (invoice_id,))
+    row = cursor.fetchone()
+    
+    # ถ้ามี parent_invoice_id แสดงว่าเป็นบิลลูก ให้เปลี่ยนไปใช้ ID ของบิลแม่แทน
+    target_id = row['parent_invoice_id'] if row and row['parent_invoice_id'] else invoice_id
+
     cursor.execute("""
         SELECT 
             i.invoice_id, i.invoice_type, i.issue_date, 
@@ -849,7 +855,7 @@ def daily_pending(invoice_id):
         JOIN unit u ON i.unit_id = u.unit_id
         WHERE i.invoice_id = %s OR parent_invoice_id = %s
         ORDER BY invoice_id DESC
-    """, (invoice_id, invoice_id))
+    """, (target_id, target_id))
     
     invoices = cursor.fetchall()
 
@@ -859,6 +865,7 @@ def daily_pending(invoice_id):
     return render_template(
         "daily_invoices_pending.html",
         invoices=invoices,
+        main_invoice_id=target_id
     )
 
 @app.route('/finance')
@@ -1191,11 +1198,10 @@ def meter_analysis():
                            active_meters=active_meters,
                            logs=recent_logs)
 
-@app.route('/meter_history')
+@app.route('/meter_history', methods=['GET','POST'])
 def meter_history():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     
@@ -1206,6 +1212,17 @@ def meter_history():
         JOIN unit u ON mh.unit_id = u.unit_id 
     """
     params = []
+
+    if request.method == 'POST':
+        history_id = request.form.get('history_id')
+        if history_id:
+            try:
+                cursor.execute("DELETE FROM meter_history WHERE id = %s", (history_id,))
+                flash(f'ลบข้อมูลเรียบร้อยแล้ว', 'success') 
+                conn.commit()
+            except Exception as e:
+                flash(f"Error: {e}", 'danger') 
+                conn.rollback()
 
     # 2. ตรวจสอบเงื่อนไขวันที่
     if start_date and end_date:
@@ -2178,7 +2195,7 @@ def create_invoice_daily_extra(invoice_id):
             flash("สร้างบิลเพิ่มเติมสำเร็จ!", "success")
             
             # ✅ แก้ไขจุดนี้: ส่ง invoice_id (ตัวเดิม) กลับไปด้วยเพื่อให้ url_for ทำงานได้
-            return redirect(url_for('daily_pending', invoice_id=invoice_id))
+            return redirect(url_for('daily_pending', invoice_id=main_invoice['invoice_id']))
 
         except Exception as e:
             if conn: conn.rollback()
@@ -3945,9 +3962,7 @@ def confirm_payment(invoice_id):
         JOIN contracts c ON i.contract_id = c.contract_id
         WHERE i.invoice_id = %s
     """, (invoice_id,))
-
     invoice = cursor.fetchone()
-    print(invoice['contract_status'])
 
     if not invoice:
         flash("ไม่พบใบแจ้งหนี้", "warning")
@@ -4152,7 +4167,7 @@ def confirm_payment(invoice_id):
         conn.close()
 
         flash("ชำระเงินเรียบร้อยแล้ว", "success")
-        return redirect(url_for('print_receipt', invoice_id=invoice_id))
+        return redirect(url_for('unit_pending', contract_id=invoice['contract_id']))
 
     cursor.close()
     conn.close()
@@ -4275,7 +4290,7 @@ def confirm_daily_payment(invoice_id):
 
             conn.commit()
             flash("ชำระเงินเรียบร้อยแล้ว", "success")
-            return redirect(url_for('print_receipt', invoice_id=invoice_id))
+            return redirect(url_for('daily_pending', invoice_id=invoice_id))
 
         except Exception as e:
             conn.rollback()
@@ -4501,6 +4516,84 @@ def billing():
                            start_date=start_date, 
                            end_date=end_date)
 
+@app.route('/print_all_invoices')
+def print_all_invoices():
+    # รับค่าจาก URL Query Parameters
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    room_name = request.args.get('room_name', '')
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # 1. ค้นหาบิลในช่วงวันที่เลือก (และกรองตามชื่อห้อง/คน ถ้ามีการพิมพ์ในช่องค้นหา)
+    query = """
+        SELECT i.*, u.name AS room_name, u.building, u.floor,
+               t.fname AS tenant_fname, t.lname AS tenant_lname
+        FROM invoices i
+        JOIN unit u ON i.unit_id = u.unit_id
+        LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
+        WHERE i.created_at >= %s AND i.created_at <= %s and i.status not in ('paid','cancelled')
+    """
+    params = [start_date, end_date]
+    cursor.execute("SELECT * FROM business WHERE id = 1")
+    biz = cursor.fetchone()
+
+    if start_date > end_date:
+        flash('วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด', "danger")
+        return redirect(url_for('billing'))
+
+    if room_name:
+        query += " AND (u.name LIKE %s OR t.fname LIKE %s)"
+        params.extend([f"%{room_name}%", f"%{room_name}%"])
+    
+    query += " ORDER BY u.name ASC"
+    cursor.execute(query, tuple(params))
+    invoices = cursor.fetchall()
+
+    if not invoices:
+        flash('ไม่พบข้อมูลในช่วงเวลาที่เลือก', "warning")
+        return redirect(url_for('billing'))
+
+    # ดึงค่ากลาง (Rate)
+    e_rate = float(get_setting('electricity_rate', 7))
+    w_rate = float(get_setting('water_rate', 18))
+    late_fee_per_day = float(get_setting('late_fee_per_day', 10)) 
+
+    # 2. เตรียมข้อมูล List เพื่อส่งไปแสดงผล
+    all_data = []
+    for inv in invoices:
+        inv_id = inv['invoice_id']
+        
+        if inv.get('electricity_total') is None or inv.get('water_total') is None:
+            continue
+
+        # ดึงรายการย่อย (Items) ของแต่ละบิล
+        cursor.execute("SELECT * FROM invoice_items WHERE invoice_id = %s", (inv_id,))
+        all_items = cursor.fetchall()
+        
+        # กรองประเภทเหมือนฟังก์ชันพิมพ์บิลใบเดียวของคุณ
+        items = [x for x in all_items if x['type'] in ('option','penalty','service')]
+        meter_adj = [x for x in all_items if x['type'] == 'meter_adjustment']
+        discount = [x for x in all_items if x['type'] == 'discount']
+
+        all_data.append({
+            'invoice': inv,
+            'invoice_items': items,       # ต้องชื่อนี้
+            'meter_adjustment': meter_adj, # ต้องชื่อนี้
+            'discount': discount          # ต้องชื่อนี้
+        })
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        "print_bulk_invoice.html",
+        all_data=all_data,
+        e_rate=e_rate,
+        w_rate=w_rate,
+        late_fee_per_day=late_fee_per_day,
+        biz=biz
+    )
 
 # ---------------------- print_receipt ----------------------
 @app.route('/print_receipt/<int:invoice_id>')
@@ -4914,13 +5007,16 @@ def print_invoice(invoice_id):
         FROM invoices i
         JOIN unit u ON i.unit_id = u.unit_id
         LEFT JOIN tenants t ON i.tenant_id = t.tenant_id
-        WHERE i.invoice_id = %s
+        WHERE i.invoice_id = %s and i.status not in ('paid','cancelled')
     """, (invoice_id,))
     invoice = cursor.fetchone()
 
     # กำหนดวันที่สำหรับแสดงบน invoice
     display_start = invoice['billing_period_start']
     display_end = invoice['billing_period_end']
+
+    cursor.execute("SELECT * FROM business WHERE id = 1")
+    biz = cursor.fetchone()
 
     # หลังจากดึง invoice มาแล้ว
     cursor.execute("""
@@ -5011,7 +5107,8 @@ def print_invoice(invoice_id):
         price_daily=price_daily,
         display_start=display_start,
         display_end=display_end,
-        meter_adjustment=meter_adjustment
+        meter_adjustment=meter_adjustment,
+        biz=biz
     )
 
 
@@ -5274,7 +5371,7 @@ def update_meter():
             cursor.execute("""
                 INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price, type)
                 VALUES (%s, %s, %s, %s, %s, 'meter_adjustment')
-            """, (invoice['invoice_id'], f"หน่วยไฟค้างจากมิเตอร์ตัวเก่าห้อง {unit_id}", e_rate, elec_old_units, elec_old_units * e_rate))
+            """, (invoice['invoice_id'], f"หน่วยไฟฟ้าค้างห้องID: {unit_id}", e_rate, elec_old_units, elec_old_units * e_rate))
         else:
             actual_prev_el = prev_el_db
 
@@ -5285,7 +5382,7 @@ def update_meter():
             cursor.execute("""
                 INSERT INTO invoice_items (invoice_id, description, unit_price, quantity, total_price, type)
                 VALUES (%s, %s, %s, %s, %s, 'meter_adjustment')
-            """, (invoice['invoice_id'], f"หน่วยน้ำค้างจากมิเตอร์ตัวเก่าห้อง {unit_id}", w_rate, water_old_units, water_old_units * w_rate))
+            """, (invoice['invoice_id'], f"หน่วยน้ำค้างห้องID: {unit_id}", w_rate, water_old_units, water_old_units * w_rate))
         else:
             actual_prev_wt = prev_wt_db
 

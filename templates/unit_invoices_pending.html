@@ -250,7 +250,10 @@
             <td>
               <div class="action-grid">
                 {% if inv.status in ["draft", "overdue"] %}
+                
+                {% if inv.invoice_type != "extra_bill" %}
                 <a href="/add_invoice_item/{{ inv.invoice_id }}" class="btn btn-info btn-sm text-white">เพิ่มรายการ</a>
+                {% endif %}
 
                 {% if (inv.current_electricity_reading is not none and
                 inv.current_water_reading is not none) or inv.invoice_type ==
@@ -263,15 +266,19 @@
                 <a href="/print_invoice/{{ inv.invoice_id }}" class="btn btn-success btn-sm">พิมพ์บิล</a>
                 {% endif %}
 
+                {% if inv.invoice_type != "extra_bill" %}
                 <button type="button" class="btn btn-warning btn-sm"
                   onclick="openEditModal('{{ inv.invoice_id }}', '{{ inv.billing_period_start }}', '{{ inv.billing_period_end }}', '{{ inv.due_date }}', '{{ inv.previous_electricity_reading }}', '{{ inv.previous_water_reading }}', '{{ inv.current_electricity_reading }}', '{{ inv.current_water_reading }}', '{{ inv.invoice_type }}')">
                   แก้ไข
                 </button>
+                {% endif %}
 
+                {% if inv.invoice_type != "first" %}
                 <button type="button" class="btn btn-outline-danger btn-sm btn-full-width"
                   onclick="confirmCancelInvoice('{{ inv.invoice_id }}')">
                   ยกเลิกบิล
                 </button>
+                {% endif %}
 
                 {% elif inv.status == "paid" %}
                 <a href="/print_receipt/{{ inv.invoice_id }}"

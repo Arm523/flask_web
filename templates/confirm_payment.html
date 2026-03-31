@@ -166,6 +166,12 @@
             {% endif %}
         </p>
 
+        <p>
+            <strong>จ่ายภายในวันที่:</strong>
+            {% if invoice.due_date %} {{ invoice.due_date.strftime('%d/%m/%Y') }} {%
+            else %} - {% endif %}
+        </p>
+
         <!-- ตารางค่าเช่า + ค่าน้ำ ค่าไฟ -->
         <h5>🏠 ค่าเช่าห้อง / ค่าน้ำ-ไฟ:</h5>
         <table>

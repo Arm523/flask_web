@@ -147,9 +147,15 @@
             {% if invoice.invoice_type == 'daily' %}
             {{ invoice.billing_period_start.strftime('%d/%m/%Y') }}
             ถึง {{ invoice.billing_period_end.strftime('%d/%m/%Y') }}
-            {% elif invoice.is_extra_bill %}
+            {% else %}
             บิลพิเศษ
             {% endif %}
+        </p>
+
+        <p>
+            <strong>จ่ายภายในวันที่:</strong>
+            {% if invoice.due_date %} {{ invoice.due_date.strftime('%d/%m/%Y') }} {%
+            else %} - {% endif %}
         </p>
 
         <!-- ตารางค่าเช่ารายวัน -->
@@ -294,7 +300,8 @@
                     <div class="form-text text-danger">* กรุณาตรวจสอบความถูกต้องของสลิปก่อนยืนยัน</div>
                 </div>
 
-                <button type="submit" id="confirmBtn" class="btn btn-primary w-100 py-2 fs-5">✔ ยืนยันการชำระเงิน</button>
+                <button type="submit" id="confirmBtn" class="btn btn-primary w-100 py-2 fs-5">✔
+                    ยืนยันการชำระเงิน</button>
             </form>
     </div>
 
