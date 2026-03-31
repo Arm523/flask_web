@@ -4577,11 +4577,25 @@ def print_all_invoices():
         meter_adj = [x for x in all_items if x['type'] == 'meter_adjustment']
         discount = [x for x in all_items if x['type'] == 'discount']
 
+        cursor.execute("""
+        SELECT t.price_daily
+        FROM type t
+        JOIN unit u ON u.type_unit_id = t.type_id
+        JOIN invoices i ON i.unit_id = u.unit_id
+        WHERE i.invoice_id = %s
+        """, (inv_id,))
+        price_daily_list = cursor.fetchall()
+        price_daily = price_daily_list[0]['price_daily'] if price_daily_list else 0
+            
+
         all_data.append({
             'invoice': inv,
             'invoice_items': items,       # ต้องชื่อนี้
             'meter_adjustment': meter_adj, # ต้องชื่อนี้
-            'discount': discount          # ต้องชื่อนี้
+            'discount': discount,         # ต้องชื่อนี้
+            'price_daily': price_daily, # ส่งราคาต่อวันไป
+            'display_start': inv['billing_period_start'], # ส่งวันที่เริ่ม
+            'display_end': inv['billing_period_end']
         })
     cursor.close()
     conn.close()

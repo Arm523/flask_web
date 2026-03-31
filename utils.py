@@ -1,5 +1,6 @@
 from flask import current_app
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta
+import time
 from docx import Document
 import mysql.connector
 from mysql.connector import Error
@@ -39,7 +40,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=True):
     if mocked:
-        return datetime(2026, 12, 10, 9, 0, 0)
+        return datetime(2027, 1, 2, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -1137,7 +1138,7 @@ def auto_read_all_systems():
                         # ถ้าเข้าฟังก์ชัน log แต่บันทึกไม่สำเร็จ จะเห็นสาเหตุตรงนี้
                         print(f"❌ [{m_type}] ห้อง {m['unit_id']}: บันทึกไม่สำเร็จเพราะ {msg}")
                 else:
-                    success, msg = log_meter_reading(
+                    fail, msg = log_meter_reading(
                         cursor, 
                         unit_id=m['unit_id'], 
                         meter_type=m_type, 
@@ -1145,7 +1146,7 @@ def auto_read_all_systems():
                         source='auto',
                         created_by=None
                     )
-                    if success:
+                    if fail:
                         print(f"⚠️ [{m_type}] ห้อง {m['unit_id']}: อ่านพลาด (Retry ครบแล้ว) บันทึก NULL ลงประวัติเรียบร้อย")
                     else:
                         print(f"❌ [{m_type}] ห้อง {m['unit_id']}: พยายามบันทึก NULL แต่ DB พัง -> {msg}")
@@ -1197,7 +1198,7 @@ def action_sync_latest_meter_to_invoices():
             # ดึงไฟฟ้า
             cursor.execute("""
                 SELECT current_reading FROM meter_reading 
-                WHERE unit_id = %s AND meter_type = 'electricity' 
+                WHERE unit_id = %s AND meter_type = 'electricity' AND current_reading IS NOT NULL
                 ORDER BY read_date DESC LIMIT 1
             """, (u_id,))
             elec_data = cursor.fetchone()
@@ -1205,7 +1206,7 @@ def action_sync_latest_meter_to_invoices():
             # ดึงน้ำ
             cursor.execute("""
                 SELECT current_reading FROM meter_reading 
-                WHERE unit_id = %s AND meter_type = 'water' 
+                WHERE unit_id = %s AND meter_type = 'water' AND current_reading IS NOT NULL
                 ORDER BY read_date DESC LIMIT 1
             """, (u_id,))
             water_data = cursor.fetchone()

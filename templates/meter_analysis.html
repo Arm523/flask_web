@@ -121,7 +121,8 @@
                         <th class="text-center">Serial Meter</th>
                         <th class="text-center">Source</th>
                         <th class="text-center">ID Invoice</th>
-                        <th class="text-end">Current value</th>
+                        <th class="text-center">Current value</th>
+                        <th class="text-center">Status</th>
                         <th class="ps-3">Created By</th>
                     </tr>
                 </thead>
@@ -143,7 +144,18 @@
                             <small class="badge bg-secondary opacity-75">{{ log.source | capitalize }}</small>
                         </td>
                         <td class="text-center">{{ '#' + log.invoice_id|string if log.invoice_id else '-' }}</td>
-                        <td class="text-end fw-bold">{{ "{:,.2f}".format(log.current_reading or 0) }}</td>
+                        <td class="text-center fw-bold">
+                            {{ "{:,.2f}".format(log.current_reading | default(0) | float) }}
+                        </td>
+                        <td class="text-center">
+                            {% if log.current_reading is not none and log.current_reading > 0 %}
+                            <span class="text-success status-icon" title="สำเร็จ"><i
+                                    class="bi bi-check-circle-fill"></i></span>
+                            {% else %}
+                            <span class="text-danger status-icon" title="ไม่สำเร็จ"><i
+                                    class="bi bi-x-circle-fill"></i></span>
+                            {% endif %}
+                        </td>
                         <td class="ps-3">{{ log.username or 'System' }} <small class="text-muted">(UID : {{
                                 log.created_by or '-' }})</small></td>
                     </tr>
@@ -226,7 +238,8 @@
             { width: 12 },
             { width: 12 },
             { width: 15 },
-            { width: 15 }
+            { width: 15 },
+            { width: 20 }
         ];
 
         // 2. ส่วนหัวรายงาน (Title)
@@ -239,7 +252,7 @@
         worksheet.addRow([]); // เว้นบรรทัดว่าง
 
         // 3. ตั้งค่า Header (ส่วนหัวตาราง)
-        const header = ['วัน/เวลา', 'ห้อง', 'ประเภท', 'Serial', 'Source', 'Invoice', 'Value', 'User'];
+        const header = ['วัน/เวลา', 'ห้อง', 'ประเภท', 'Serial', 'Source', 'Invoice', 'Value', 'Status', 'User'];
         const headerRow = worksheet.addRow(header);
 
         headerRow.eachCell((cell) => {
@@ -258,20 +271,40 @@
         // 4. ดึงข้อมูลจากตาราง HTML
         document.querySelectorAll('#logTable tbody tr').forEach(tr => {
             if (tr.style.display !== 'none' && tr.cells.length > 1) {
-                // ดึงค่าทีละ Cell เพื่อจัดการ Alignment เฉพาะจุด
-                const rowData = Array.from(tr.cells).map(c => c.innerText.trim());
+
+                // ดึงข้อมูลทีละ Cell และจัดการ Logic พิเศษ
+                const rowData = Array.from(tr.cells).map((cell, index) => {
+                    // คอลัมน์ที่ 6: Current Value (ทำให้เป็นตัวเลข)
+                    if (index === 6) {
+                        let val = cell.innerText.replace(/,/g, '').trim();
+                        return val === "-" ? 0 : parseFloat(val);
+                    }
+                    // คอลัมน์ที่ 7: Status (เช็คจากไอคอนว่าเป็น Success หรือไม่)
+                    if (index === 7) {
+                        return cell.querySelector('.text-success') ? 'สำเร็จ' : 'ไม่สำเร็จ';
+                    }
+                    return cell.innerText.trim();
+                });
+
                 const addedRow = worksheet.addRow(rowData);
 
+                // จัดรูปแบบ Cell ในแถวข้อมูล
                 addedRow.eachCell((cell, colNumber) => {
-                    cell.border = {
-                        top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
-                    };
+                    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                     cell.alignment = { vertical: 'middle' };
 
-                    if (colNumber === 7) {
+                    if (colNumber === 7) { // คอลัมน์ Value
                         cell.alignment.horizontal = 'right';
                         cell.numFmt = '#,##0.00';
-                    } else if (colNumber === 3 || colNumber === 5) { // ประเภท และ Source ให้กึ่งกลาง
+                    } else if (colNumber === 8) { // คอลัมน์ Status
+                        cell.alignment.horizontal = 'center';
+                        // ใส่สีตัวอักษรตามสถานะ
+                        if (cell.value === 'สำเร็จ') {
+                            cell.font = { color: { argb: 'FF28A745' }, bold: true };
+                        } else {
+                            cell.font = { color: { argb: 'FFDC3545' }, bold: true };
+                        }
+                    } else if ([2, 3, 4, 5, 6].includes(colNumber)) {
                         cell.alignment.horizontal = 'center';
                     }
                 });
