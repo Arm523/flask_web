@@ -211,9 +211,10 @@
       ใบเเจ้งหนี้
       {% if invoice.invoice_type == 'daily' %}
       <span class="badge-type badge-daily">รายวัน</span>
+      {% elif invoice.invoice_type in ('monthly','first','final') %}
+      <span class="badge-type badge-monthly">รายเดือน</span>
       {% else %}
-      <span class="badge-type badge-monthly">{{ 'รายเดือน' if invoice.invoice_type == 'monthly' else 'บิลพิเศษ'
-        }}</span>
+      <span class="badge-type badge-monthly">บิลพิเศษ</span>
       {% endif %}
     </h2>
 

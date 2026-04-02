@@ -174,7 +174,7 @@
     ใบเเจ้งหนี้
     {% if invoice.invoice_type == 'daily' %}
     <span class="badge-type badge-daily">รายวัน</span>
-    {% elif invoice.invoice_type == 'monthly' %}
+    {% elif invoice.invoice_type in ('monthly','first','final') %}
     <span class="badge-type badge-monthly">รายเดือน</span>
     {% else %}
     <span class="badge-type badge-monthly">บิลพิเศษ</span>
@@ -244,7 +244,6 @@
   </table>
   {% endif %}
 
-  {% if not invoice.is_first_month %}
   {% if items %}
   <p style="font-size: 13px; margin: 10px 0 5px 0;"><strong>บริการเสริม / ค่าปรับ:</strong></p>
   <table>
@@ -328,7 +327,6 @@
       </tr>
     </tbody>
   </table>
-  {% endif %}
   {% endif %}
 
   {% elif invoice.invoice_type == 'daily' %}

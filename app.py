@@ -18,7 +18,7 @@ import json
 from master_modbus import read_meter_tool, write_meter_tool, read_meter_unit_read
 from apscheduler.schedulers.background import BackgroundScheduler
 from api import api
-import fcntl
+import portalocker
 from werkzeug.security import check_password_hash,generate_password_hash
 
 today = get_now(mocked=True).date()
@@ -126,7 +126,7 @@ lock_file = open(".scheduler.lock", "wb")
 
 def start_scheduled_jobs():
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        portalocker.lock(lock_file, portalocker.LOCK_EX | portalocker.LOCK_NB)
         
         scheduler = BackgroundScheduler()
         scheduler.add_job(job_read_meters_task, 'cron', hour=0, minute=0, id='read_meter_hourly')
@@ -234,11 +234,7 @@ def add_user():
         if len(password) < 6:
             flash('รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร', 'warning')
             return render_template('add_user.html', roles=roles)
-        
-        if not re.search("[a-z]", password) or not re.search("[A-Z]", password) or not re.search("[0-123456789]", password):
-            flash('รหัสผ่านควรประกอบด้วยตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก และตัวเลข', 'warning')
-            return render_template('add_user.html', roles=roles)
-
+    
         hashed_password = generate_password_hash(password)
 
         try:
@@ -271,6 +267,8 @@ def add_user():
                 f'เพิ่มผู้ใช้งานใหม่ ID: {new_user_id}', 
                 session.get('user', {}).get('user_id')
             )
+
+            print(f"DEBUG: {username}, {id_card}, {role_id}") # ดูว่าค่ามาครบไหม
             conn.commit()
             cursor.close()
             conn.close()
@@ -3723,6 +3721,7 @@ def edit_user(user_id):
         fname = request.form.get('fname', '').strip()
         lname = request.form.get('lname', '').strip()
         email = request.form.get('email', '').strip()
+        id_card = request.form.get('id_card','').strip()
         tel = request.form.get('tel', '').strip()
         role_id = request.form.get('role_id')
         new_password = request.form.get('password', '').strip()
@@ -3774,7 +3773,6 @@ def edit_user(user_id):
             
             # บันทึกประวัติการแก้ไข
             add_audit_log(cursor, 'USER', 'UPDATE', f'แก้ไขข้อมูลผู้ใช้ ID: {user_id}', session.get('user', {}).get('user_id'))
-
             conn.commit()
             flash('อัปเดตข้อมูลสำเร็จ', 'success')
             return redirect(url_for('user_settings'))
@@ -3937,6 +3935,13 @@ def delete_user(user_id):
         conn.close()
 
     return redirect(url_for('user_settings'))
+
+@app.route('/view_id_card/<filename>')
+def view_id_card(filename):
+    try:
+        return send_from_directory(UPLOAD_ID_CARD, filename)
+    except FileNotFoundError:
+        abort(404)
 
 
 # ---------------------- PAYMENT ----------------------

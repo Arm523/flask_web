@@ -149,5 +149,20 @@
         },
         "baudrate": 9600,
         "parameters": "8N1"
+    },
+    "TCPmeter": {
+        "type": "tcp",
+        "read_register": {
+            "kwh": {
+                "address": 9,
+                "count": 2,
+                "data_type": "float32",
+                "gain": 1,
+                "word_swap": false
+            }
+        },
+        "config_register": {},
+        "ip": "127.0.0.1",
+        "port": 502
     }
 }

@@ -40,7 +40,7 @@ def save_config(path, data):
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
 def get_now(mocked=True):
     if mocked:
-        return datetime(2027, 1, 2, 9, 0, 0)
+        return datetime(2026, 4, 10, 9, 0, 0)
     else:
         return datetime.now()
 
@@ -529,8 +529,6 @@ def update_late_penalty(cursor, invoice_id):
         if not inv['due_date']:
             return 0
         
-        if inv['invoice_type'] == 'first':
-            return 0
 
         # คำนวณจำนวนวันที่เกินกำหนด
         overdue_days = max(0, (today - inv['due_date']).days)
