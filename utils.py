@@ -38,7 +38,7 @@ def save_config(path, data):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 # ดึงวันเวลาปัจจุบัน (หรือ mock)
-def get_now(mocked=True):
+def get_now(mocked=False):
     if mocked:
         return datetime(2026, 4, 10, 9, 0, 0)
     else:
