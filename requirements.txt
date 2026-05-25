@@ -10,3 +10,4 @@ pyserial
 requests
 python-dotenv
 gunicorn 
+portalocker
