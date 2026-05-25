@@ -9,3 +9,4 @@ pymodbus==2.5.3
 pyserial
 requests
 python-dotenv
+gunicorn 
